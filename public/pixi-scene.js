@@ -46,14 +46,23 @@ export const tintOf = (s) => { const [r, g, b] = s.split(',').map(Number); retur
 // ---------- Tegelsprites ----------
 // Een laag van tegelcanvassen (createTileCanvases) als sprites in een container. Elk frame:
 // gewijzigde tegels opnieuw uploaden en alleen de tegels in beeld zichtbaar maken.
-export function createTileSprites(container, R, TILE) {
+// Met shadows (een container) krijgt elke tegel een schaduw: dezelfde texture in één kleur,
+// verschoven (zie shadow()).
+export function createTileSprites(container, R, TILE, shadows = null) {
   let layer = null;
-  const sprites = [];
+  const sprites = [], shade = [];
+  let dx = 0, dy = 0, color = 0, alpha = 0;
+  const place = (t) => shade[t]?.position.set(sprites[t].x + dx, sprites[t].y + dy);
   return {
     use(next) {
       for (const s of container.removeChildren()) s.destroy({ texture: true, textureSource: true });
-      sprites.length = 0;
+      for (const s of shadows?.removeChildren() || []) s.destroy();
+      sprites.length = shade.length = 0;
       layer = next;
+    },
+    shadow(x, y, c, a) {
+      dx = x; dy = y; color = c; alpha = a;
+      for (let t = 0; t < shade.length; t++) if (shade[t]) { place(t); shade[t].tint = color; shade[t].alpha = alpha; }
     },
     sync(cam) {
       if (!layer) return;
@@ -64,10 +73,19 @@ export function createTileSprites(container, R, TILE) {
           s.position.set((t % layer.TILES_X) * TILE, Math.floor(t / layer.TILES_X) * TILE);
           s.scale.set(1 / R);
           container.addChild(s);
+          if (shadows) {
+            const h = shade[t] = shadows.addChild(new Sprite(s.texture));
+            h.scale.set(1 / R); h.tint = color; h.alpha = alpha;
+            place(t);
+          }
         } else s.texture.source.update();
       }
-      const x0 = cam.x - TILE, x1 = cam.x + cam.w, y0 = cam.y - TILE, y1 = cam.y + cam.h;
-      for (const s of sprites) if (s) s.visible = s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1;
+      const x0 = cam.x - TILE - 2, x1 = cam.x + cam.w, y0 = cam.y - TILE - 2, y1 = cam.y + cam.h;
+      sprites.forEach((s, t) => {
+        if (!s) return;
+        s.visible = s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1;
+        if (shade[t]) shade[t].visible = s.visible;
+      });
     },
   };
 }

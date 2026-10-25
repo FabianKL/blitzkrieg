@@ -41,6 +41,30 @@ export const FOG = { fade: 0.62, shadow: 0.35, ghostAlpha: 0.45 };
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
 
+// Uiterlijk per kaart (alleen de weergave, public/world-view.js; de spelregels kijken er niet
+// naar). Een kaart overschrijft dit met look: {...}; grade en noise worden per veld gemengd.
+//   light       schaduw van tanks, bases, bomen en rotsen: verschuiving in cellen (dx, dy) en
+//               donkerte (alpha). Eén lichtbron voor alles: linksboven = positieve dx en dy.
+//   grade       kleurfilter over de hele wereld: saturation (-1 grijs .. 0 .. 1 feller),
+//               brightness en contrast (1 = gelijk), tint (#rrggbb) met tintStrength (0..1)
+//   noise       grondtextuur met simplex-ruis over de terreinkleur: scale (cellen per vlek),
+//               strength (0..1, verschil licht/donker), octaves (lagen fijnere ruis)
+//   blend       breedte van de zachte overgang tussen terreinklassen (in cellen, ~2 = smal)
+//   weather     deeltjes in beeld: 'snow', 'dust', 'rain' of null; amount = deeltjes per
+//               100x100 cellen (tijdens een storm stormFactor keer zoveel)
+//   vignette    donkere hoeken van het speelveld (0..1); fogSoft: zo'n deel van de zichtstraal
+//               loopt de mist al zacht in (0 = harde rand)
+//   iceShine    glinstering op ijs (0..1); shakeOnHit: schudden als je eigen tank geraakt wordt
+export const LOOK = {
+  light: { dx: 0.45, dy: 0.6, alpha: 0.36 },
+  grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
+  noise: { scale: 9, strength: 0, octaves: 3 },
+  blend: 2.2,
+  weather: null, amount: 0, stormFactor: 4,
+  vignette: 0.2, fogSoft: 0.15,
+  iceShine: 0, shakeOnHit: 0.25,
+};
+
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)
 // moet je duim schuiven voor de tank rijdt, zodat een rustende duim niet kruipt. stickRadius in
 // CSS-pixels: verder slepen telt niet meer (de voet schuift mee). selfDestructMs: zo lang
@@ -141,6 +165,7 @@ export const TRACK_ERASER = { fadeFactor: 10, warnSeconds: 5, burialSeconds: 2 }
 //   buildings   {at: [x, y] als fractie, count, spread: fractie, min, max: zijde in cellen}: losse
 //               huizen (voorlopig; de dorpsmodule komt in fase 4)
 //   bulletsDig, minimap   overschrijven BULLETS.dig en DISPLAY.minimap voor deze kaart
+//   look        uiterlijk in de weergave (kleurfilter, grondtextuur, weer, licht): zie LOOK
 //   mines       mijnenvelden (El Alamein)
 // Kaarten met terrainPercent en features (§11) gaan via de kaartmaker in mapgen.js:
 //   terrainPercent  {klasse | rock | water | vegetation | building: procent van het speelbare deel}
@@ -200,6 +225,7 @@ export const MAPS = {
     ],
     refill: { ammo: false }, // munitie alleen bij het depot in Rhenen
     scarce: { type: 'ammoDepot' },
+    look: { grade: { saturation: 0.05, tint: '#fff2d8', tintStrength: 0.08 }, noise: { strength: 0.08 } },
     tunnelColor: '#4a3a22',
     weather: [
       { label: 'Inundatie', from: { round: 2 }, everyRound: true, untilRound: 4, effect: { terrain: { type: 'inundate', valley: [0, 0.55], stages: 3 } } },
@@ -225,6 +251,7 @@ export const MAPS = {
       { type: 'road', from: [0, 0.5], to: [1, 0.5], width: 2 },
       { type: 'village', at: [0.5, 0.5], size: 0.05, name: 'Dorp', layout: 'row', buildings: [5, 5] },
     ],
+    look: { grade: { saturation: -0.05, tint: '#ffe6b8', tintStrength: 0.12 }, noise: { strength: 0.1 }, weather: 'dust', amount: 6 },
     tunnelColor: '#3e3022',
     weather: [
       { label: 'Zomer', untilRound: 2, effect: { visibility: 10, heatHaze: true, dust: true } },
@@ -250,6 +277,7 @@ export const MAPS = {
       { type: 'road', from: [0, 0.17], to: [1, 0.17], width: 2, bridges: false },
     ],
     meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040' },
+    look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35 },
     tunnelColor: '#6e5430',
     weather: [
       { label: 'Hitte', effect: { visibility: 10, heatHaze: true, mirages: true } },
@@ -278,6 +306,7 @@ export const MAPS = {
       { type: 'area', name: 'zuid', rect: [0, 0.56, 1, 1], classes: { soft: 75, hard: 25 } },
     ],
     meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40' },
+    look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 7, strength: 0.16, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
     tunnelColor: '#3a2f27',
     weather: [
       { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },
@@ -312,6 +341,7 @@ export const MAPS = {
     ],
     hazard: { type: 'grainFire', shotChance: 0.1, stormShotChance: 0.03, everySeconds: 120, spreadSeconds: 1, burnSeconds: 15, armorPerSecond: 5, wind: true },
     meter: { type: 'temp', label: 'Motortemperatuur', danger: 100, color: '#e0603a' },
+    look: { grade: { saturation: 0.05, tint: '#ffe8c0', tintStrength: 0.1 }, noise: { strength: 0.08 } },
     tunnelColor: '#2e2418',
     weather: [
       { label: 'Zomerhitte', untilRound: 2, effect: { visibility: 12, fires: true, battleSmoke: true } },
@@ -345,6 +375,7 @@ export const MAPS = {
       { type: 'road', from: [0.75, 0.25], to: [0.9, 1], width: 2 },
     ],
     hazard: { type: 'atGuns', count: 2, coneDegrees: 45, rangeT: 10, everySeconds: 4, armorLoss: 25, hp: 4 },
+    look: { grade: { saturation: -0.05, tint: '#e6f0e0', tintStrength: 0.08 }, noise: { strength: 0.08 }, weather: 'rain', amount: 8 },
     tunnelColor: '#4a3a22',
     weather: [
       { label: 'Ochtendmist', untilRound: 1, effect: { visibility: 4 } },
@@ -378,6 +409,7 @@ export const MAPS = {
     hazard: { type: 'bridgeBlast', armorLoss: 40 },
     scarce: { type: 'airDrops', everySeconds: 30, fuel: 0.4, ammo: 25 },
     refill: { fuel: false, ammo: false },
+    look: { noise: { strength: 0.08 } },
     tunnelColor: '#4a3a22',
     weather: [
       { label: 'Helder', untilRound: 2, effect: { visibility: 12, drops: true, citySmoke: true } },
@@ -406,6 +438,7 @@ export const MAPS = {
       { type: 'road', from: [0.5, 0.5], to: [0.85, 1], width: 2 },
       { type: 'river', from: [0, 0.8], to: [1, 0.8], width: 2, bridges: 'atRoads' },
     ],
+    look: { grade: { saturation: -0.12, contrast: 1.04, tint: '#d4e2ff', tintStrength: 0.15 }, noise: { scale: 8, strength: 0.1 }, blend: 3, weather: 'snow', amount: 25, vignette: 0.25, fogSoft: 0.2 },
     tunnelColor: '#2b2118',
     weather: [
       { label: 'Dichte mist', from: { secondsInRound: 0 }, untilRound: 2, effect: { visibility: { start: 2, end: 12, overSeconds: 120 }, fog: true } },
@@ -440,6 +473,7 @@ export const MAPS = {
       { type: 'road', from: [0.3, 0.72], to: [0.88, 0.72], width: 2 },
     ],
     hazard: { type: 'artillery', everySeconds: 60, area: 6, warningSeconds: 3, armorLoss: 30 },
+    look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32 },
     tunnelColor: '#1a1410',
     weather: [
       { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 3, widthT: 4, sweepSeconds: 12, visibility: 12 } } },
@@ -474,6 +508,7 @@ export const MAPS = {
     tolerance: { klein: 13, default: 8 },
     hazard: { type: 'facades', chancePerSecond: 0.05, armorLoss: 10, rammingLoss: 25, collapseAfterHits: 3, collapseSeconds: 3, collapseLoss: 25, dustSeconds: 10 },
     refill: { armor: false }, // pantser wordt tijdens een ronde niet hersteld
+    look: { grade: { saturation: -0.3, contrast: 1.05, tint: '#e8e0d8', tintStrength: 0.1 }, weather: 'dust', amount: 5, vignette: 0.32 },
     tunnelColor: '#2a2420',
     weather: [
       { label: 'Rook boven de stad', untilRound: 1, effect: { visibility: 12 } },

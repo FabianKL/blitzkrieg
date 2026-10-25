@@ -137,7 +137,6 @@ function drawBoulder(g, x, y, r, rnd) {
     g.closePath();
   };
   const stone = view.colors.rock;
-  g.fillStyle = 'rgba(55, 70, 95, 0.3)'; poly(1.05, r * 0.3, r * 0.35); g.fill(); // schaduw
   g.fillStyle = shade(stone, 0.92); poly(1, 0, 0); g.fill();
   g.fillStyle = mix(stone, '#ffffff', 0.22); poly(0.7, -r * 0.15, -r * 0.15); g.fill(); // lichte kant
   g.strokeStyle = shade(stone, 0.52); g.lineWidth = 0.14; poly(1, 0, 0); g.stroke();
@@ -167,9 +166,7 @@ function drawObjects(g, x0, y0, x1, y1) {
     }
   }
   for (const k of rocks) drawBoulder(g, k.x, k.y, k.r, k.rnd);
-  trees.sort((a, b) => a.y - b.y);
-  g.fillStyle = 'rgba(55, 70, 100, 0.28)';
-  for (const t of trees) { g.beginPath(); g.ellipse(t.x + t.r * 0.35, t.y + t.r * 0.45, t.r, t.r * 0.8, 0, 0, Math.PI * 2); g.fill(); }
+  trees.sort((a, b) => a.y - b.y); // schaduwen tekent de wereldweergave (look.light)
   const birch = view.game.rules.vegetation?.type === 'birch';
   for (const t of trees) {
     (birch ? drawBirch : drawTree)(g, t.x, t.y, t.r, t.rot);
@@ -220,7 +217,6 @@ function wallV(a, b, x) {
   post(x + 0.5, b - 0.6);
 }
 function crate(x, y, s) {
-  ctx.fillStyle = 'rgba(55, 70, 100, 0.3)'; ctx.fillRect(x + 0.25, y + 0.3, s, s);
   ctx.fillStyle = '#946535'; ctx.fillRect(x, y, s, s);
   ctx.strokeStyle = '#4e3218'; ctx.lineWidth = 0.14;
   ctx.strokeRect(x, y, s, s);

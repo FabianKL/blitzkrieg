@@ -101,8 +101,6 @@ function drawObjects(g, x0, y0, x1, y1) {
       if (!edge) continue;
       const rnd = G.mulberry32(hash(x, y));
       const cx = x + 0.5, cy = y + 0.5, r = 0.7 + rnd() * 0.5;
-      g.fillStyle = 'rgba(70, 45, 20, 0.3)';
-      g.beginPath(); g.ellipse(cx + 0.3, cy + 0.35, r, r * 0.7, 0, 0, Math.PI * 2); g.fill();
       for (let k = 0; k < 7; k++) { // kameeldoorn: pluisjes in donker olijf
         const a = rnd() * Math.PI * 2, d = rnd() * r * 0.7;
         g.fillStyle = k % 2 ? '#6b6a3a' : '#837f48';
@@ -153,14 +151,12 @@ function bagRow(ctx, a, b, fixed, horizontal) {
   }
 }
 function drum(ctx, x, y) {
-  ctx.fillStyle = 'rgba(70, 45, 20, 0.35)'; ctx.beginPath(); ctx.arc(x + 0.25, y + 0.3, 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#6f5a36'; ctx.beginPath(); ctx.arc(x, y, 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#3e301b'; ctx.lineWidth = 0.12; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, 0.5, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = '#9a8352'; ctx.beginPath(); ctx.arc(x - 0.25, y - 0.25, 0.14, 0, Math.PI * 2); ctx.fill();
 }
 function jerrycan(ctx, x, y) {
-  ctx.fillStyle = 'rgba(70, 45, 20, 0.35)'; ctx.fillRect(x + 0.2, y + 0.25, 1.1, 1.5);
   ctx.fillStyle = '#7a7444'; ctx.fillRect(x, y, 1.1, 1.5);
   ctx.strokeStyle = '#3f3b20'; ctx.lineWidth = 0.1; ctx.strokeRect(x, y, 1.1, 1.5);
   ctx.beginPath(); ctx.moveTo(x + 0.15, y + 0.3); ctx.lineTo(x + 0.95, y + 1.25); ctx.moveTo(x + 0.95, y + 0.3); ctx.lineTo(x + 0.15, y + 1.25); ctx.stroke();

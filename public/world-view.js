@@ -37,11 +37,12 @@
 //   tracer: [kleur staart, kleur kop]
 //   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
 import { sightOf, lineOfSight, blocksSight, hintDirection, canHear, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
-import { autoDetectRenderer, Container, Graphics, Sprite } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter } from 'pixi.js';
+import { createNoise2D } from 'simplex-noise';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
   eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, camera,
@@ -71,6 +72,27 @@ function makePalette(rules) {
     tunnel: rgb(hex.tunnel), water: rgb(hex.water), rock: rgb(hex.rock), veg: rgb(hex.veg), building: rgb(hex.building),
   };
 }
+
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise en light per veld)
+function lookFor(rules) {
+  const own = rules?.look || {};
+  return { ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise }, light: { ...LOOK.light, ...own.light } };
+}
+// Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint
+function gradeMatrix({ saturation, brightness, contrast, tint, tintStrength }) {
+  const s = 1 + saturation, lum = [0.3086, 0.6094, 0.082], t = rgb(tint).map((v) => 1 - tintStrength + (tintStrength * v) / 255);
+  const m = [];
+  for (let c = 0; c < 3; c++) {
+    const k = contrast * brightness * t[c];
+    const row = lum.map((l, i) => ((1 - s) * l + (i === c ? s : 0)) * k);
+    m.push(...row, 0, 0.5 * (1 - contrast) * brightness * t[c]);
+  }
+  m.push(0, 0, 0, 1, 0);
+  return m;
+}
+const isNeutral = (g) => !g.saturation && g.brightness === 1 && g.contrast === 1 && !g.tintStrength;
+// Getal uit een tekst (kaartnaam): dezelfde grondtextuur voor iedereen op die kaart
+const seedOf = (str) => [...str].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261);
 
 // Barsten in een ijsvak: per vak vaste lijnen (in pixels), per stadium twee meer
 const crackCache = new Map();
@@ -136,16 +158,26 @@ export function startWorld(style) {
     rockAt: (du, dv) => rocks.sample(p.u + du, p.v + dv),
   };
   let pal = makePalette({});
+  let look = lookFor({}), noise2 = null;
+  // Grondtextuur: een paar lagen simplex-ruis (fbm), -1..1
+  function groundNoise(X, Y) {
+    const n = look.noise;
+    let v = 0, amp = 1, sum = 0, f = 1 / (R * n.scale);
+    for (let o = 0; o < n.octaves; o++) { v += amp * noise2(X * f, Y * f); sum += amp; amp *= 0.5; f *= 2; }
+    return v / sum;
+  }
   // Terreinkleur op pixel (X, Y): de klassekleuren van de vier dichtstbijzijnde cellen, gemengd
   // op een met ruis verschoven plek. Zo lopen grenzen golvend en zacht in elkaar over in
   // plaats van in blokjes per cel.
   const clsColor = (x, y) => pal.cls[game.terrain[Math.min(G.H - 1, Math.max(0, y)) * G.W + Math.min(G.W - 1, Math.max(0, x))]];
   function groundColor(X, Y) {
-    const wx = X / R - 0.5 + (vnoise(X / 13, Y / 13) - 0.5) * 2.2, wy = Y / R - 0.5 + (vnoise(X / 13 + 71, Y / 13 + 29) - 0.5) * 2.2;
+    const b = look.blend; // breedte van de overgang in cellen
+    const wx = X / R - 0.5 + (vnoise(X / 13, Y / 13) - 0.5) * b, wy = Y / R - 0.5 + (vnoise(X / 13 + 71, Y / 13 + 29) - 0.5) * b;
     const x0 = Math.floor(wx), y0 = Math.floor(wy), fx = smoothstep(wx - x0), fy = smoothstep(wy - y0);
-    const a = clsColor(x0, y0), b = clsColor(x0 + 1, y0), c = clsColor(x0, y0 + 1), d = clsColor(x0 + 1, y0 + 1);
-    const mixc = (k) => (a[k] * (1 - fx) + b[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy;
-    return pack(mixc(0), mixc(1), mixc(2));
+    const a = clsColor(x0, y0), q = clsColor(x0 + 1, y0), c = clsColor(x0, y0 + 1), d = clsColor(x0 + 1, y0 + 1);
+    const mixc = (k) => (a[k] * (1 - fx) + q[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy;
+    const n = look.noise.strength ? 1 + look.noise.strength * groundNoise(X, Y) : 1; // vlekken licht en donker
+    return pack(mixc(0) * n, mixc(1) * n, mixc(2) * n);
   }
   // IJs: terreinkleur met lichte strepen en glinstering, plus barsten per vak
   function crackAt() {
@@ -418,6 +450,7 @@ export function startWorld(style) {
     clearTankTextures();
     }
     pal = makePalette(game.rules);
+    applyLook(lookFor(game.rules));
     view.colors = pal.hex;
     painter = createMapPainter({ R, paintCell, afterTile: style.afterTile, skipRepaint: style.skipRepaint });
     makeMini();
@@ -562,7 +595,7 @@ export function startWorld(style) {
   // vanuit de gamestate, daarna tekent Pixi alles in één keer.
   const groundTiles = createTileSprites(L.ground, R, TILE);
   const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
-  const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE);
+  const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE, L.shadows.addChild(new Container()));
   const marks = L.marks.addChild(new Graphics());
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
@@ -584,7 +617,27 @@ export function startWorld(style) {
   const hintCorners = spritePool(L.ui.addChild(new Container()), TEX.soft);
   const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
   // Schaduwen: dezelfde vorm in het zwart, iets verschoven (licht van linksboven)
-  const SHADOW = { dx: 0.45, dy: 0.6, color: 0x000000, alpha: 0.36, ...style.shadow };
+  // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
+  const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
+  const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
+  const gradeFilter = new ColorMatrixFilter();
+  const vignette = L.ui.addChild(new Sprite(drawnTexture(256, 256, (g) => {
+    const r = g.createRadialGradient(128, 128, 60, 128, 128, 182);
+    r.addColorStop(0, 'rgba(0,0,0,0)'); r.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
+  })));
+  L.ui.setChildIndex(vignette, 0); // onder de hints en labels
+  function applyLook(next) {
+    look = next;
+    noise2 = createNoise2D(G.mulberry32(seedOf(game.mapId || '')));
+    Object.assign(SHADOW, { dx: look.light.dx, dy: look.light.dy, alpha: look.light.alpha });
+    objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
+    for (const s of tankSprites.values()) s.shadow.alpha = SHADOW.alpha;
+    if (isNeutral(look.grade)) world.filters = [];
+    else { gradeFilter.matrix = gradeMatrix(look.grade); world.filters = [gradeFilter]; }
+    vignette.alpha = look.vignette;
+    visionKey = '';
+  }
 
   // Tanks: per ploeg één keer getekend (neus naar rechts) als texture, daarna alleen gedraaid.
   // Een stijl met een bewegend onderdeel (wimpel) heeft tankFrames plaatjes over tankPeriod ms.
@@ -684,7 +737,7 @@ export function startWorld(style) {
     updateRenderPositions(game, now + clockOffset); // eigen tank voorspeld, de rest vloeiend uit de buffer
     smoothTankAngles(game, dt);
     if (shake > 0) shake -= dt;
-    const cam = view.cam = camera(game, canvas, style.viewCells, shake);
+    const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
     painter.flush(cam);
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
@@ -705,6 +758,7 @@ export function startWorld(style) {
     drawDust(now);
     particles.update(dt);
     drawSmokes(now);
+    drawWeather(cam, now, dt);
     const me = eye(), fogOn = !DEBUG && !!me;
     sightSprite.visible = visionSprite.visible = fogOn;
     mirageSprites.begin();
@@ -712,8 +766,38 @@ export function startWorld(style) {
     mirageSprites.end();
     drawSearchlights(cam);
     drawStyleOverlay(cam, now);
+    vignette.width = canvas.width; vignette.height = canvas.height;
     drawEraser(now);
     drawHints(now);
+  }
+
+  // Weer in beeld (look.weather): sneeuw, stof of regen als deeltjes in de wereld. Ze blijven
+  // binnen de camera (wat eruit waait, komt aan de andere kant terug); in een storm meer en harder.
+  const flakes = [], flakeSprites = spritePool(L.effects.addChild(new Container()), TEX.soft);
+  const rainSprites = spritePool(L.effects.addChild(new Container()), TEX.white);
+  const WEATHER = {
+    snow: { tint: 0xffffff, fall: [5, 4], wind: 1.5, size: [0.35, 0.55], alpha: [0.55, 0.4] },
+    dust: { tint: 0xd8c09a, fall: [0.5, 0.5], wind: 7, size: [0.8, 1.4], alpha: [0.18, 0.15] },
+    rain: { tint: 0xdfe8f0, fall: [55, 15], wind: 6, size: [0.1, 0], alpha: [0.25, 0.15] },
+  };
+  const wrap = (v, lo, len) => lo + ((((v - lo) % len) + len) % len);
+  function drawWeather(cam, now, dt) {
+    const w = WEATHER[look.weather], storm = eraserInfo(game)?.active ? look.stormFactor : 1;
+    flakeSprites.begin(); rainSprites.begin();
+    const n = w ? Math.round((look.amount * cam.w * cam.h * storm) / 10000) : 0;
+    while (flakes.length < n) flakes.push({ x: cam.x + Math.random() * cam.w, y: cam.y + Math.random() * cam.h, z: Math.random(), ph: Math.random() * 6.3 });
+    for (let k = 0; k < n; k++) {
+      const f = flakes[k], wind = w.wind * storm * (0.6 + f.z);
+      const vx = wind + Math.sin(now / 900 + f.ph) * (look.weather === 'snow' ? 1.2 : 0.4), vy = w.fall[0] + w.fall[1] * f.z;
+      f.x = wrap(f.x + vx * dt, cam.x - 2, cam.w + 4);
+      f.y = wrap(f.y + vy * dt, cam.y - 2, cam.h + 4);
+      const s = look.weather === 'rain' ? rainSprites.next() : flakeSprites.next();
+      s.tint = w.tint; s.alpha = w.alpha[0] + w.alpha[1] * f.z;
+      s.position.set(f.x, f.y);
+      if (look.weather === 'rain') { s.rotation = Math.atan2(vy, vx); s.width = 1.5 + f.z * 1.5; s.height = w.size[0]; }
+      else s.width = s.height = w.size[0] + w.size[1] * f.z;
+    }
+    flakeSprites.end(); rainSprites.end();
   }
 
   // Een eigen stijllaag over het beeld (witte mist): de stijl geeft een canvas terug dat over
@@ -757,8 +841,11 @@ export function startWorld(style) {
 
   // ---------- Zicht (§9) ----------
   // ?debug=alles: alles zichtbaar (alleen op deze computer, voor het ontwikkelen)
-  const DEBUG = ['localhost', '127.0.0.1'].includes(location.hostname) &&
-    [location.search, window.parent !== window ? window.parent.location.search : ''].some((q) => new URLSearchParams(q).get('debug') === 'alles');
+  const DEBUG_HOST = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const debugParam = (k) => [location.search, window.parent !== window ? window.parent.location.search : ''].map((q) => new URLSearchParams(q).get(k)).find((v) => v);
+  const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
+  // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
+  const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
   // zichtstraal in cellen; het weer (game.vision, in T) kan hem kleiner maken
   const visionRadius = () => {
     const cfg = game.weather?.flags.searchlights, me = eye();
@@ -793,11 +880,11 @@ export function startWorld(style) {
   function drawFog(me, cam) {
     const r = visionRadius(), far = Math.max(r + 1, Math.hypot(cam.w, cam.h) / 2 + Math.hypot(me.x + 0.5 - (cam.x + cam.w / 2), me.y + 0.5 - (cam.y + cam.h / 2)));
     const fade = game.weather?.flags.night ? 0.92 : FOG.fade; // 's nachts veel donkerder
-    const ratio = Math.round((r / far) * 400) / 400, key = `${ratio},${fade}`;
+    const ratio = Math.round((r / far) * 400) / 400, key = `${ratio},${fade},${look.fogSoft}`;
     if (key !== visionKey) {
       visionKey = key;
       const g = visionCanvas.getContext('2d'), c = visionCanvas.width / 2;
-      const grad = g.createRadialGradient(c, c, c * ratio, c, c, c);
+      const grad = g.createRadialGradient(c, c, c * ratio * (1 - look.fogSoft), c, c, c); // zachte rand
       grad.addColorStop(0, 'rgba(8, 8, 10, 0)');
       grad.addColorStop(0.55, `rgba(8, 8, 10, ${fade * 0.6})`);
       grad.addColorStop(1, `rgba(8, 8, 10, ${fade})`);
