@@ -28,6 +28,7 @@ import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL } from '/shared/config.js';
 import { sightOf, lineOfSight, blocksSight, hintDirection, canHear, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
+import { touchControls } from '/touch.js';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
   drawEraser, eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, fitCanvas, camera,
@@ -523,6 +524,7 @@ export function startWorld(style) {
     game = connect(hooks, { room: query.get('kaart') || style.room, size: query.get('grootte') });
   }
   if ($('net')) showBandwidth(game, $('net'));
+  touchControls($('panel'), game);
 
   // ---------- Tekenen ----------
   fitCanvas(canvas, $('panel'));
