@@ -1,35 +1,37 @@
-// De spelpagina (/): verbinding, titelregel, mapmenu en kaartgrootte (§3).
-// De weergave van de kaart (zomer, winter, woestijn) draait in een iframe en gebruikt deze
-// verbinding via window.blitz; wisselt de host naar een kaart met een andere weergave, dan
-// wordt alleen het iframe vervangen en blijft iedereen verbonden.
+// De spelpagina (/): verbinding, titelregel, mapmenu en kaartgrootte (§3), en de weergave van de
+// kaart. De stijl van de kaart (zomer, winter, woestijn) is een tekenmodule in styles/; wisselt
+// de host naar een kaart met een andere stijl, dan wordt alleen de weergave vervangen en blijft
+// iedereen verbonden.
 import * as G from '/shared/game.js';
 import { connect } from '/net.js';
+import { touchControls } from '/touch.js';
 
 const $ = (id) => document.getElementById(id);
-const STYLE_PAGES = { zomer: '/1944.html', winter: '/1943.html', woestijn: '/1942.html' };
 const PHASES = { lobby: 'wachtkamer', play: 'spel bezig', pause: 'tussen twee rondes', over: 'spel uit' };
 
-// Berichten gaan door naar de weergave die nu in het iframe staat
-let viewHooks = {};
+// Berichten gaan door naar de weergave die er nu staat (view.hooks)
+let view = null;
 const game = connect({
-  onMap: (map) => { viewHooks.onMap?.(map); showView(); update(); },
-  onDig: (x, y) => viewHooks.onDig?.(x, y),
-  onEvent: (e) => { viewHooks.onEvent?.(e); update(); },
-  onStatus: (s) => { viewHooks.onStatus?.(s); update(); },
+  onMap: (map) => { if (!showView()) view?.hooks.onMap(map); update(); },
+  onDig: (x, y) => view?.hooks.onDig(x, y),
+  onEvent: (e) => { view?.hooks.onEvent(e); update(); },
+  onStatus: (s) => { view?.hooks.onStatus(s); update(); },
 }, { room: 'blitzkrieg' });
-window.blitz = { game, setHooks: (h) => { viewHooks = h; }, visionOverlay: true };
+game.visionOverlay = true;
+window.blitz = { game }; // voor de console en de tests
+touchControls($('panel'), game, $('view'));
 
 // ZICHT AAN/UIT: het zichtveld in beeld (mist, schaduw, vervaging). Uit ziet de kaart er helder
-// uit; wat je niet kunt zien blijft verborgen. De weergave leest blitz.visionOverlay elk frame.
+// uit; wat je niet kunt zien blijft verborgen. De weergave leest game.visionOverlay elk frame.
 // Per browser onthouden (later naar een instellingenmenu).
 const VISION_KEY = 'blitzkrieg.zicht';
-try { window.blitz.visionOverlay = localStorage.getItem(VISION_KEY) !== 'uit'; } catch { /* geen opslag: standaard aan */ }
-const visionLabel = () => { $('vision').textContent = window.blitz.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT'; };
+try { game.visionOverlay = localStorage.getItem(VISION_KEY) !== 'uit'; } catch { /* geen opslag: standaard aan */ }
+const visionLabel = () => { $('vision').textContent = game.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT'; };
 visionLabel();
 $('vision').addEventListener('click', () => {
   $('vision').blur();
-  window.blitz.visionOverlay = !window.blitz.visionOverlay;
-  try { localStorage.setItem(VISION_KEY, window.blitz.visionOverlay ? 'aan' : 'uit'); } catch { /* niet bewaard */ }
+  game.visionOverlay = !game.visionOverlay;
+  try { localStorage.setItem(VISION_KEY, game.visionOverlay ? 'aan' : 'uit'); } catch { /* niet bewaard */ }
   visionLabel();
 });
 
@@ -74,13 +76,24 @@ document.addEventListener('fullscreenchange', fullLabel);
 document.addEventListener('webkitfullscreenchange', fullLabel);
 
 // ---------- Weergave ----------
-let page = '';
+// Andere stijl dan nu: oude weergave opruimen, nieuw canvas, stijlmodule laden en starten (die
+// tekent dan zelf de kaart die er al is). Geeft true als de weergave vervangen wordt.
+let style = '';
 function showView() {
-  const style = game.rules?.style || 'zomer';
-  if (STYLE_PAGES[style] === page) return;
-  page = STYLE_PAGES[style];
-  viewHooks = {}; // de oude weergave verdwijnt; de nieuwe meldt zich aan als hij geladen is
-  $('view').src = page;
+  const next = game.rules?.style || 'zomer';
+  if (next === style) return false;
+  style = next;
+  view?.destroy();
+  view = null;
+  const canvas = document.createElement('canvas');
+  canvas.id = 'game';
+  $('game')?.remove(); // het oude canvas (als de renderer het niet al weghaalde)
+  $('panel').prepend(canvas);
+  document.body.dataset.style = next;
+  import(`/styles/${next}.js`).then((mod) => {
+    if (style === next) view = mod.default(game); // intussen niet alweer gewisseld
+  });
+  return true;
 }
 
 // ---------- Titel en status ----------

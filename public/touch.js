@@ -14,7 +14,9 @@ function el(className, parent) {
   return e;
 }
 
-export function touchControls(panel, game) {
+// root: het deel van de pagina dat bij het spel hoort (speelveld en zijpaneel); aanraken van de
+// menubalk erboven blijft gewoon werken.
+export function touchControls(panel, game, root = document.body) {
   const R = TOUCH.stickRadius;
   const layer = el('touch');
   const base = el('touch-stick', layer), knob = el('touch-knob', base);
@@ -24,8 +26,8 @@ export function touchControls(panel, game) {
   sd.append(document.createElement('i'), 'K');
   layer.style.setProperty('--stick', `${R}px`);
   layer.style.setProperty('--hold', `${TOUCH.selfDestructMs}ms`);
-  // over de hele pagina, niet alleen het speelveld: de vuurknop hoort tegen de rechterrand
-  document.body.append(layer);
+  // over het hele scherm, niet alleen het speelveld: de vuurknop hoort tegen de rechterrand
+  root.append(layer);
 
   let stick = null; // { id, x, y }: duim op de joystick en de plek van de voet
   let dir = [0, 0];
@@ -58,11 +60,11 @@ export function touchControls(panel, game) {
     sd.classList.remove('hold');
   }
 
-  const on = () => document.body.classList.contains('touch-on');
+  const on = () => root.classList.contains('touch-on');
   document.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== 'touch' || !root.contains(e.target)) return;
     e.preventDefault();
-    if (!on()) { document.body.classList.add('touch-on'); rest(); }
+    if (!on()) { root.classList.add('touch-on'); rest(); }
     // de duim blijft van ons, ook buiten het veld (faalt als hij al weg is: dan maakt het niet uit)
     try { document.documentElement.setPointerCapture(e.pointerId); } catch { /* geen actieve pointer meer */ }
     const x = e.clientX, y = e.clientY, field = panel.getBoundingClientRect();
@@ -106,6 +108,6 @@ export function touchControls(panel, game) {
   };
   document.addEventListener('pointerup', end);
   document.addEventListener('pointercancel', end);
-  document.addEventListener('contextmenu', (e) => { if (on()) e.preventDefault(); }); // lang drukken = geen menu
+  document.addEventListener('contextmenu', (e) => { if (on() && root.contains(e.target)) e.preventDefault(); }); // lang drukken = geen menu
   new ResizeObserver(() => { if (!stick && on()) rest(); }).observe(panel);
 }

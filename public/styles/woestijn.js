@@ -1,11 +1,10 @@
-// Tunneler El Alamein: stijl voor de gedeelde wereldweergave (world-view.js), eigen potje
-// met mijnenvelden, struiken en zandstormen. Zand met duinribbels, loopgraven, rotsplateaus
-// met lagen en (bijna onzichtbare) mijnen.
+// Stijl woestijn (El Alamein) voor de gedeelde wereldweergave (world-view.js): mijnenvelden,
+// struiken en zandstormen. Zand met duinribbels, loopgraven, rotsplateaus met lagen en (bijna
+// onzichtbare) mijnen. De spelpagina (shell.js) start hem met start(game); de opmaak van het
+// zijpaneel staat in woestijn.css.
 import * as G from '/shared/game.js';
 import { startWorld, R } from '/world-view.js';
-import { clamp, shade, mix, rgb, hash, vnoise, pack, drawEmblem } from '/render-common.js';
-
-const $ = (id) => document.getElementById(id);
+import { shade, mix, rgb, hash, vnoise, pack, drawEmblem } from '/render-common.js';
 
 // Uiterlijk per kaart (config: tanks, via teamLook); de herkenningspanelen en wimpels geven de
 // vaste kleur van de speler
@@ -20,7 +19,6 @@ function teamLook(spec, i) {
   const hull = spec.variant ? shade(spec.hull, 0.88) : spec.hull;
   return { ...spec, emblem: spec.mark, hull, turret: mix(hull, '#ffffff', 0.12), camo: spec.camo || shade(hull, 0.72), mark: SLOT[i], mini: SLOT[i] };
 }
-function onTeams() { hudKey = ''; }
 
 // ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
 // De dure ruiskleuren (duinen, loopgraaf, rotslagen) worden per pixel onthouden;
@@ -278,41 +276,22 @@ function onEvent(e, spawn) {
   }
 }
 
-// ---------- Zijbalk: je tank (naam, zeges, meters) ----------
-function setGauge(k, pct, text, low) {
-  $(`g-${k}`).style.width = `calc(${clamp(pct, 0, 1) * 100}% - 2px)`;
-  $(`g-${k}`).classList.toggle('low', low);
-  $(`n-${k}`).textContent = text;
+let view = null;
+export default function start(game) {
+  view = startWorld({
+    viewCells: 90, background: '#d9be86', teams: TEAMS, teamLook,
+    ground, tunnel, rock, water, veg, base,
+    // minikaart (world-view.js): tijdens een zandstorm waait er stof over de hele kaart
+    minimap: {
+      rect: 'rgba(46, 36, 22, 0.9)',
+      overlay: (g) => { if (view.eraserInfo()?.active) { g.fillStyle = 'rgba(196, 150, 90, 0.4)'; g.fillRect(0, 0, G.W, G.H); } },
+    },
+    objects: { draw: drawObjects, over: false },
+    clouds: { dust: '226, 200, 150', smoke: '64, 56, 46' }, cloudAlpha: { dust: 0.6, smoke: 0.45 },
+    onEvent, drawUnder: drawMines, drawBase, drawTank,
+    tankFrames: 8, tankPeriod: 754, // één golf van de wimpel (sin(now / 120))
+    shadow: { color: 0x50321a, alpha: 0.35, dx: 0.5, dy: 0.65 },
+    eraser: { name: 'ZANDSTORM', haze: '196, 156, 98', hazeAlpha: 0.42, streak: '245, 226, 182' },
+  }, game);
+  return view;
 }
-
-let hudKey = '';
-function hud() {
-  const { game } = view;
-  const self = game.tanks.get(game.me);
-  if (!self) return;
-  const key = `${game.me},${TEAMS[game.me].name},${self.f},${self.s},${self.m},${self.c}`;
-  if (key === hudKey) return;
-  hudKey = key;
-  $('name').textContent = TEAMS[game.me].name;
-  setGauge('fuel', (self.f ?? 0) / 100, `${self.f ?? 0}%`, self.f < 20);
-  setGauge('armour', (self.s ?? 0) / G.SHIELD_MAX, `${self.s ?? 0}`, self.s < 30);
-  setGauge('ammo', (self.m ?? 0) / G.AMMO_MAX, `${self.m ?? 0}`, self.m < 10);
-  $('wins').textContent = self.c ?? 0;
-}
-
-const view = startWorld({
-  room: 'el-alamein', viewCells: 90, background: '#d9be86', teams: TEAMS, teamLook, onTeams,
-  ground, tunnel, rock, water, veg, base,
-  // minikaart (world-view.js): tijdens een zandstorm waait er stof over de hele kaart
-  minimap: {
-    rect: 'rgba(46, 36, 22, 0.9)',
-    overlay: (g) => { if (view.eraserInfo()?.active) { g.fillStyle = 'rgba(196, 150, 90, 0.4)'; g.fillRect(0, 0, G.W, G.H); } },
-  },
-  objects: { draw: drawObjects, over: false },
-  clouds: { dust: '226, 200, 150', smoke: '64, 56, 46' }, cloudAlpha: { dust: 0.6, smoke: 0.45 },
-  onEvent, drawUnder: drawMines, drawBase, drawTank,
-  tankFrames: 8, tankPeriod: 754, // één golf van de wimpel (sin(now / 120))
-  shadow: { color: 0x50321a, alpha: 0.35, dx: 0.5, dy: 0.65 },
-  eraser: { name: 'ZANDSTORM', haze: '196, 156, 98', hazeAlpha: 0.42, streak: '245, 226, 182' },
-  hud,
-});

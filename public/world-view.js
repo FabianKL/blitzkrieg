@@ -1,7 +1,7 @@
-// Gedeelde wereldweergave voor alle maps (stijlen 1944, 1943, 1942). Hier zit alles wat voor elke
-// stijl hetzelfde is: verbinding, kaartschilder, ronde randen van rots/water/begroeiing, sporen,
-// minikaart, objectlaag, camera, tanks, deeltjes, storm en meldingen. Een stijl levert alleen
-// kleuren, tekeningen en zijn zijbalk.
+// Gedeelde wereldweergave voor alle maps (stijlen zomer, winter, woestijn in styles/). Hier zit
+// alles wat voor elke stijl hetzelfde is: kaartschilder, ronde randen van rots/water/begroeiing,
+// sporen, minikaart, legenda, tankkaart, objectlaag, camera, tanks, deeltjes, storm en meldingen.
+// Een stijl levert alleen kleuren en tekeningen.
 //
 // Tekenen gaat met PixiJS (WebGL) in lagen, zie L in startWorld. De gamestate is de enige bron:
 // de weergave leest hem elk frame uit en zet sprites en Graphics klaar. Wat duur is om te tekenen
@@ -10,17 +10,16 @@
 //
 // De kleuren van terrein, tunnels, rots, water en begroeiing komen uit de kaartconfiguratie
 // (config.js); een stijl legt er zijn eigen textuur overheen (p.ground() en p.shade(), zie onder).
-// Normaal draait een weergave ingebed (iframe) in de spelpagina op /: die heeft de verbinding,
-// de menu's en de titel, en geeft de berichten door (window.parent.blitz). Los geopend (bv.
-// /1944.html?kaart=koersk) maakt hij zelf verbinding: ?kaart=<id>, anders style.room.
+// De spelpagina (shell.js) heeft de verbinding, de menu's en de titel. Hij start een weergave met
+// startWorld(style, game) en geeft de berichten door aan view.hooks; bij een kaart met een andere
+// stijl ruimt hij hem op met view.destroy() en start de volgende op een nieuw canvas #game.
 // Teams: style.teamLook(spec, i) maakt van het tankuiterlijk uit de config (G.teamsFor) de
 // velden die de stijl tekent; style.onTeams() na een wissel (caches leeg).
 //
 // Een stijl is een object met (alles behalve de kleuren is optioneel):
-//   room, viewCells, background, teams, fullText (melding als het potje vol is)
+//   viewCells, background, teams, fullText (melding als het potje vol is)
 //   ground, tunnel, rock, water, veg, base   kleur per pixel: (p) => zet p.r/p.g/p.b (zie hieronder)
 //   ice, wak, building         ijs, wakken en gebouwen (anders de standaard hieronder)
-// Kaartgrootte: ?grootte=klein|middel|groot|extragroot (geldt als het potje nog leeg is).
 // De minikaart staat aan of uit via DISPLAY.minimap in config.js (of minimap per kaart);
 // staat hij uit, dan verdwijnen het canvas en alles met data-minimap op de pagina.
 //   mini(c, x, y)              kleur [r, g, b] van een cel op de minikaart
@@ -35,13 +34,12 @@
 //                              ploeg (tankFrames plaatjes over tankPeriod ms als er iets beweegt)
 //   shadow: {color, alpha, dx, dy}   schaduw van tanks en bases (licht van linksboven)
 //   tracer: [kleur staart, kleur kop]
-//   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
+//   eraser                     stijl van de storm (zie drawEraser)
+//   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, HUD, TUNNEL, LOOK } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
-import { connect } from '/net.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
-import { touchControls } from '/touch.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
@@ -132,7 +130,7 @@ function crackLines(b) {
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
 const CRACK_MS = 450; // zo lang groeit een nieuwe barst
 
-export function startWorld(style) {
+export function startWorld(style, game) {
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
   // Lagen van onder naar boven: grond, markeringen, schaduwen, objecten, tanks, kruinen (bomen
@@ -143,7 +141,6 @@ export function startWorld(style) {
   // clean: de kaart zonder tunnels en sporen, over de grond waar je geen zicht hebt (zie drawSight)
   for (const name of ['ground', 'clean', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
-  let game = null;
   let bases = [], rockField = null, fields = null;
   const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
   const at = (x, y) => cellAt(game.map, x, y);
@@ -666,24 +663,7 @@ export function startWorld(style) {
     onEvent,
     onStatus: statusOverlay(setOverlay, style.fullText || 'alle vier de tanks zijn al bemand'),
   };
-  const shell = window.parent !== window ? window.parent.blitz : null;
-  // Ingebed: de verbinding (en de voorspelling) loopt in de buitenpagina, met de klok van die
-  // pagina. performance.now() telt per document vanaf het laden, en dit venster is later geladen
-  // (bij elke kaartwissel opnieuw): zonder dit verschil sprong je tank bij elke toetsaanslag.
-  let clockOffset = 0;
-  if (shell) {
-    clockOffset = performance.timeOrigin - window.parent.performance.timeOrigin;
-    document.body.classList.add('embed');
-    game = shell.game;
-    shell.setHooks(hooks);
-    // toetsen gaan naar het venster met de focus: doorgeven aan de verbinding van de spelpagina
-    for (const type of ['keydown', 'keyup', 'blur']) addEventListener(type, game.key);
-  } else {
-    const query = new URLSearchParams(location.search);
-    game = connect(hooks, { room: query.get('kaart') || style.room, size: query.get('grootte') });
-  }
   if ($('net')) showBandwidth(game, $('net'));
-  touchControls($('panel'), game);
 
   // ---------- Tekenen (PixiJS) ----------
   // De lagen staan bovenaan (L). Hier de onderdelen per laag; drawWorld zet ze elk frame klaar
@@ -803,7 +783,7 @@ export function startWorld(style) {
   // zichtcirkel (alleen als je zicht hebt en het zichtveld in beeld staat), alleen als ze iets doen
   function updateFilters(now) {
     const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
-    const blur = !DEBUG && !!eye() && shell?.visionOverlay !== false && FOG.blur > 0;
+    const blur = !DEBUG && !!eye() && game.visionOverlay !== false && FOG.blur > 0;
     const key = `${isNeutral(look.grade)},${haze},${blur}`;
     if (key !== filterKey) {
       filterKey = key;
@@ -891,7 +871,7 @@ export function startWorld(style) {
     }
   }
   // de letters op de bases hebben een webfont: opnieuw tekenen zodra dat geladen is
-  document.fonts?.ready.then(() => { if (game.map) buildBases(); });
+  document.fonts?.ready.then(() => { if (alive && game.map) buildBases(); });
 
   // Kogel als lichtspoor met een felle kop
   const [tracerTail, tracerHead] = style.tracer || ['rgba(255, 170, 60, 0)', 'rgba(255, 220, 130, 1)'];
@@ -941,7 +921,7 @@ export function startWorld(style) {
   }
 
   function drawWorld(now, dt) {
-    updateRenderPositions(game, now + clockOffset); // eigen tank voorspeld, de rest vloeiend uit de buffer
+    updateRenderPositions(game, now); // eigen tank voorspeld, de rest vloeiend uit de buffer
     smoothTankAngles(game, dt);
     if (shake > 0) shake -= dt;
     const self = game.tanks.get(game.me);
@@ -952,7 +932,7 @@ export function startWorld(style) {
     const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
     // sightOn: de zichtregel geldt (je leeft, geen debug); overlayOn: het zichtveld staat ook in
     // beeld (mist, schaduw, vervaging; de knop ZICHT in de bovenste balk)
-    const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && shell?.visionOverlay !== false;
+    const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     flushPainter(painter, cam);
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
@@ -1116,7 +1096,7 @@ export function startWorld(style) {
   // ---------- Zicht (§9) ----------
   // ?debug=alles: alles zichtbaar (alleen op deze computer, voor het ontwikkelen)
   const DEBUG_HOST = ['localhost', '127.0.0.1'].includes(location.hostname);
-  const debugParam = (k) => [location.search, window.parent !== window ? window.parent.location.search : ''].map((q) => new URLSearchParams(q).get(k)).find((v) => v);
+  const debugParam = (k) => new URLSearchParams(location.search).get(k);
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
   const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
@@ -1275,14 +1255,22 @@ export function startWorld(style) {
   // ---------- Renderer en beeldlus ----------
   // Pixi tekent op het canvas #game, in schermpixels (devicePixelRatio zit in de maat zelf).
   let renderer = null, lastFrame = performance.now(), lastShield = null;
+  let alive = true, resize = null; // alive = false na destroy(): de beeldlus stopt
   const panel = $('panel');
   const panelSize = () => [Math.max(1, Math.round(panel.clientWidth * (devicePixelRatio || 1))), Math.max(1, Math.round(panel.clientHeight * (devicePixelRatio || 1)))];
   autoDetectRenderer({ canvas, preference: 'webgl', width: panelSize()[0], height: panelSize()[1], resolution: 1, antialias: true, background: style.background })
     .then((r) => {
       renderer = r;
-      new ResizeObserver(() => renderer.resize(...panelSize())).observe(panel);
+      if (!alive) { destroyRenderer(); return; } // al opgeruimd voordat de renderer klaar was
+      resize = new ResizeObserver(() => renderer.resize(...panelSize()));
+      resize.observe(panel);
       requestAnimationFrame(frame);
     });
+  // De videokaart meteen vrijgeven (Pixi laat de WebGL-context los) en het canvas weghalen
+  function destroyRenderer() {
+    renderer.destroy({ removeView: true });
+    renderer = null;
+  }
 
   // ?fps=1 (alleen localhost): beelden per seconde en rekentijd per beeld linksboven
   const FPS = DEBUG_HOST && debugParam('fps'), fpsLabel = FPS ? createLabel(L.ui) : null;
@@ -1316,13 +1304,14 @@ export function startWorld(style) {
   }
 
   function frame(now, once = false) {
+    if (!alive) return;
     if (!once) requestAnimationFrame(frame);
     const t0 = performance.now();
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
     if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawMinimap(); }
-    style.hud?.(now);
+    drawCard(now);
     if (game.status === 'playing') gameOverlay();
     renderer.render(stage);
     if (FPS) countFrame(now, performance.now() - t0);
@@ -1545,9 +1534,37 @@ export function startWorld(style) {
     roundLabel.at(8 * s, canvas.height - 30 * s);
   }
 
-  // Wat een stijl nodig heeft voor zijn zijbalk en effecten
+  // ---------- Tankkaart in het zijpaneel (op elke kaart dezelfde, opmaak per stijl in CSS) ----------
+  // Naam, zeges en drie meters; alleen bijwerken als er iets veranderd is. Plus de korte tekst van
+  // de stijl in het speelveld (je ploeg, hoe lang de mist nog hangt).
+  const card = {
+    el: $('card'), name: $('card-name'), wins: $('card-wins'), label: $('panel-label'), key: '',
+    gauges: ['fuel', 'armour', 'ammo'].map((k) => ({ fill: $(`fill-${k}`), num: $(`num-${k}`), low: HUD.low[k] })),
+  };
+  function drawCard(now) {
+    const txt = style.label?.(now) ?? '';
+    if (card.label && card.label.textContent !== txt) card.label.textContent = txt;
+    const t = game.tanks.get(game.me);
+    if (!t || !card.el) return;
+    const name = style.teams[game.me]?.name ?? '';
+    const key = `${name},${t.f},${t.s},${t.m},${t.c},${t.a}`;
+    if (key === card.key) return;
+    card.key = key;
+    card.name.textContent = name;
+    card.wins.textContent = t.c ?? 0;
+    const values = [[(t.f ?? 0) / 100, `${t.f ?? 0}%`], [(t.s ?? 0) / G.SHIELD_MAX, `${t.s ?? 0}`], [(t.m ?? 0) / G.AMMO_MAX, `${t.m ?? 0}`]];
+    card.gauges.forEach((g, k) => {
+      const [pct, text] = values[k];
+      g.fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+      g.fill.classList.toggle('low', pct < g.low);
+      g.num.textContent = text;
+    });
+    card.el.classList.toggle('dead', t.a === 0);
+  }
+
+  // Wat een stijl nodig heeft voor zijn effecten, en wat de spelpagina gebruikt (hooks, destroy)
   const view = {
-    game, canvas,
+    game, canvas, hooks,
     cam: { x: 0, y: 0, w: 0, h: 0, Z: 1, drawX: 0, drawY: 0 },
     at,
     get bases() { return bases; },
@@ -1556,10 +1573,18 @@ export function startWorld(style) {
     drawMinimap,
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
+    // Opruimen bij een kaart met een andere stijl: beeldlus stoppen, videokaart vrijgeven
+    destroy() {
+      alive = false;
+      resize?.disconnect();
+      if (renderer) destroyRenderer();
+      stage.destroy({ children: true });
+      if (window.blitzView === view) delete window.blitzView;
+    },
   };
-  // ingebed: de kaart kan er al zijn voordat deze weergave geladen was. Pas na deze functie,
-  // want de stijl heeft zijn view dan nog niet (const view = startWorld(...)).
-  if (shell && game.map) queueMicrotask(() => { loadMap(game.map); hooks.onStatus(game.status); });
+  // De kaart kan er al zijn (kaartwissel, of de stijl laadde later dan het instapbericht). Pas na
+  // deze functie, want de stijl heeft zijn view dan nog niet (view = startWorld(...)).
+  if (game.map) queueMicrotask(() => { if (alive) { loadMap(game.map); hooks.onStatus(game.status); } });
   if (DEBUG_HOST) window.blitzView = view; // voor bench() in de console
   return view;
 }

@@ -99,6 +99,9 @@ export const LOOK = {
 // vasthouden voor zelfvernietiging, zodat je hem niet per ongeluk raakt.
 export const TOUCH = { deadZone: 0.3, stickRadius: 60, selfDestructMs: 1000 };
 
+// Tankkaart in het zijpaneel: een meter knippert onder dit deel van vol (brandstof, pantser, munitie)
+export const HUD = { low: { fuel: 0.2, armour: 0.3, ammo: 0.2 } };
+
 // Kogels (§5.8): dig = kogels graven een krater in de grond en stoppen daar (zoals het originele
 // Tunneler). Standaard niet: ze vliegen over grond en water tot een tank, begroeiing, gebouw,
 // rots of muur. Een kaart kan dit overschrijven met bulletsDig. De krater van een

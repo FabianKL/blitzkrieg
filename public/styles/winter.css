@@ -1,0 +1,36 @@
+/* Winter (Ardennen, Leningrad): metalen platen met boutjes, sneeuwwit speelveld.
+   De tankkaart is dezelfde papieren kaart als in de zomer (zie zomer.css). */
+[data-style="winter"] .view {
+  --edge: #3a3e42; --text: #d8d9d4; --muted: #9a9d9f; --stamp: #d8473a;
+  padding: 8px; background: #111213; color: var(--text);
+  font-family: "Oswald", "Arial Narrow", Impact, sans-serif;
+}
+[data-style="winter"] .panel { border: 3px solid #0b0c0d; box-shadow: 0 0 0 1px var(--edge); background: #e9eef3; }
+[data-style="winter"] .panel-label { /* hoe lang de mist nog hangt */
+  left: 14px; font-weight: 600; font-size: 14px; letter-spacing: 2px; color: #2b3138;
+  background: rgba(240, 244, 248, .75); padding: 3px 10px; border: 1px solid rgba(40,48,56,.35);
+}
+[data-style="winter"] .overlay .big {
+  font-weight: 700; font-size: 52px; letter-spacing: 4px; color: var(--stamp); background: rgba(20,22,24,.78);
+  border: 4px solid var(--stamp); padding: 4px 26px;
+}
+[data-style="winter"] .overlay .small { margin-top: 12px; font-size: 18px; letter-spacing: 1px; color: #fff; }
+[data-style="winter"] .caution { width: 18px; margin: 0 3px; border-color: #000; background: repeating-linear-gradient(-45deg, #f0b81c 0 10px, #141414 10px 20px); }
+
+/* zijpaneel: metalen plaat met boutjes in de hoeken */
+[data-style="winter"] aside {
+  width: 320px; padding: 14px 14px 12px; gap: 10px;
+  background:
+    radial-gradient(circle at 12px 12px, #7b7f83 0 2.5px, #26292c 3.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #7b7f83 0 2.5px, #26292c 3.5px, transparent 5px),
+    radial-gradient(circle at 12px calc(100% - 12px), #7b7f83 0 2.5px, #26292c 3.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #7b7f83 0 2.5px, #26292c 3.5px, transparent 5px),
+    linear-gradient(180deg, #24272a, #1c1e20);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px #000;
+}
+[data-style="winter"] .label { font-weight: 600; font-size: 18px; letter-spacing: 1px; color: var(--text); margin: 6px 2px 4px; }
+[data-style="winter"] #mini { border: 2px solid #4a4e52; background: #c9ccd0; image-rendering: pixelated; }
+[data-style="winter"] .legend-swatch { border: 1px solid #0b0c0d; box-shadow: 0 0 0 1px var(--edge); }
+[data-style="winter"] .legend-name { color: var(--text); letter-spacing: .3px; }
+[data-style="winter"] .legend-note { color: var(--muted); }

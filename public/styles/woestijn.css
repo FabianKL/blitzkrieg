@@ -1,0 +1,50 @@
+/* Woestijn (El Alamein): zandkleurig canvas met een gestikte rand, felle zon */
+[data-style="woestijn"] .view {
+  --canvas: #c9b48a; --canvas-2: #b9a174; --canvas-edge: #6f5c3a; --ink: #2e2416; --ink-soft: #5b4a30; --red: #b3321f;
+  --fuel: #d9a520; --armour: #b3321f; --ammo: #7d8a3a;
+  --stencil: "Stardos Stencil", "Black Ops One", Impact, sans-serif;
+  padding: 10px 12px 12px; gap: 12px;
+  background: radial-gradient(ellipse at 30% 0%, #2c2316 0%, #1e1810 65%);
+  color: var(--ink); font-family: "Courier Prime", "Courier New", monospace;
+}
+[data-style="woestijn"] .panel { border: 8px solid var(--canvas-2); box-shadow: 0 0 0 2px var(--canvas-edge), 0 0 0 3px #0d0a06; background: #d9be86; }
+[data-style="woestijn"] .panel::after { /* felle zon linksboven, randen in de schaduw */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 20% 10%, rgba(255,240,200,.16), transparent 55%);
+  box-shadow: inset 0 0 70px rgba(60,35,10,.45);
+}
+[data-style="woestijn"] .overlay .big {
+  font-family: var(--stencil); font-weight: 700; font-size: 50px; letter-spacing: 6px; color: var(--red);
+  border: 5px double var(--red); padding: 4px 24px; background: rgba(230, 210, 165, .82);
+}
+[data-style="woestijn"] .overlay .small { font-size: 17px; font-weight: 700; color: #fff7e6; }
+[data-style="woestijn"] .caution { display: none; }
+
+/* zijpaneel: stof van canvas met een gestikte rand */
+[data-style="woestijn"] aside {
+  width: 310px; padding: 16px 16px 14px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.025) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, var(--canvas), var(--canvas-2));
+  border: 2px solid var(--canvas-edge);
+  box-shadow: inset 0 0 0 4px var(--canvas), inset 0 0 0 5px rgba(70,55,30,.55), 0 3px 0 #0d0a06;
+  outline: 1px dashed rgba(70,55,30,.5); outline-offset: -9px;
+}
+[data-style="woestijn"] .label { font-family: var(--stencil); font-weight: 700; font-size: 15px; letter-spacing: 3px; color: var(--ink-soft); margin-bottom: -6px; }
+[data-style="woestijn"] .card { background: rgba(255, 245, 220, .35); border: 1px solid rgba(70,55,30,.45); }
+[data-style="woestijn"] .card .top { align-items: flex-start; margin-bottom: 0; }
+[data-style="woestijn"] .card .name { font-family: var(--stencil); font-weight: 700; font-size: 30px; letter-spacing: 2px; line-height: 1; }
+[data-style="woestijn"] .card .wins { text-align: center; font-weight: 700; letter-spacing: 2px; }
+[data-style="woestijn"] .card .wins b { font-family: var(--stencil); font-size: 30px; line-height: 1.1; color: var(--red); }
+[data-style="woestijn"] .card .gauge { grid-template-columns: 92px 1fr 34px; margin-top: 7px; font-size: 13px; font-weight: 700; }
+[data-style="woestijn"] .card .gauge .num { display: block; text-align: right; font-size: 12px; }
+[data-style="woestijn"] .card .track {
+  height: 14px; background: rgba(46,36,22,.18); border: 1px solid var(--ink-soft);
+  background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(46,36,22,.45) calc(10% - 1px) 10%);
+}
+[data-style="woestijn"] .card .fill { position: absolute; inset: 1px auto 1px 1px; height: auto; }
+[data-style="woestijn"] #mini { border: 1px solid var(--ink-soft); background: #d6bf8e; }
+[data-style="woestijn"] .legend-swatch { border: 1px solid var(--canvas-edge); }
+[data-style="woestijn"] .legend-name { color: var(--ink); }
+[data-style="woestijn"] .legend-note { color: var(--ink-soft); }

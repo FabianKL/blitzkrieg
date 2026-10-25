@@ -12,7 +12,13 @@
   <title>BLITZKRIEG</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Special+Elite&display=swap" rel="stylesheet">
+  <!-- alle lettertypes van de drie stijlen (zomer, winter, woestijn) -->
+  <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Special+Elite&family=Oswald:wght@500;600;700&family=Stardos+Stencil:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/view.css">
+  <link rel="stylesheet" href="/styles/zomer.css">
+  <link rel="stylesheet" href="/styles/winter.css">
+  <link rel="stylesheet" href="/styles/woestijn.css">
+  <link rel="stylesheet" href="/touch.css">
   <style>
     :root { --bg: #15130f; --bar: #24211b; --line: #3d382e; --cream: #e6dcc2; --dim: #9a917c; --red: #d8473a; --gold: #d2a431; }
     * { box-sizing: border-box; }
@@ -35,7 +41,6 @@
     button:hover { filter: brightness(1.1); }
     .info { font-size: 12px; color: var(--dim); white-space: nowrap; }
     .info b { color: var(--cream); font-weight: normal; }
-    iframe { flex: 1; width: 100%; border: 0; display: block; background: var(--bg); }
     @media (max-width: 900px) { h1 .rest { display: none; } }
     html, body { overscroll-behavior: none; }
     /* vast in de hoek rechtsboven, ook als de balk over twee regels loopt */
@@ -66,7 +71,7 @@
     }
   </style>
 </head>
-<body>
+<body data-style="zomer">
   <div class="bar">
     <h1>BLITZKRIEG <span class="rest" id="header"></span></h1>
     <!-- alleen voor de host in de wachtkamer; verder staat hier de titel -->
@@ -84,8 +89,31 @@
       <button id="full" hidden title="volledig scherm">⛶ <span class="label">VOLLEDIG SCHERM</span></button>
     </span>
   </div>
-  <iframe id="view" title="Speelveld"></iframe>
+  <!-- Het speelveld en het zijpaneel; de stijl van de kaart (zomer, winter, woestijn) staat in
+       data-style op <body> en kiest het thema (styles/*.css) en de tekenmodule (styles/*.js) -->
+  <main class="view" id="view">
+    <div class="panel" id="panel">
+      <canvas id="game"></canvas>
+      <div class="panel-label" id="panel-label"></div>
+      <div class="overlay" id="overlay"><div class="big">VERBINDEN</div><div class="small">radioverbinding maken…</div></div>
+    </div>
+    <div class="caution"></div>
+    <!-- Zijbalk, op elke kaart hetzelfde: je tank, de minikaart, de legenda -->
+    <aside>
+      <div class="card" id="card">
+        <div class="top"><span class="name" id="card-name">—</span><span class="wins">ZEGES<b id="card-wins">0</b></span></div>
+        <div class="gauge"><span>BRANDSTOF</span><div class="track"><div class="fill fuel" id="fill-fuel"></div></div><span class="num" id="num-fuel"></span></div>
+        <div class="gauge"><span>PANTSER</span><div class="track"><div class="fill armour" id="fill-armour"></div></div><span class="num" id="num-armour"></span></div>
+        <div class="gauge"><span>MUNITIE</span><div class="track"><div class="fill ammo" id="fill-ammo"></div></div><span class="num" id="num-ammo"></span></div>
+      </div>
+      <div class="label" data-minimap>VELDKAART</div>
+      <canvas id="mini" width="400" height="250"></canvas>
+      <div class="label">TERREIN</div>
+      <div class="legend" id="legend"></div>
+    </aside>
+  </main>
   <div class="rotate"><b>DRAAI JE SCHERM</b>BLITZKRIEG speel je liggend.</div>
+  <script type="importmap">{ "imports": { "pixi.js": "/vendor/pixi.mjs", "pixi-filters": "/vendor/pixi-filters.mjs", "simplex-noise": "/vendor/simplex-noise.mjs" } }</script>
   <script type="module" src="/shell.js"></script>
 </body>
 </html>

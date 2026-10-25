@@ -1,0 +1,40 @@
+/* Zomer (Normandië, Arnhem, ...): olijf en papier, een ruwe houten lijst om het speelveld */
+[data-style="zomer"] .view {
+  --paper: #d8cba5; --paper-edge: #8c7f5b; --ink: #3b3a22; --gold: #d2a431; --stamp: #d8473a;
+  padding: 14px 18px 16px;
+  background: radial-gradient(ellipse at 50% 30%, #25221c 0%, #1c1a16 70%);
+  color: #e6dcc2; font-family: "Special Elite", "Courier New", monospace;
+}
+[data-style="zomer"] .panel {
+  border: 6px solid #34342b; background: #2a1f17;
+  box-shadow: inset 0 0 0 1px #4a4a3c, 0 0 0 1px #121210, inset 0 0 40px rgba(0,0,0,.6);
+}
+[data-style="zomer"] .panel::after { /* vignet over het speelveld */
+  content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 60px rgba(0,0,0,.55);
+}
+[data-style="zomer"] .panel-label { /* je ploeg: PLOEG A · ★ */
+  right: 16px; font-family: "Black Ops One", Impact, sans-serif; font-size: 13px; letter-spacing: 3px; color: #f1ead6;
+  text-shadow: 0 1px 2px #000;
+}
+[data-style="zomer"] .overlay .big {
+  font-family: "Black Ops One", Impact, sans-serif; font-size: 44px; letter-spacing: 6px; color: var(--stamp);
+  border: 4px solid var(--stamp); padding: 6px 22px; background: rgba(20,16,12,.55);
+}
+[data-style="zomer"] .overlay .small { font-size: 16px; color: #e6dcc2; }
+[data-style="zomer"] .caution { width: 14px; margin: 0 16px; background: repeating-linear-gradient(-45deg, #e7c22b 0 9px, #15140f 9px 18px); }
+
+/* papieren tankkaart (ook in de winter) */
+[data-style="zomer"] .card, [data-style="winter"] .card {
+  background: linear-gradient(180deg, #ddd1ad, #d8cba5); border: 2px solid #8c7f5b;
+  box-shadow: inset 0 0 0 3px #d8cba5, inset 0 0 0 4px #b3a57e, 0 2px 0 #0e0d0b;
+  color: #3b3a22; font-family: "Special Elite", "Courier New", monospace;
+}
+[data-style="zomer"] .card .name, [data-style="winter"] .card .name { font-family: "Black Ops One", Impact, sans-serif; font-size: 20px; letter-spacing: 2px; color: #3a4320; }
+[data-style="zomer"] .card .wins b, [data-style="winter"] .card .wins b { font-family: "Black Ops One", Impact, sans-serif; font-size: 24px; }
+[data-style="zomer"] .card .track, [data-style="winter"] .card .track { background: #c9b98e; border: 1px solid #7e7150; box-shadow: inset 0 1px 0 rgba(0,0,0,.15); }
+
+[data-style="zomer"] .label { font-family: "Black Ops One", Impact, sans-serif; font-size: 13px; letter-spacing: 3px; color: var(--gold); margin-top: 6px; }
+[data-style="zomer"] #mini { border: 2px solid var(--paper-edge); box-shadow: 0 0 0 1px #000; background: #000; }
+[data-style="zomer"] .legend-swatch { border: 1px solid var(--paper-edge); }
+[data-style="zomer"] .legend-name { color: #e6dcc2; }
+[data-style="zomer"] .legend-note { color: #9a927c; }

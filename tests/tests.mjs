@@ -787,10 +787,10 @@ export const tests = [
     },
   },
   {
-    name: 'vloeiend rijden: tekenen met een andere klok dan de voorspelling springt niet (ingebed speelveld)',
+    name: 'vloeiend rijden: tekenen met een andere klok dan de voorspelling springt niet',
     async run(port) {
       const a = await connectBot(port, 'barbarossa');
-      // de voorspelling loopt op klok A (buitenpagina), het tekenen op klok B = A - 3 s (iframe)
+      // de voorspelling loopt op klok A, het tekenen op klok B = A - 3 s (bv. een trage tab)
       let max = 0, prev = null;
       const t0 = Date.now();
       while (Date.now() - t0 < 3000) {

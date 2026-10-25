@@ -1,5 +1,5 @@
-/* Touchbesturing (touch.js) en de telefoonstand, voor alle drie de stijlpagina's.
-   Komt na de eigen <style> van de pagina, zodat deze regels bij gelijke selectors winnen. */
+/* Touchbesturing (touch.js) en de telefoonstand van het speelveld, voor alle stijlen.
+   Komt na de stijlbladen; de telefoonregels beginnen met [data-style], zodat ze winnen. */
 
 /* De pagina is voor de duimen: niet scrollen, zoomen, selecteren of een menu bij lang drukken */
 .panel, aside, .touch-on { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -44,26 +44,24 @@ html, body { overscroll-behavior: none; }
 
 /* ---------- Telefoon liggend: speelveld over het hele scherm, zijpaneel als kleine HUD ---------- */
 @media (pointer: coarse) and (max-height: 500px) {
-  body { padding: 0; overflow: hidden; }
-  main, .frame, .main { display: block; position: relative; height: 100%; padding: 0; margin: 0; }
-  .panel { position: absolute; inset: 0; height: auto; min-height: 0; border-width: 2px; }
-  .caution, .title, .ploeg, .fog { display: none; }
-  .overlay .big { font-size: 26px; padding: 3px 14px; border-width: 3px; }
-  .overlay .small { font-size: 12px; margin-top: 8px; }
+  [data-style] .view { display: block; position: relative; padding: 0; }
+  [data-style] .panel { position: absolute; inset: 0; height: auto; min-height: 0; border-width: 2px; }
+  [data-style] .caution, [data-style] .panel-label { display: none; }
+  [data-style] .overlay .big { font-size: 26px; padding: 3px 14px; border-width: 3px; }
+  [data-style] .overlay .small { font-size: 12px; margin-top: 8px; }
 
   /* tankkaart en minikaart rechtsboven; de rest van het zijpaneel weg */
-  aside {
+  [data-style] aside {
     position: absolute; top: 6px; right: 6px; z-index: 5; width: 150px; height: auto;
-    padding: 5px; gap: 4px; overflow: hidden; pointer-events: none; opacity: .9;
+    padding: 5px; gap: 4px; overflow: hidden; pointer-events: none; opacity: .9; outline: none;
   }
-  aside .legend, aside .label, aside .legend-title { display: none; }
-  aside #cards { padding-top: 0 !important; }
-  aside .card { padding: 4px 6px; margin: 0; }
-  aside .card .top { margin-bottom: 2px; padding-bottom: 2px; }
-  aside .card .name { font-size: 13px; letter-spacing: 1px; }
-  aside .card .wins { font-size: 8px; }
-  aside .card .wins b { font-size: 14px; margin-top: 0; padding: 0 4px; }
-  aside .card .tag, aside .card .portrait, aside .card .num { display: none; }
-  aside .card .row, aside .gauge { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
-  aside .card .track { height: 6px; }
+  [data-style] aside .legend, [data-style] aside .label { display: none; }
+  [data-style] aside .card { padding: 4px 6px; margin: 0; }
+  [data-style] aside .card .top { margin-bottom: 2px; padding-bottom: 2px; }
+  [data-style] aside .card .name { font-size: 13px; letter-spacing: 1px; }
+  [data-style] aside .card .wins { font-size: 8px; }
+  [data-style] aside .card .wins b { font-size: 14px; margin-top: 0; padding: 0 4px; }
+  [data-style] aside .card .gauge { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
+  [data-style] aside .card .gauge .num { display: none; }
+  [data-style] aside .card .track { height: 6px; }
 }
