@@ -242,7 +242,6 @@ function hud() {
 }
 
 const view = startWorld({
-  // Koersk gebruikt deze stijl ook: data-kaart="koersk" in koersk.html
   room: 'carentan', viewCells: 80, background: '#2a1f17', teams: TEAMS,
   fullText: 'alle vier de ploegen zijn al bemand',
   ground, tunnel, rock, water, veg, base,

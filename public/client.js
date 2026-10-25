@@ -1,6 +1,7 @@
 // Tunneler-client: stuurt alleen input, ontvangt delta's en tekent in retro-stijl.
 import * as G from '/shared/game.js';
-import { connect, updateRenderPositions } from '/net.js';
+import { connect } from '/net.js';
+import { updateRenderPositions } from '/shared/client-sim.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

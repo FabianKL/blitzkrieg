@@ -39,7 +39,8 @@
 import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
-import { connect, updateRenderPositions } from '/net.js';
+import { connect } from '/net.js';
+import { updateRenderPositions } from '/shared/client-sim.js';
 import { touchControls } from '/touch.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';

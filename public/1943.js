@@ -441,7 +441,6 @@ function hud() {
 }
 
 const view = startWorld({
-  // Leningrad gebruikt deze stijl ook: data-kaart="leningrad" in leningrad.html
   room: 'ardennen', viewCells: 96, background: '#e9eef3', teams: TEAMS,
   ground: snow, rock: snow, veg: snow, tunnel, water, base,
   // minikaart (world-view.js): zolang de mist hangt, ligt die ook over de minikaart

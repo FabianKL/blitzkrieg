@@ -28,16 +28,14 @@ const VENDOR = {
 
 // ---------- Statische bestanden ----------
 // / is het spel (BLITZKRIEG), /retro het originele Tunneler. De weergaves (1944.html enz.)
-// worden door de spelpagina ingeladen. Oude adressen sturen door naar het spel.
+// worden door de spelpagina ingeladen.
 const PAGES = {
   '/': 'public/index.html',
   '/retro': 'public/retro.html',
 };
-const OLD_PAGES = new Set(['/1944', '/1943', '/1942', '/koersk', '/leningrad']);
 const server = http.createServer((req, res) => {
   let urlPath;
   try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { urlPath = '/'; }
-  if (OLD_PAGES.has(urlPath)) { res.writeHead(302, { Location: '/' }); res.end(); return; }
   const rel = VENDOR[urlPath] || PAGES[urlPath] || (urlPath.startsWith('/shared/') ? urlPath.slice(1) : 'public' + urlPath);
   const file = path.join(ROOT, rel);
   if (!VENDOR[urlPath] && !ALLOWED.some((d) => file.startsWith(d + path.sep))) { res.writeHead(404); res.end(); return; }
