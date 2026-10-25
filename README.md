@@ -17,9 +17,9 @@ Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de kno
 de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
 richtingen), rechterhelft = vuren, het K-rondje bovenin 1 s vasthouden = zelfvernietiging. Staand
 krijg je "draai je scherm". Op een telefoon (liggend, lager dan 500 px) is het zijpaneel een kleine
-HUD rechtsboven: je tankkaart en de minikaart, zonder legenda. Volledig scherm: de knop ⛶ in de
-balk (Android zet het scherm dan ook liggend vast), of "Zet op beginscherm" / "Toevoegen aan
-startscherm" in de browser: dan opent het spel zonder browserbalken. `/retro` heeft geen
+HUD rechtsboven: je tankkaart en de minikaart, zonder legenda. Volledig scherm: de knop ⛶ VOLLEDIG
+SCHERM helemaal rechtsboven in de balk (Android zet het scherm dan ook liggend vast), of "Zet op
+beginscherm" / "Toevoegen aan startscherm" in de browser: dan opent het spel zonder browserbalken. `/retro` heeft geen
 touchbesturing.
 
 Rechts staat op elke map hetzelfde: je tank (zeges en meters), de minikaart (terrein, je eigen basis,

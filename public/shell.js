@@ -46,6 +46,10 @@ $('full').addEventListener('click', async () => {
     await screen.orientation?.lock?.('landscape');
   } catch { /* niet toegestaan (bv. desktop of iPad): dan gewoon zonder vastzetten */ }
 });
+// het opschrift volgt de werkelijke toestand, ook als je met Esc of een gebaar uit volledig scherm gaat
+const fullLabel = () => { $('full').querySelector('.label').textContent = fullElement() ? 'SCHERM VERKLEINEN' : 'VOLLEDIG SCHERM'; };
+document.addEventListener('fullscreenchange', fullLabel);
+document.addEventListener('webkitfullscreenchange', fullLabel);
 
 // ---------- Weergave ----------
 let page = '';
