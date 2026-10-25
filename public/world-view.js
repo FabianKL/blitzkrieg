@@ -94,22 +94,41 @@ const isNeutral = (g) => !g.saturation && g.brightness === 1 && g.contrast === 1
 // Getal uit een tekst (kaartnaam): dezelfde grondtextuur voor iedereen op die kaart
 const seedOf = (str) => [...str].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261);
 
-// Barsten in een ijsvak: per vak vaste lijnen (in pixels), per stadium twee meer
+// Barsten in een ijsvak: per vak vaste grillige lijnen (in cellen), per stadium twee meer.
+// Elke barst loopt vanuit een punt bij het midden twee kanten op, met een knik per stuk en
+// soms een zijtakje. Zelfde vak = zelfde barsten, bij iedereen.
 const crackCache = new Map();
 function crackLines(b) {
-  let segs = crackCache.get(b);
-  if (segs) return segs;
-  const rnd = G.mulberry32((b * 2654435761) >>> 0), B = G.ICE_B * R;
+  let cracks = crackCache.get(b);
+  if (cracks) return cracks;
+  const rnd = G.mulberry32((b * 2654435761) >>> 0), B = G.ICE_B;
   const cx = (b % G.ICE_BW) * B + B / 2, cy = ((b / G.ICE_BW) | 0) * B + B / 2;
-  segs = [];
+  cracks = [];
   for (let k = 0; k < 6; k++) {
     const a = rnd() * Math.PI * 2, len = B * (0.3 + rnd() * 0.25);
     const x0 = cx + (rnd() - 0.5) * B * 0.4, y0 = cy + (rnd() - 0.5) * B * 0.4;
-    segs.push([x0, y0, Math.cos(a), Math.sin(a), len]);
+    const crack = [];
+    for (const side of [1, -1]) { // twee armen vanuit het beginpunt
+      let x = x0, y = y0, ang = side > 0 ? a : a + Math.PI;
+      const arm = [[x, y]];
+      for (let s = 0; s < 4; s++) {
+        ang += (rnd() - 0.5) * 0.9;
+        x += Math.cos(ang) * len / 4; y += Math.sin(ang) * len / 4;
+        arm.push([x, y]);
+        if (rnd() < 0.3) { // zijtakje
+          const ta = ang + (rnd() < 0.5 ? 1 : -1) * (0.6 + rnd() * 0.6), tl = len * (0.12 + rnd() * 0.15);
+          crack.push({ twig: true, from: arm.length - 1, side, pts: [[x, y], [x + Math.cos(ta) * tl, y + Math.sin(ta) * tl]] });
+        }
+      }
+      crack.push({ side, pts: arm });
+    }
+    cracks.push(crack);
   }
-  crackCache.set(b, segs);
-  return segs;
+  crackCache.set(b, cracks);
+  return cracks;
 }
+const easeOut = (t) => 1 - (1 - t) * (1 - t);
+const CRACK_MS = 450; // zo lang groeit een nieuwe barst
 
 export function startWorld(style) {
   const $ = (id) => document.getElementById(id);
@@ -158,7 +177,7 @@ export function startWorld(style) {
     rockAt: (du, dv) => rocks.sample(p.u + du, p.v + dv),
   };
   let pal = makePalette({});
-  let look = lookFor({}), noise2 = null;
+  let look = lookFor({}), noise2 = null, hasIce = false;
   // Grondtextuur: een paar lagen simplex-ruis (fbm), -1..1
   function groundNoise(X, Y) {
     const n = look.noise;
@@ -176,27 +195,28 @@ export function startWorld(style) {
     const x0 = Math.floor(wx), y0 = Math.floor(wy), fx = smoothstep(wx - x0), fy = smoothstep(wy - y0);
     const a = clsColor(x0, y0), q = clsColor(x0 + 1, y0), c = clsColor(x0, y0 + 1), d = clsColor(x0 + 1, y0 + 1);
     const mixc = (k) => (a[k] * (1 - fx) + q[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy;
-    const n = look.noise.strength ? 1 + look.noise.strength * groundNoise(X, Y) : 1; // vlekken licht en donker
-    return pack(mixc(0) * n, mixc(1) * n, mixc(2) * n);
+    const r = mixc(0), g = mixc(1), b2 = mixc(2);
+    // vlekken licht en donker, vooral op donkere grond (veen, aarde); sneeuw blijft rustig
+    const dark = Math.min(1, Math.max(0.1, 1.15 - (0.3 * r + 0.59 * g + 0.11 * b2) / 255));
+    const n = look.noise.strength ? 1 + look.noise.strength * dark * groundNoise(X, Y) : 1;
+    return pack(r * n, g * n, b2 * n);
   }
-  // IJs: terreinkleur met lichte strepen en glinstering, plus barsten per vak
-  function crackAt() {
-    const st = G.iceStage(game.world.ice[G.iceBlockAt(p.x, p.y)]);
-    if (!st) return false;
-    const segs = crackLines(G.iceBlockAt(p.x, p.y)), px = p.X + 0.5, py = p.Y + 0.5;
-    for (let k = 0; k < st * 2; k++) {
-      const [x0, y0, dx, dy, len] = segs[k];
-      const along = (px - x0) * dx + (py - y0) * dy;
-      if (along >= -len && along <= len && Math.abs(-(px - x0) * dy + (py - y0) * dx) < 0.75) return true;
-    }
-    return false;
+  // IJs: diepe, donkere plekken die vloeiend overgaan in licht ijs, met lange stroomstrepen
+  // (de rivier loopt van west naar oost) en wat korrel. Barsten en glinstering staan los
+  // daarboven (drawIce), zodat ze kunnen bewegen.
+  const ICE_SLOT = 9; // cache-vak (stijlen 0..7, terrein 8)
+  const DEEP = [34, 58, 82]; // kleur van diep, donker ijs
+  function iceColor(X, Y) {
+    const ice = pal.cls[ICE_CLS], f = 1 / (R * 18);
+    const deep = 0.5 + 0.5 * (noise2(X * f, Y * f) * 0.7 + noise2(X * f * 2.3 + 40, Y * f * 2.3) * 0.3); // 0..1
+    const k = Math.pow(1 - deep, 1.6) * 0.62; // hoeveel donker ijs
+    const flow = noise2(X / (R * 40), Y / (R * 2.2)) * 0.035; // lange strepen langs de stroom
+    const grain = (((hash(X, Y) & 1023) / 1023) - 0.5) * 0.025;
+    const light = 1 + flow + grain + (1 - k) * 0.04;
+    return pack(...ice.map((v, i) => (v * (1 - k) + DEEP[i] * k) * light));
   }
   function paintIce() {
-    p.ground();
-    const s = Math.sin(p.X * 0.05 + p.Y * 0.35 + vnoise(p.X / 40, p.Y / 40) * 5);
-    p.shade(1 + s * 0.035 + (p.n - 0.5) * 0.03);
-    if (p.n > 0.993) p.set(248, 252, 255);
-    if (crackAt()) p.shade(0.55);
+    p.cached(ICE_SLOT, iceColor);
   }
   // Wak: open water met ijsschotsen en een gebroken ijsrand
   function paintWak() {
@@ -391,6 +411,18 @@ export function startWorld(style) {
 
   // ---------- Effecten ----------
   const particles = createParticles(style.clouds || { smoke: '64, 60, 56' }, style.cloudAlpha || {});
+  const ICE_BITS = ['#e8f2fa', '#c6dcea', '#9ebdd2', '#ffffff'];
+  const crackGrow = new Map(); // ijsvak -> {from: vorig stadium, t0}: barsten die nog groeien
+  // Mondingsvuur: een felle steekvlam voor de loop, vonken en een rookwolkje dat meedrijft
+  function muzzle(e) {
+    const [dx, dy] = G.DIRS[e.d], n = Math.hypot(dx, dy), ux = dx / n, uy = dy / n, dir = Math.atan2(dy, dx);
+    const x = e.x - ux * 1.2, y = e.y - uy * 1.2;
+    particles.spawn('flash', x, y, 1, { life: 0.09, r0: 2.2, r1: 1 });
+    particles.spawn('flash', x + ux * 1.4, y + uy * 1.4, 1, { life: 0.07, r0: 1.4, r1: 0.6 });
+    particles.spawn('spark', x, y, 6, { speed: 26, life: 0.18, dir, spread: 0.6, cols: ['#ffd27a', '#ffb347', '#fff0c0'] });
+    const cloud = style.clouds?.smoke ? 'smoke' : Object.keys(style.clouds || {})[0];
+    if (cloud) particles.spawn(cloud, x + ux, y + uy, 3, { speed: 4, life: 1.1, dir, spread: 0.9, r0: 0.6, r1: 2.6 });
+  }
   let shake = 0;
   function onEvent(e) {
     if (e.t === 'x' && e.fell) { // plant of gebouw weg: alleen daar de randen en objecten opnieuw
@@ -400,15 +432,26 @@ export function startWorld(style) {
     if (e.t === 'x' && e.building && (style.clouds || { smoke: 1 }).smoke) { // stof en brokken van een gebouw
       particles.spawn('smoke', e.x, e.y, e.fell ? 14 : 3, { speed: e.fell ? 5 : 2, life: e.fell ? 2.4 : 1.2, r0: 1, r1: e.fell ? 7 : 3 });
     }
-    if (e.t === 'c') { // ijsvak heeft een passage meer: barsten opnieuw tekenen
-      const bx = (e.b % G.ICE_BW) * G.ICE_B, by = ((e.b / G.ICE_BW) | 0) * G.ICE_B;
-      painter.markRect(bx, by, bx + G.ICE_B - 1, by + G.ICE_B - 1);
+    if (e.t === 'c') { // ijsvak heeft een passage meer: nieuwe barsten groeien, ijs splintert
+      const from = G.iceStage(e.n - 1), to = G.iceStage(e.n);
+      if (to > from) crackGrow.set(e.b, { from, t0: performance.now() });
+      const t = game.tanks.get(e.i);
+      if (t && (e.i === game.me || t.seen === 'sharp')) particles.spawn('chunk', t.x, t.y, to > from ? 8 : 3, { speed: 8, life: 0.5, cols: ICE_BITS });
     }
-    if (e.t === 'w' && e.box) { // ijs gebroken: waterrand bijwerken
+    if (e.t === 'w' && e.box) { // ijs gebroken: waterrand bijwerken, schotsen en spatwater
       const [x0, y0, x1, y1] = e.box;
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
       painter.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
-      shake = Math.max(shake, 0.2);
+      crackGrow.delete(e.b);
+      const cx = (e.b % G.ICE_BW) * G.ICE_B + G.ICE_B / 2, cy = ((e.b / G.ICE_BW) | 0) * G.ICE_B + G.ICE_B / 2;
+      particles.spawn('chunk', cx, cy, 30, { speed: 14, life: 0.9, cols: ICE_BITS });
+      particles.spawn('ring', cx, cy, 1, { life: 0.6, r0: 1, r1: 7 });
+      if (style.clouds?.puff) particles.spawn('puff', cx, cy, 6, { speed: 4, life: 1.2, r0: 1, r1: 4 });
+      shake = Math.max(shake, 0.3);
+    }
+    if (e.t === 'b') { // schot: mondingsvuur en rook, alleen als je de schutter ziet
+      const t = game.tanks.get(e.i);
+      if (t && (e.i === game.me || t.seen === 'sharp')) muzzle(e);
     }
     if (e.t === 'W') loadMap(game.map); // het weer veranderde het terrein: alles opnieuw
     if (e.t === 'bridge') { // brug ontploft of hersteld
@@ -457,6 +500,8 @@ export function startWorld(style) {
     miniMe = -1;
     makeObjects();
     crackCache.clear();
+    crackGrow.clear();
+    hasIce = game.terrain.includes(ICE_CLS);
     rockField = blurField(map, (c) => c === G.ROCK);
     fields = obstacleFields(map);
     bases = findBases(map);
@@ -597,6 +642,8 @@ export function startWorld(style) {
   const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
   const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE, L.shadows.addChild(new Container()));
   const marks = L.marks.addChild(new Graphics());
+  const crackG = L.marks.addChild(new Graphics());
+  const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
   const ghosts = spritePool(L.tanks.addChild(new Container()), TEX.soft);
@@ -737,6 +784,11 @@ export function startWorld(style) {
     updateRenderPositions(game, now + clockOffset); // eigen tank voorspeld, de rest vloeiend uit de buffer
     smoothTankAngles(game, dt);
     if (shake > 0) shake -= dt;
+    const self = game.tanks.get(game.me);
+    if (self?.s !== undefined) {
+      if (lastShield !== null && self.s < lastShield && self.a) shake = Math.max(shake, look.shakeOnHit);
+      lastShield = self.s;
+    }
     const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
     painter.flush(cam);
     world.scale.set(cam.Z);
@@ -745,6 +797,7 @@ export function startWorld(style) {
     objTiles.sync(cam);
 
     marks.clear();
+    drawIce(cam, now);
     style.drawUnder?.(marks, cam, now);
     drawLandmarks();
     drawDepots();
@@ -769,6 +822,59 @@ export function startWorld(style) {
     vignette.width = canvas.width; vignette.height = canvas.height;
     drawEraser(now);
     drawHints(now);
+  }
+
+  // IJs: barsten als lijnen (nieuwe groeien vanuit hun beginpunt) en glinstering die komt en
+  // gaat. Alleen voor ijsvakken in beeld; een wak (water) heeft geen barsten meer.
+  function drawIce(cam, now) {
+    crackG.clear();
+    sparkles.begin();
+    if (hasIce) {
+      const B = G.ICE_B, bx0 = Math.max(0, Math.floor(cam.x / B) - 1), by0 = Math.max(0, Math.floor(cam.y / B) - 1);
+      const bx1 = Math.min(G.ICE_BW - 1, Math.ceil((cam.x + cam.w) / B)), by1 = Math.min(G.ICE_BH - 1, Math.ceil((cam.y + cam.h) / B));
+      for (let by = by0; by <= by1; by++) {
+        for (let bx = bx0; bx <= bx1; bx++) {
+          const b = by * G.ICE_BW + bx, st = G.iceStage(game.world.ice[b]);
+          if (!st) continue;
+          const grow = crackGrow.get(b), p = grow ? easeOut(Math.min(1, (now - grow.t0) / CRACK_MS)) : 1;
+          if (grow && p >= 1) crackGrow.delete(b);
+          const cracks = crackLines(b);
+          for (let k = 0; k < Math.min(st * 2, cracks.length); k++) {
+            const part = grow && k >= grow.from * 2 ? p : 1;
+            for (const line of cracks[k]) {
+              if (line.twig && part < 0.8) continue; // zijtakjes pas als de barst bijna uit is
+              const pts = line.pts, n = line.twig ? 1 : (pts.length - 1) * part;
+              if (game.map[Math.round(pts[0][1]) * G.W + Math.round(pts[0][0])] === G.WATER) continue;
+              for (const [col, alpha, width, off] of [[0x1a3550, 0.5, 0.14, 0], [0xffffff, 0.45, 0.06, -0.08]]) {
+                crackG.moveTo(pts[0][0] + off, pts[0][1] + off);
+                for (let i = 1; i <= Math.ceil(n); i++) {
+                  const f = Math.min(1, n - (i - 1)), [ax, ay] = pts[i - 1], [qx, qy] = pts[i];
+                  crackG.lineTo(ax + (qx - ax) * f + off, ay + (qy - ay) * f + off);
+                }
+                crackG.stroke({ color: col, alpha, width: line.twig ? width * 0.7 : width, cap: 'round', join: 'round' });
+              }
+            }
+          }
+        }
+      }
+    }
+    // glinstering: vaste plekken op het ijs (elke 3 cellen een kans) die af en toe oplichten
+    if (look.iceShine) {
+      for (let gy = Math.floor(cam.y / 3) * 3; gy < cam.y + cam.h; gy += 3) {
+        for (let gx = Math.floor(cam.x / 3) * 3; gx < cam.x + cam.w; gx += 3) {
+          const h = hash(gx * 7 + 3, gy * 11 + 5);
+          if (h % 5) continue;
+          const x = gx + (h >>> 8) % 3, y = gy + (h >>> 12) % 3;
+          if (!G.inBounds(x, y) || game.terrain[y * G.W + x] !== ICE_CLS || game.map[y * G.W + x] !== G.DIRT) continue;
+          const tw = Math.sin(now / (600 + (h >>> 16) % 900) + (h % 628) / 100);
+          if (tw < 0.85) continue;
+          const s = sparkles.next(), k = (tw - 0.85) / 0.15;
+          s.position.set(x + 0.5, y + 0.5); s.width = s.height = 1.2 + k * 0.8;
+          s.alpha = k * look.iceShine; s.rotation = (h % 100) / 100;
+        }
+      }
+    }
+    sparkles.end();
   }
 
   // Weer in beeld (look.weather): sneeuw, stof of regen als deeltjes in de wereld. Ze blijven
@@ -986,7 +1092,7 @@ export function startWorld(style) {
 
   // ---------- Renderer en beeldlus ----------
   // Pixi tekent op het canvas #game, in schermpixels (devicePixelRatio zit in de maat zelf).
-  let renderer = null, lastFrame = performance.now();
+  let renderer = null, lastFrame = performance.now(), lastShield = null;
   const panel = $('panel');
   const panelSize = () => [Math.max(1, Math.round(panel.clientWidth * (devicePixelRatio || 1))), Math.max(1, Math.round(panel.clientHeight * (devicePixelRatio || 1)))];
   autoDetectRenderer({ canvas, preference: 'webgl', width: panelSize()[0], height: panelSize()[1], resolution: 1, antialias: true, background: style.background })

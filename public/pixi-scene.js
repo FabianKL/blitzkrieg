@@ -37,6 +37,19 @@ export const TEX = {
     l.addColorStop(0, 'rgba(255,255,255,1)'); l.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = l; g.fillRect(0, 0, S, 4);
   }),
+  // glinster: kleine vierpuntige ster met een zachte gloed (ijs)
+  sparkle: drawnTexture(S, S, (g) => {
+    const r = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 4);
+    r.addColorStop(0, 'rgba(255,255,255,0.9)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#fff';
+    g.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4, rr = k % 2 ? S * 0.06 : S * 0.48;
+      g.lineTo(S / 2 + Math.cos(a) * rr, S / 2 + Math.sin(a) * rr);
+    }
+    g.fill();
+  }),
   white: Texture.WHITE,
 };
 
@@ -115,7 +128,9 @@ export function createParticles(clouds, cloudAlpha = {}) {
     spawn(kind, x, y, n, o) {
       if (!groups[kind]) return; // soort die deze weergave niet kent
       for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2, v = (0.25 + Math.random() * 0.75) * (o.speed || 0);
+        // o.dir: hoek waarin ze wegvliegen (met o.spread speling), anders alle kanten op
+        const a = o.dir !== undefined ? o.dir + (Math.random() - 0.5) * (o.spread ?? 0.5) : Math.random() * Math.PI * 2;
+        const v = (0.25 + Math.random() * 0.75) * (o.speed || 0);
         const life = (0.6 + Math.random() * 0.4) * o.life;
         const p = {
           kind, x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v,

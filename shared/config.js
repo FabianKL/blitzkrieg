@@ -306,7 +306,7 @@ export const MAPS = {
       { type: 'area', name: 'zuid', rect: [0, 0.56, 1, 1], classes: { soft: 75, hard: 25 } },
     ],
     meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40' },
-    look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 7, strength: 0.16, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
+    look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
     tunnelColor: '#3a2f27',
     weather: [
       { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },
