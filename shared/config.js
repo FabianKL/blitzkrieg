@@ -88,6 +88,8 @@ export const BULLETS = { dig: false };
 // Gebouwen (§5.4): zoveel treffers tot het puin is; daarna wordt de cel de klasse rubble met
 // een puinpatroon dat nooit vervaagt.
 export const BUILDING = { hp: 4, rubble: 'soft', color: '#8c8a86' };
+// De brug die kan ontploffen (Market Garden): betongrijs, heel en als brokken in het water
+export const BRIDGE = { color: '#8e8c88' };
 
 // Rijden door een bestaande tunnel: altijd zo snel en zo zuinig, ongeacht het terrein
 export const TUNNEL = { speed: 1.0, fuel: 1 };

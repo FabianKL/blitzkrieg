@@ -37,7 +37,7 @@
 //   tracer: [kleur staart, kleur kop]
 //   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
@@ -63,14 +63,14 @@ function makePalette(rules) {
   const hex = {
     tunnel: rules.tunnelColor || FALLBACK.tunnel, water: rules.water?.color || FALLBACK.water,
     rock: rules.rocks?.color || FALLBACK.rock, veg: rules.vegetation?.color || FALLBACK.veg, classes: {},
-    building: rules.buildings?.color || BUILDING_CFG.color,
+    building: rules.buildings?.color || BUILDING_CFG.color, bridge: BRIDGE_CFG.color,
   };
   const named = Object.values(rules.classes || {}).find((c) => c.color)?.color || '#8a7a5a';
   for (const n of G.CLASS_NAMES) hex.classes[n] = rules.classes?.[n]?.color || named;
   return {
     hex,
     cls: G.CLASS_NAMES.map((n) => rgb(hex.classes[n])),
-    tunnel: rgb(hex.tunnel), water: rgb(hex.water), rock: rgb(hex.rock), veg: rgb(hex.veg), building: rgb(hex.building),
+    tunnel: rgb(hex.tunnel), water: rgb(hex.water), rock: rgb(hex.rock), veg: rgb(hex.veg), building: rgb(hex.building), bridge: rgb(hex.bridge),
   };
 }
 
@@ -248,6 +248,25 @@ export function startWorld(style) {
     p.shade(0.6 + p.n * 0.55);
   }
 
+  // Brug die kan ontploffen (Market Garden): betonplaten met naden en een donkere rand, in
+  // plaats van de wegkleur. bridgeMask: cellen van die brug (gezet in loadMap).
+  let bridgeMask = null;
+  const onBridge = (x, y) => G.inBounds(x, y) && bridgeMask[y * G.W + x] === 1;
+  // De brug komt mee in het instapbericht, of (vanuit de wachtkamer) pas met 'hz' bij de start
+  function makeBridgeMask() {
+    bridgeMask = null;
+    if (!game.bridge?.cells?.length) return;
+    bridgeMask = new Uint8Array(G.W * G.H);
+    for (const i of game.bridge.cells) bridgeMask[i] = 1;
+  }
+  function paintBridge() {
+    p.set(...pal.bridge);
+    const edge = (p.u === 0 && !onBridge(p.x - 1, p.y)) || (p.u === R - 1 && !onBridge(p.x + 1, p.y)) ||
+      (p.v === 0 && !onBridge(p.x, p.y - 1)) || (p.v === R - 1 && !onBridge(p.x, p.y + 1));
+    if (edge) { p.shade(0.55); return; }
+    p.shade((p.X % 12 === 0 || p.Y % 12 === 0 ? 0.82 : 1) * (0.95 + p.n * 0.1));
+  }
+
   const colorOf = [];
   colorOf[G.DIRT] = style.ground; colorOf[G.EMPTY] = style.tunnel; colorOf[G.ROCK] = style.rock;
   colorOf[G.WATER] = style.water; colorOf[G.VEG] = style.veg; colorOf[G.BUILDING] = style.building || paintBuilding;
@@ -284,6 +303,7 @@ export function startWorld(style) {
         p.c = c;
         if (p.cls === ICE_CLS && c === G.DIRT) (style.ice || paintIce)(p);
         else if (p.cls === ICE_CLS && c === G.WATER) (style.wak || paintWak)(p);
+        else if (bridgeMask?.[idx] && (c === G.DIRT || c === G.EMPTY)) paintBridge();
         else (colorOf[c] || style.base)(p); // muur en vloer van de bases: style.base
         if ((c === G.DIRT || c === G.EMPTY) && game.world.scar[idx] === G.SCAR_RUBBLE) rubble();
         setPx(X, Y, p.r, p.g, p.b);
@@ -330,6 +350,7 @@ export function startWorld(style) {
     else if (c === G.WATER) col = pal.water;
     else if (c === G.VEG) col = (hash(x, y) % 3 ? pal.veg : lighten(pal.veg, 0.12));
     else if (c === G.BUILDING) col = pal.building;
+    else if (bridgeMask?.[idx]) col = pal.bridge;
     else { // grond (ook tunnels en andermans basis): de terreinklasse, met wat korrel
       const k = 0.94 + (hash(x, y) % 100) / 1000;
       col = pal.cls[game.terrain[idx]].map((v) => v * k);
@@ -467,6 +488,12 @@ export function startWorld(style) {
       if (t && (e.i === game.me || t.seen === 'sharp')) muzzle(e);
     }
     if (e.t === 'W') loadMap(game.map); // het weer veranderde het terrein: alles opnieuw
+    if (e.t === 'hz' && game.bridge && !bridgeMask) { // spel gestart: nu is bekend waar de brug ligt
+      makeBridgeMask();
+      const [x0, y0, x1, y1] = game.bridge.box;
+      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) paintMini(x, y);
+    }
     if (e.t === 'bridge') { // brug ontploft of hersteld
       const [x0, y0, x1, y1] = game.bridge?.box || [0, 0, 0, 0];
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
@@ -506,6 +533,7 @@ export function startWorld(style) {
     clearTankTextures();
     }
     pal = makePalette(game.rules);
+    makeBridgeMask();
     applyLook(lookFor(game.rules));
     view.colors = pal.hex;
     painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
@@ -1366,7 +1394,8 @@ export function startWorld(style) {
       if (!c) continue;
       const [x, y, kind, full] = c;
       if (full) {
-        marks.arc(x, y - 2.5, 2.2, Math.PI, 0).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
+        // eerst moveTo: anders trekt Pixi een lijn vanaf het eind van het vorige pad (witte strepen)
+        marks.moveTo(x - 2.2, y - 2.5).arc(x, y - 2.5, 2.2, Math.PI, 0).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
         marks.moveTo(x - 2.2, y - 2.5).lineTo(x, y).lineTo(x + 2.2, y - 2.5).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
       }
       marks.rect(x - 1.2, y - 1, 2.4, 2).fill(full ? (kind === 'fuel' ? 0x4e6b2a : 0x8a6a2a) : 0x6a6a64);
@@ -1382,6 +1411,7 @@ export function startWorld(style) {
   }
   // Opgeblazen brug: brokken beton en geknakte liggers in het water, met water ertussen.
   // De vorm volgt uit een hash van de plek, zodat iedereen hetzelfde wrak ziet.
+  const bridgeGrey = (k) => pack(...pal.bridge.map((v) => v * k)); // brokken in de kleur van de brug
   function drawBridgeWreck([x0, y0, x1, y1]) {
     const hash = (x, y, k) => { let h = (x * 374761393 + y * 668265263 + k * 2246822519) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
     const step = 2.6;
@@ -1397,15 +1427,14 @@ export function startWorld(style) {
           pts.push(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
         }
         marks.poly(pts.map((v, k) => v + (k % 2 ? 0.35 : 0.25))).fill({ color: 0x14202a, alpha: 0.45 }); // schaduw op het water
-        const shade = 0x6e6a62 + Math.floor(hash(gx, gy, 12) * 3) * 0x0c0c0c;
-        marks.poly(pts).fill(shade).stroke({ color: 0x3a3832, width: 0.2 });
+        marks.poly(pts).fill(bridgeGrey(0.72 + Math.floor(hash(gx, gy, 12) * 3) * 0.1)).stroke({ color: bridgeGrey(0.4), width: 0.2 });
       }
     }
     // een paar liggers die schuin uit het water steken
     for (let k = 0; k < 3; k++) {
       const hx = x0 + (x1 - x0) * (0.2 + 0.3 * k + (hash(x0, y0, 20 + k) - 0.5) * 0.15), hy = y0 + (y1 - y0) * hash(x0, y0, 30 + k);
       marks.save(); marks.translateTransform(hx, hy); marks.rotateTransform((hash(x0, y0, 40 + k) - 0.5) * 1.6);
-      marks.rect(-2.2, -0.35, 4.4, 0.7).fill(0x4a3a2c);
+      marks.rect(-2.2, -0.35, 4.4, 0.7).fill(bridgeGrey(0.5));
       marks.restore();
     }
   }
