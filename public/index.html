@@ -39,8 +39,12 @@
     @media (max-width: 900px) { h1 .rest { display: none; } }
     html, body { overscroll-behavior: none; }
     /* vast in de hoek rechtsboven, ook als de balk over twee regels loopt */
-    .bar { position: relative; padding-right: 230px; }
-    #full { position: absolute; top: 6px; right: 16px; padding: 4px 10px; background: #171510; border-color: var(--line); white-space: nowrap; }
+    .bar { position: relative; padding-right: 330px; }
+    .choose { display: flex; align-items: center; gap: 14px; }
+    .choose[hidden] { display: none; }
+    .corner { position: absolute; top: 6px; right: 16px; display: flex; gap: 8px; }
+    #full, #stop { padding: 4px 10px; background: #171510; border-color: var(--line); white-space: nowrap; }
+    #stop { color: var(--red); }
     /* staand op tablet of telefoon: eerst draaien */
     .rotate {
       display: none; position: fixed; inset: 0; z-index: 10; background: var(--bg);
@@ -50,10 +54,11 @@
     @media (orientation: portrait) and (pointer: coarse) { .rotate { display: flex; } }
     /* telefoon liggend: zo weinig mogelijk balk, de rest is speelveld */
     @media (pointer: coarse) and (max-height: 500px) {
-      .bar { padding: 3px 48px 3px 8px; gap: 8px; flex-wrap: nowrap; }
-      #full { top: 3px; right: 8px; }
+      .bar { padding: 3px 120px 3px 8px; gap: 8px; flex-wrap: nowrap; }
+      .choose { gap: 8px; }
+      .corner { top: 3px; right: 8px; gap: 4px; }
       h1 { font-size: 16px; letter-spacing: 2px; }
-      h1 .rest, .bar a, #full .label { display: none; }
+      #full .label { display: none; }
       h1 .rest { display: none; }
       label { font-size: 10px; }
       select, button { font-size: 11px; padding: 2px 4px; }
@@ -64,15 +69,19 @@
 <body>
   <div class="bar">
     <h1>BLITZKRIEG <span class="rest" id="header"></span></h1>
+    <!-- alleen voor de host in de wachtkamer; verder staat hier de titel -->
+    <span class="choose" id="choose" hidden>
+      <label>MAP <select id="map"></select></label>
+      <label>KAART <select id="size"></select></label>
+      <button id="start">START</button>
+    </span>
     <span class="spacer"></span>
-    <label>MAP <select id="map"></select></label>
-    <label>KAART <select id="size"></select></label>
-    <button id="start" hidden>START</button>
     <span class="info" id="info">verbinden…</span>
-    <a href="/retro">retro</a>
     <!-- altijd helemaal rechtsboven -->
-    <button id="full" hidden title="volledig scherm">⛶ <span class="label">VOLLEDIG SCHERM</span></button>
-    <button id="full" hidden title="volledig scherm">⛶</button>
+    <span class="corner">
+      <button id="stop" hidden title="stoppen">STOP</button>
+      <button id="full" hidden title="volledig scherm">⛶ <span class="label">VOLLEDIG SCHERM</span></button>
+    </span>
   </div>
   <iframe id="view" title="Speelveld"></iframe>
   <div class="rotate"><b>DRAAI JE SCHERM</b>BLITZKRIEG speel je liggend.</div>

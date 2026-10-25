@@ -393,6 +393,7 @@ export function statusOverlay(setOverlay, fullText) {
   return (s) => {
     if (s === 'full') setOverlay('VOL', fullText);
     else if (s === 'closed') setOverlay('VERBINDING VERBROKEN', 'herlaad de pagina');
+    else if (s === 'left') setOverlay('JE HEBT HET SPEL VERLATEN', 'druk op OPNIEUW MEEDOEN om weer in te stappen');
   };
 }
 

@@ -56,8 +56,12 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 
 ## Keuzes van de eigenaar (niet terugdraaien zonder te vragen)
 - Tunnels en sporen blijven tussen rondes liggen. De kaart blijft het hele spel dezelfde.
-- Kaartgrootte klein = alleen 2 spelers. De host kiest map en grootte, ook **tijdens** een spel: dan
-  begint meteen een nieuw spel op die kaart.
+- Kaartgrootte klein = alleen 2 spelers. De host kiest map en grootte, **alleen in de wachtkamer**:
+  de dropdowns en START staan dan naast de titel. Gasten zien altijd de titel, de host na de start ook.
+- **STOP** (naast volledig scherm): host → iedereen terug naar de wachtkamer (nieuw spel); gast →
+  verlaat het spel, de rest speelt door. De link naar `/retro` staat niet meer op de spelpagina.
+- Brug bij Market Garden: kans per oversteek 10% + 5% per eerdere oversteek, teller loopt door over
+  de rondes (`hazard.chance`/`chanceStep`).
 - Kogels **graven standaard niet** (`BULLETS.dig`, per map aan te zetten; retro graaft wel). De krater
   van een ontploffende tank blijft.
 - Zichtstraal × 0,4 (`VISION.scale`), zodat hij in het venster past. Gehoord binnen 20 T.

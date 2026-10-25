@@ -7,7 +7,7 @@ import * as Sim from '/shared/client-sim.js';
 export function connect(hooks = {}, { room = 'carentan', size } = {}) {
   const state = Sim.createState();
   state.bytes = 0; // ontvangen bytes, de weergave mag dit resetten
-  state.status = 'connecting'; // connecting | playing | full | closed
+  state.status = 'connecting'; // connecting | playing | full | closed | left
   const setStatus = (s) => { state.status = s; hooks.onStatus?.(s); };
 
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?room=${encodeURIComponent(room)}${size ? `&size=${encodeURIComponent(size)}` : ''}`);
@@ -19,7 +19,7 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
     else if (msg.t === 's') Sim.applyState(state, msg, hooks, now);
     else if (msg.t === 'full') setStatus('full');
   };
-  ws.onclose = () => { if (state.status !== 'full') setStatus('closed'); };
+  ws.onclose = () => { if (state.status !== 'full' && state.status !== 'left') setStatus('closed'); };
 
   // ---------- Input: alleen versturen als er iets verandert ----------
   const KEYS = {
@@ -68,6 +68,8 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
 
   // Andere berichten naar de server (wachtkamer: kaart kiezen, starten)
   state.send = (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); };
+  // zelf weggaan (STOP als gast): de server haalt je tank weg, de rest speelt door
+  state.leave = () => { setStatus('left'); ws.close(); };
 
   return state;
 }

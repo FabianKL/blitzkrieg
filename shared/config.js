@@ -409,7 +409,7 @@ export const MAPS = {
       { type: 'village', at: [0.5, 0.24], size: 0.05, name: 'Arnhem', buildings: [5, 8], landmark: 'kerk' },
       { type: 'ditches', rect: [0, 0.56, 1, 1], spacing: 24, damsEvery: 1 },
     ],
-    hazard: { type: 'bridgeBlast', armorLoss: 40 },
+    hazard: { type: 'bridgeBlast', armorLoss: 40, chance: 0.1, chanceStep: 0.05 }, // kans per oversteek, +5% na elke oversteek
     scarce: { type: 'airDrops', everySeconds: 30, fuel: 0.4, ammo: 25 },
     refill: { fuel: false, ammo: false },
     look: { noise: { strength: 0.08 } },
@@ -424,6 +424,7 @@ export const MAPS = {
     name: 'Ardennen 1944', style: 'winter', header: 'WACHT AM RHEIN — ARDENNEN · DECEMBER 1944',
     tanks: { A: { ...T_SHERMAN, winter: true }, B: { name: 'KÖNIGSTIGER', hull: '#d8d6cc', mark: 'number', number: '332' } },
     terrainPercent: { soft: 52, hard: 12, vegetation: 18, paved: 8, rock: 6, water: 4 },
+    tolerance: { klein: 1, default: 0 }, // klein: wegen (vaste breedte) zijn ~14% verhard, dat gaat van de sneeuw af
     classes: {
       paved: { label: 'Bosweg en Bastogne', color: '#9b9184' },
       hard: { label: 'Bevroren grond', color: '#bccfda' },

@@ -90,6 +90,19 @@ export function checkGeneratedMap(id, w, players, size) {
     for (let i = 0; i < d.length; i++) maxD = Math.max(maxD, d[i]);
     check(maxD <= 2.5 * T + 1.5, `${tag}: bos van ${(maxD * 2).toFixed(0)} cellen breed, max 5 T = ${5 * T}`);
   }
+  // geen huis of kerk op of pal tegen de weg (zonder stad is verhard altijd weg of dorpsplein)
+  if (!(rules.features || []).some((f) => f.type === 'city')) {
+    let bad = -1;
+    for (let i = 0; i < w.map.length && bad < 0; i++) {
+      if (w.map[i] !== G.BUILDING) continue;
+      const x = i % G.W, y = (i / G.W) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const j = (y + dy) * G.W + x + dx;
+        if (w.map[j] !== G.BUILDING && w.terrain[j] === G.CLASS.paved) bad = i;
+      }
+    }
+    check(bad < 0, `${tag}: gebouw tegen de weg bij (${bad % G.W}, ${(bad / G.W) | 0})`);
+  }
   // dorp: gebouwen binnen het aantal, rond de opgegeven plek
   for (const f of rules.features || []) {
     if (f.type !== 'village') continue;

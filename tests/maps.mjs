@@ -111,18 +111,25 @@ export const mapTests = [
         for (let k = 0; k < 10 * G.TICK_RATE; k++) Hz.step(room, 200 + k, ev, hurt);
         check(t.shield === before, 'uitgeschakeld geschut schoot nog');
         out.push('geschut');
-        // Market Garden: over de brug = ontploffing, brug weg tot de volgende ronde
+        // Market Garden: over de brug = kans op ontploffing (10%, +5% per oversteek), brug weg tot de volgende ronde
         room = fakeRoom('market-garden'); t = room.tanks[0]; ev = [];
         Hz.roundStart(room, ev);
         const br = room.hz.bridge;
         check(br && br.cells.length, 'geen brug');
-        t.x = (br.box[0] + br.box[2]) >> 1; t.y = (br.box[1] + br.box[3]) >> 1;
-        Hz.step(room, 1, ev, hurt);
-        t.y = br.box[3] + 6;
-        Hz.step(room, 2, ev, hurt);
-        check(br.blown && t.shield === 60 && room.world.map[br.cells[0]] === G.WATER, 'brug ontplofte niet');
+        const cross = (k) => {
+          t.x = (br.box[0] + br.box[2]) >> 1; t.y = (br.box[1] + br.box[3]) >> 1;
+          Hz.step(room, k, ev, hurt);
+          t.y = br.box[3] + 6;
+          Hz.step(room, k + 1, ev, hurt);
+        };
+        withRandom(0.12, () => cross(1)); // 0,12 ≥ 10%: houdt
+        check(!br.blown && t.shield === 100, 'brug ontplofte al bij de eerste oversteek');
+        withRandom(0.12, () => cross(3)); // 0,12 < 15%: weg
+        check(br.blown && t.shield === 60 && room.world.map[br.cells[0]] === G.WATER, 'brug ontplofte niet bij de tweede oversteek');
         Hz.roundStart(room, ev);
         check(!br.blown && room.world.map[br.cells[0]] !== G.WATER, 'brug niet hersteld bij de nieuwe ronde');
+        withRandom(0.19, () => cross(5)); // teller loopt door: 20% bij de derde oversteek
+        check(br.blown && room.hz.crossings === 3, `teller liep niet door over de ronde (${room.hz.crossings})`);
         out.push('brug');
         // Oder-front: vak licht op, 3 s later -30% en kraters
         room = fakeRoom('seelow'); t = room.tanks[0]; ev = [];

@@ -96,23 +96,22 @@ function hostOf(room) {
   return host ? host.id : -1;
 }
 
-// De host kiest een kaart en grootte: nieuwe kaart voor iedereen. In de wachtkamer wacht die
-// op START; tijdens een spel begint er meteen een nieuw spel (ronde 1, scores 0) op de nieuwe kaart.
+// De host kiest een kaart en grootte: nieuwe kaart voor iedereen, die op START wacht.
+// Alleen in de wachtkamer; tijdens een spel drukt de host eerst op STOP.
 function configure(room, t, mapId, size) {
-  if (!room.lobby || t.id !== hostOf(room)) return;
+  if (!room.lobby || room.phase !== 'lobby' || t.id !== hostOf(room)) return;
   if (!Object.hasOwn(G.MAPS, mapId) || mapId === 'retro' || !Object.hasOwn(G.MAP_SIZES, size)) return;
   if (room.tanks.filter(Boolean).length > G.MAP_SIZES[size].maxPlayers) return; // te veel spelers voor deze grootte
   if (mapId === room.mapId && size === room.size) return;
-  const old = [room.mapId, room.size], playing = room.phase !== 'lobby';
+  const old = [room.mapId, room.size];
   room.mapId = mapId;
   room.rules = G.MAPS[mapId];
   room.size = size;
-  if (newGame(room)) { if (playing) beginPlay(room, room.pendingEvents); return; }
+  if (newGame(room)) return;
   // de bases passen niet (te veel spelers voor deze kaartgrootte): terug en melden in het menu
   [room.mapId, room.size] = old;
   room.rules = G.MAPS[room.mapId];
   newGame(room);
-  if (playing) beginPlay(room, room.pendingEvents);
   room.pendingEvents.push({ t: 'err', msg: 'De bases passen niet op deze kaartgrootte: kies een grotere kaart.' });
 }
 
@@ -126,6 +125,13 @@ function beginPlay(room, events) {
   room.mapTick = room.roundTick = room.tick; // storm- en weerklok beginnen nu
   events.push({ t: 'n', n: room.round, m0: room.mapTick, r0: room.roundTick });
   Hazards.roundStart(room, events);
+  // het instapbericht ging uit vóór roundStart: brug, munitiedepot e.d. alsnog meesturen
+  events.push({ t: 'hz', hz: Hazards.snapshot(room) });
+}
+// De host stopt het spel: iedereen terug naar de wachtkamer, op dezelfde kaart (nieuw spel)
+function stopGame(room, t) {
+  if (!room.lobby || room.phase === 'lobby' || t.id !== hostOf(room)) return;
+  newGame(room);
 }
 
 // Alles wat met de kaart van een potje rekent, zet eerst de kaartmaat van dat potje
@@ -506,6 +512,8 @@ wss.on('connection', (ws, req) => {
       configure(room, t, String(msg.map), String(msg.size));
     } else if (msg.t === 'start') {
       startGame(room, t, room.pendingEvents);
+    } else if (msg.t === 'stop') {
+      stopGame(room, t);
     } else if (msg.t === 'sd') {
       t.selfDestruct = true; // zelfvernietiging (toets K), bij de volgende tick
     }

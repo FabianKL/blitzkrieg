@@ -31,6 +31,14 @@ const sendConfig = () => game.send({ t: 'cfg', map: $('map').value, size: $('siz
 $('map').addEventListener('change', () => { sendConfig(); $('map').blur(); });
 $('size').addEventListener('change', () => { sendConfig(); $('size').blur(); });
 $('start').addEventListener('click', () => { game.send({ t: 'start' }); $('start').blur(); });
+// STOP: de host stopt het spel (iedereen terug naar de wachtkamer), een gast stapt uit.
+// Na het uitstappen wordt dezelfde knop "opnieuw meedoen".
+$('stop').addEventListener('click', () => {
+  $('stop').blur();
+  if (game.status === 'left') location.reload();
+  else if (game.me === game.host) game.send({ t: 'stop' });
+  else game.leave();
+});
 
 // Volledig scherm (tablet/telefoon): de hele spelpagina, op Android ook liggend vastzetten.
 // iPhone kent dit niet; daar (en op de iPad) werkt "Zet op beginscherm" via het manifest.
@@ -63,18 +71,22 @@ function showView() {
 
 // ---------- Titel en status ----------
 function update() {
+  if (game.status === 'left') { $('stop').textContent = 'OPNIEUW MEEDOEN'; $('stop').hidden = false; $('choose').hidden = true; return; }
   if (!game.mapId) return;
   const rules = game.rules || {}, players = game.tanks.size;
   const isHost = game.me === game.host, inLobby = game.lobby && game.game.phase === 'lobby';
+  // alleen de host kiest, en alleen in de wachtkamer; de rest (en de host tijdens het spel) ziet de titel
+  const choosing = isHost && inLobby;
+  const size = inLobby ? ` · ${G.MAP_SIZES[game.size]?.label.toLowerCase() ?? game.size}` : '';
   const header = `— ${rules.header || rules.name || ''}`;
-  if ($('header').textContent !== header) { $('header').textContent = header; document.title = `BLITZKRIEG ${header}`; }
+  if ($('header').textContent !== header + size) { $('header').textContent = header + size; document.title = `BLITZKRIEG ${header}`; }
+  $('header').hidden = choosing;
+  $('choose').hidden = !choosing;
+  $('stop').hidden = !game.lobby || inLobby || game.status !== 'playing';
   if ($('map').value !== game.mapId) $('map').value = game.mapId;
   if ($('size').value !== game.size) $('size').value = game.size;
-  // alleen de host kiest (ook tijdens een spel: dan begint er meteen een nieuw spel op die kaart);
   // klein kan niet met te veel spelers
-  $('map').disabled = $('size').disabled = !isHost;
   for (const opt of $('size').options) opt.disabled = G.MAP_SIZES[opt.value].maxPlayers < players && opt.value !== game.size;
-  $('start').hidden = !(isHost && inLobby);
   const host = game.host < 0 ? '—' : game.host === game.me ? 'jij' : `speler ${game.host + 1}`;
   if (game.message && game.tick < game.message.until) { $('info').textContent = game.message.text; return; }
   $('info').innerHTML = `${PHASES[game.game.phase] || ''} · ronde <b>${game.game.round}</b> · spelers <b>${players}/${G.MAP_SIZES[game.size]?.maxPlayers ?? G.MAX_PLAYERS}</b> · host <b>${host}</b>`;

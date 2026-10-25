@@ -238,8 +238,10 @@ const atGuns = {
 };
 
 // ---------- De brug ontploft (Market Garden, §10.7) ----------
-// Wie over de brug over de Rijn rijdt, haalt de overkant, maar dan ontploft hij: armorLoss%
-// pantser, en de brug is de rest van de ronde water met een wrak. Volgende ronde weer heel.
+// Wie over de brug over de Rijn rijdt, haalt de overkant; daarna ontploft hij met kans chance,
+// en elke oversteek wordt die kans chanceStep groter (de teller loopt door over de rondes, een
+// nieuw spel begint weer bij chance). Ontploft: armorLoss% pantser, en de brug is de rest van
+// de ronde water met een wrak. Volgende ronde weer heel.
 const bridgeBlast = {
   roundStart(room, events) {
     const hz = room.hz, w = room.world;
@@ -259,8 +261,11 @@ const bridgeBlast = {
       const on = t.x >= x0 && t.x <= x1 && t.y >= y0 && t.y <= y1;
       if (on) { room.hz.onBridge.add(t.id); continue; }
       if (!room.hz.onBridge.has(t.id)) continue;
-      // over de brug heen: nu ontploft hij
+      // over de brug heen: ontploft hij nu?
       room.hz.onBridge.delete(t.id);
+      const cfg = room.rules.hazard, n = room.hz.crossings || 0;
+      room.hz.crossings = n + 1;
+      if (rnd() >= (cfg.chance ?? 1) + n * (cfg.chanceStep ?? 0)) continue;
       br.blown = true;
       G.setBridge(room.world, br.cells, true);
       events.push({ t: 'bridge', blown: true, x: (x0 + x1) >> 1, y: (y0 + y1) >> 1 });

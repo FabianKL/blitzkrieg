@@ -24,14 +24,18 @@ touchbesturing.
 
 Rechts staat op elke map hetzelfde: je tank (zeges en meters), de minikaart (terrein, je eigen basis,
 je eigen tank en waar je brandstof (B) of munitie (M) haalt; geen tunnels, andere bases of tanks) en
-de legenda van de map.
+de legenda van de map. Ook op de kaart zelf staat boven elke volle laadplek (depot, dropping) een
+B- of M-badge met een pulserende ring.
 
 ## Een spel
-- Wie als eerste binnenkomt is de **host**. Die kiest bovenin de **map** (10 maps, chronologisch; maps
-  die nog niet bestaan staan grijs) en de **kaartgrootte** (klein = 2 spelers, middel, groot,
-  extra groot) en drukt op **START**. De anderen zien de keuze maar kunnen niets veranderen. Kiest de
-  host tijdens een spel een andere map of grootte, dan begint meteen een nieuw spel op die kaart
-  (handig om te testen). Gaat de host weg, dan wordt de volgende speler host.
+- Wie als eerste binnenkomt is de **host**. In de wachtkamer staan bij de host naast de titel de
+  **map** (10 maps, chronologisch; maps die nog niet bestaan staan grijs), de **kaartgrootte**
+  (klein = 2 spelers, middel, groot, extra groot) en **START**. De anderen zien alleen de titel, die
+  meeloopt met wat de host kiest. Na de start ziet ook de host alleen de titel.
+- **STOP** (naast volledig scherm, alleen tijdens een spel): drukt de host erop, dan gaat iedereen
+  terug naar de wachtkamer en kan de host een andere map of grootte kiezen. Drukt een gast erop, dan
+  verlaat die het spel (de rest speelt door) en wordt de knop "opnieuw meedoen". Gaat de host weg,
+  dan wordt de volgende speler host.
 - Een **ronde** eindigt zodra er een tank dood is; daarna begint iedereen weer in zijn eigen basis
   met alles vol. Bij **2 spelers** wint wie eerst **3 rondes** wint, bij meer spelers wie eerst
   **5 kills** heeft. Een dood door een gevaar telt voor niemand. Daarna terug naar de wachtkamer.
@@ -60,7 +64,7 @@ de legenda van de map.
 | 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, sneeuwjacht; dooi in ronde 4 |
 | 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer vanaf ronde 3 |
 | 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenbuien bij het water |
-| 1944 Arnhem | de brug ontploft | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
+| 1944 Arnhem | de brug kan ontploffen (10% per oversteek, +5% na elke oversteek) | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
 | 1944 Ardennen | barrage in het bos | brandstofdepots | mist; sneeuwstorm elke 90 s |
 | 1945 Oder-front | artilleriebarrage | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
 | 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter |
@@ -75,7 +79,7 @@ tanks. Zie de uitleg bovenaan elk blok.
   het venster passen: 12 T = 24 cellen.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard
   daardoor meer dan 8% (bv. Ardennen ~13%), en dat gaat van de andere klassen af. De test houdt daar
-  rekening mee.
+  rekening mee; Ardennen klein heeft daarvoor 1 procentpunt extra marge (`tolerance`).
 - **Berlijn met 4 spelers**: de vrije zones rond de bases (~13% van de stad) mogen geen huizen hebben,
   dus ~25% gebouwen in plaats van 30% (ruimere marge in de config). De Spree en het kanaal zijn iets
   smaller (2 en 1,5 T), anders is het water ~12% in plaats van 7%. Er is **geen metro** (op verzoek).
@@ -83,6 +87,12 @@ tanks. Zie de uitleg bovenaan elk blok.
 - **Krappe kaarten** (Market Garden en Berlijn klein): passen de bases niet volgens alle regels, dan
   wordt eerst de vensterregel versoepeld, daarna de afstand tot de rivier (die buigt dan om de basis
   heen) en pas als laatste de uitrijstrook (tot de 3 T uit de spec).
+- **Brug bij Arnhem**: in de spec ontploft de brug altijd na de eerste oversteek. Hier is het een
+  kans: 10%, en elke oversteek 5% meer (`chance`/`chanceStep`). De teller loopt door over de rondes
+  (de brug zelf is elke ronde weer heel) en begint pas bij een nieuw spel weer bij 10%.
+- **Huizen en kerken** staan nooit op een weg of dijk, en in een dorp ook niet pal ertegen.
+- **Plassen en rotsen** worden niet afgekapt door de rechthoekige zones (rond de bases, het dorp, een
+  park, een gebied): komt een blob daaraan, dan wordt hij kleiner of komt hij ergens anders.
 - **Dorpshuizen** tellen niet mee in de percentages; ze gaan van de andere klassen af (ruimere marge).
 - **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen.
 - **Leningrad**: bevroren veen is lichter dan in de spec (#8a7e72), anders zijn tunnels niet te zien.

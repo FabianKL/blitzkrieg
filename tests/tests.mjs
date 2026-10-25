@@ -353,7 +353,7 @@ export const tests = [
     },
   },
   {
-    name: 'wachtkamer: host kiest kaart en grootte, anderen niet, start; tijdens het spel kiezen = nieuw spel; host gaat weg → volgende is host',
+    name: 'wachtkamer: host kiest kaart en grootte, anderen niet, start; tijdens het spel niet kiezen; host STOP = terug naar de wachtkamer; gast weg = rest speelt door; host gaat weg → volgende is host',
     async run(port) {
       const a = await connectBot(port, 'blitzkrieg');
       const b = await connectBot(port, 'blitzkrieg');
@@ -388,21 +388,63 @@ export const tests = [
       a.send({ t: 'start' });
       await waitFor(() => b.state.game.phase === 'play', 2000);
       check(b.state.game.phase === 'play', `na start fase ${b.state.game.phase}`);
-      // tijdens het spel een andere kaart: meteen een nieuw spel daarop (ronde 1, scores 0, spelen)
+      // brug, munitiedepot e.d. komen na de start alsnog mee (het instapbericht was al weg)
+      check(b.events.some((e) => e.t === 'hz'), 'geen hz-gebeurtenis bij de start');
+      // tijdens het spel kiezen: genegeerd, ook voor de host (eerst STOP)
       b.send({ t: 'cfg', map: 'ardennen', size: 'middel' });
-      await sleep(400);
-      check(b.state.mapId === 'el-alamein', 'niet-host kon tijdens het spel de kaart wisselen');
       a.send({ t: 'cfg', map: 'carentan', size: 'middel' });
-      await waitFor(() => b.state.mapId === 'carentan' && b.state.game.phase === 'play', 4000);
-      check(b.state.mapId === 'carentan' && b.state.size === 'middel', `na wisselen tijdens het spel: ${b.state.mapId} ${b.state.size}`);
-      check(b.state.game.phase === 'play' && b.state.game.round === 1, `nieuw spel: fase ${b.state.game.phase}, ronde ${b.state.game.round}`);
-      check(mapDiff(a.state.map, b.state.map) === 0 && a.me.a && b.me.a, 'na wisselen: kaarten verschillen of een tank leeft niet');
+      await sleep(400);
+      check(b.state.mapId === 'el-alamein' && b.state.game.phase === 'play', `kaart wisselde tijdens het spel: ${b.state.mapId} ${b.state.game.phase}`);
+      // gast STOP doet niets, host STOP: iedereen terug naar de wachtkamer
+      b.send({ t: 'stop' });
+      await sleep(300);
+      check(a.state.game.phase === 'play', 'gast kon het spel stoppen');
+      a.send({ t: 'stop' });
+      await waitFor(() => b.state.game.phase === 'lobby', 3000);
+      check(a.state.game.phase === 'lobby' && b.state.game.phase === 'lobby', `na STOP fase ${b.state.game.phase}`);
+      // nu kan de host weer kiezen
+      a.send({ t: 'cfg', map: 'carentan', size: 'middel' });
+      await waitFor(() => b.state.mapId === 'carentan', 4000);
+      check(b.state.mapId === 'carentan' && b.state.size === 'middel' && b.state.game.phase === 'lobby', `na STOP kiezen: ${b.state.mapId} ${b.state.size} ${b.state.game.phase}`);
+      check(mapDiff(a.state.map, b.state.map) === 0, 'na kiezen: kaarten verschillen');
+      // gast stapt uit tijdens het spel: de anderen spelen door
+      const c2 = await connectBot(port, 'blitzkrieg');
+      await sleep(200);
+      a.send({ t: 'start' });
+      await waitFor(() => c2.state.game.phase === 'play', 2000);
+      c2.close();
+      await waitFor(() => !a.state.tanks.has(c2.state.me), 2000);
+      check(a.state.game.phase === 'play' && !a.state.tanks.has(c2.state.me), 'na vertrek van een gast: spel stopte of tank bleef staan');
       // host gaat weg: B wordt host
       a.close();
       await waitFor(() => b.state.host === b.state.me, 2000);
       check(b.state.host === b.state.me, `host na vertrek ${b.state.host}, verwacht B`);
       b.close();
-      return 'alleen de host kiest en start, kleine kaart max 2, host gaat over';
+      return 'alleen de host kiest (in de wachtkamer) en start, STOP = wachtkamer, kleine kaart max 2, host gaat over';
+    },
+  },
+  {
+    name: 'wachtkamer: na START komen brug (Market Garden) en munitiedepot (Fall Gelb) alsnog naar de browser',
+    async run(port) {
+      const a = await connectBot(port, 'blitzkrieg');
+      await sleep(200);
+      const out = [];
+      for (const [map, ok] of [['market-garden', (hz) => hz.bridge?.cells.length > 0], ['fall-gelb', (hz) => Array.isArray(hz.ammoDepot)]]) {
+        a.send({ t: 'cfg', map, size: 'middel' });
+        await waitFor(() => a.state.mapId === map, 4000);
+        a.events.length = 0;
+        a.send({ t: 'start' });
+        await waitFor(() => a.events.some((e) => e.t === 'hz'), 2000);
+        const e = a.events.find((x) => x.t === 'hz');
+        check(e && ok(e.hz), `${map}: geen hz met brug/depot na START`);
+        check(map !== 'market-garden' || a.state.bridge?.cells.length, 'browser kent de brug niet');
+        check(map !== 'fall-gelb' || a.state.ammoDepot, 'browser kent het munitiedepot niet');
+        a.send({ t: 'stop' });
+        await waitFor(() => a.state.game.phase === 'lobby', 3000);
+        out.push(map);
+      }
+      a.close();
+      return out.join(', ');
     },
   },
   {

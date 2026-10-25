@@ -410,15 +410,11 @@ function drawFog(cam, now) {
 }
 
 // ---------- Zijbalk ----------
-const SEG_COLORS = { fuel: 'var(--fuel)', armour: 'var(--armour)', ammo: 'var(--ammo)' };
-for (const k of Object.keys(SEG_COLORS)) {
-  $(`seg-${k}`).innerHTML = '<i><b></b></i>'.repeat(6);
-  for (const b of $(`seg-${k}`).querySelectorAll('b')) b.style.background = SEG_COLORS[k];
-}
-function setSegs(k, pct, low) {
-  const el = $(`seg-${k}`);
-  el.querySelectorAll('b').forEach((b, i) => { b.style.width = `${clamp(pct * 6 - i, 0, 1) * 100}%`; });
-  el.classList.toggle('low', low);
+// De tankkaart is dezelfde als op de zomerkaarten (1944.js): dunne balken, knippert onder 20%
+function setFill(k, pct) {
+  const el = $(`fill-${k}`);
+  el.style.width = `${clamp(pct, 0, 1) * 100}%`;
+  el.classList.toggle('low', pct < 0.2);
 }
 
 let hudKey = '';
@@ -426,14 +422,15 @@ function hud() {
   const { game } = view;
   const self = game.tanks.get(game.me);
   if (self) {
-    const key = `${game.me},${TEAMS[game.me].name},${self.f},${self.s},${self.m},${self.c}`;
+    const key = `${game.me},${TEAMS[game.me].name},${self.f},${self.s},${self.m},${self.c},${self.a}`;
     if (key !== hudKey) {
       hudKey = key;
       $('name').textContent = TEAMS[game.me].name;
-      setSegs('fuel', (self.f ?? 0) / 100, self.f < 20);
-      setSegs('armour', (self.s ?? 0) / G.SHIELD_MAX, self.s < 30);
-      setSegs('ammo', (self.m ?? 0) / G.AMMO_MAX, self.m < 10);
-      $('wins').textContent = String(self.c ?? 0).padStart(2, '0');
+      setFill('fuel', (self.f ?? 0) / 100);
+      setFill('armour', (self.s ?? 0) / G.SHIELD_MAX);
+      setFill('ammo', (self.m ?? 0) / G.AMMO_MAX);
+      $('wins').textContent = self.c ?? 0;
+      document.querySelector('.card').classList.toggle('dead', self.a === 0);
     }
   }
   if (game.map) {

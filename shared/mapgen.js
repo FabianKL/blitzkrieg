@@ -86,6 +86,8 @@ function tryMap(seed, rules, players) {
   }
   const setClass = (i, cls) => { map[i] = DIRT; terrain[i] = CLASS[cls]; fixedClass[i] = 1; };
   const setPaved = (i) => setClass(i, 'paved');
+  // een weg of dijk (verhard of harde grond van een kenmerk): daar komt geen huis op
+  const isRoad = (i) => fixedClass[i] && (terrain[i] === CLASS.paved || terrain[i] === CLASS.hard);
   const open = (i) => !border[i] && !zone[i];
   // gebieden met een eigen terreinmix (vallei, heuvel, moeras, ...)
   const areas = of('area').map((f) => ({ f, x0: Math.round(f.rect[0] * W), y0: Math.round(f.rect[1] * H), x1: Math.round(f.rect[2] * W), y1: Math.round(f.rect[3] * H) }));
@@ -293,7 +295,9 @@ function tryMap(seed, rules, players) {
         if (!inBounds(x, y)) return false;
         const i = y * W + x, inside = x >= x0 && x < x0 + bw && y >= y0 && y < y0 + bh;
         if (map[i] === BUILDING || zone[i] || border[i]) return false; // ruimte tussen huizen
-        if (inside && (map[i] !== DIRT || terrain[i] === CLASS.paved)) return false;
+        if (inside && (map[i] !== DIRT || isRoad(i))) return false;
+        // in een dorp ook niet pal tegen de weg (in de stad liggen de blokken wel tegen de straat)
+        if (gap >= 2 && isRoad(i) && x >= x0 - 1 && x <= x0 + bw && y >= y0 - 1 && y <= y0 + bh) return false;
       }
     }
     const id = vegHp.length + 1;
@@ -338,11 +342,21 @@ function tryMap(seed, rules, players) {
       }
     }
   }
-  const blobs = (cell, key, want, rMin, rMax, salt, ok) => {
+  // Plassen en rotsen. Vakken met rechte randen (beschermde zone, dorp, park, rand) mogen een
+  // blob niet afknippen, anders krijgt hij een rechte kant: dan wordt hij kleiner, of komt hij niet.
+  // (een gebied, zoals de heuvel voor rotsen, is ook een rechthoek)
+  const clearOfBoxes = (cx, cy, r, area) => {
+    let ok = true;
+    disk(cx, cy, r, (i) => { if (zone[i] || villageMask[i] || parkMask[i] || border[i] || (area && !inArea(area, i))) ok = false; });
+    return ok && cx - r >= 0 && cy - r >= 0 && cx + r < W && cy + r < H;
+  };
+  const blobs = (cell, key, want, rMin, rMax, salt, ok, area) => {
     for (let tries = 0; have[key] < want && tries < 6000; tries++) {
       const cx = Math.floor(rnd() * W), cy = Math.floor(rnd() * H);
       if (!ok(cy * W + cx)) continue;
-      const r = rMin + rnd() * (rMax - rMin);
+      let r = rMin + rnd() * (rMax - rMin);
+      while (r >= rMin && !clearOfBoxes(cx, cy, r * 1.4, area)) r *= 0.8;
+      if (r < rMin) continue;
       disk(cx, cy, r * 1.4, (i) => {
         const x = i % W, y = (i / W) | 0;
         if (ok(i) && Math.hypot(x - cx, y - cy) < r * (0.7 + noise(x / 4 + salt, y / 4) * 0.6)) { map[i] = cell; have[key]++; }
@@ -350,7 +364,7 @@ function tryMap(seed, rules, players) {
     }
   };
   const rk = rules.rocks || {};
-  blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeIn(rk.in));
+  blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeIn(rk.in), rk.in && areaOf(rk.in));
   if (!rules.noPonds) blobs(WATER, 'water', target('water'), 0.8 * T, 2 * T, 53, (i) => free(i) && !parkMask[i]);
   const vcfg = rules.vegetation;
   if (vcfg && pct.vegetation) {

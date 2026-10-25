@@ -553,8 +553,8 @@ export function startWorld(style) {
     rows.push({ kind: null, color: pal.hex.tunnel, label: 'Tunnel en spoor', note: pct(TUNNEL.speed) });
     // brandstof en munitie halen (zo staan ze op de minikaart: B en M)
     const scarce = rules.scarce?.type;
-    if (scarce === 'fuelDepots' || scarce === 'airDrops') rows.push({ icon: 'fuel', label: scarce === 'airDrops' ? 'Dropping: brandstof' : 'Brandstofdepot', note: 'minikaart B' });
-    if (scarce === 'ammoDepot' || scarce === 'airDrops') rows.push({ icon: 'ammo', label: scarce === 'airDrops' ? 'Dropping: munitie' : 'Munitiedepot', note: 'minikaart M' });
+    if (scarce === 'fuelDepots' || scarce === 'airDrops') rows.push({ icon: 'fuel', label: scarce === 'airDrops' ? 'Dropping: brandstof' : 'Brandstofdepot', note: 'B op kaart en minikaart' });
+    if (scarce === 'ammoDepot' || scarce === 'airDrops') rows.push({ icon: 'ammo', label: scarce === 'airDrops' ? 'Dropping: munitie' : 'Munitiedepot', note: 'M op kaart en minikaart' });
     box.replaceChildren(...rows.map((r) => {
       const row = document.createElement('div');
       row.className = 'legend-row';
@@ -643,6 +643,15 @@ export function startWorld(style) {
   const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
   const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE, L.shadows.addChild(new Container()));
   const marks = L.marks.addChild(new Graphics());
+  // B/M-badge boven elke volle laadplek (brandstof, munitie), zoals op de minikaart
+  const badgeTex = Object.fromEntries(['fuel', 'ammo'].map((kind) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    paintIcon(c, kind);
+    return [kind, textureOf(c)];
+  }));
+  const badges = spritePool(L.effects.addChild(new Container()), badgeTex.fuel);
+  const badgeRings = L.effects.addChild(new Graphics());
   const crackG = L.marks.addChild(new Graphics());
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
@@ -842,6 +851,7 @@ export function startWorld(style) {
     drawLandmarks();
     drawDepots();
     drawObjectsOfHazards(now);
+    drawRefillMarkers(now);
     drawBullets();
     drawTanks(now, cam);
 
@@ -1187,6 +1197,24 @@ export function startWorld(style) {
     if (FPS) countFrame(now, performance.now() - t0);
   }
 
+  // Waar je brandstof of munitie laadt: een badge met B of M en een zacht pulserende ring.
+  // Alleen volle plekken; de mist erboven verbergt ze buiten je zicht, net als het ding zelf.
+  function drawRefillMarkers(now) {
+    badges.begin();
+    badgeRings.clear();
+    const p = 0.5 + 0.5 * Math.sin(now / 300);
+    const marker = (x, y, kind) => {
+      badgeRings.circle(x, y, 4 + 1.5 * p).stroke({ color: MINI_ICON[kind], alpha: 0.35 + 0.35 * (1 - p), width: 0.5 });
+      const s = badges.next();
+      s.texture = badgeTex[kind];
+      s.width = s.height = 3.2;
+      s.position.set(x, y - 5.5);
+    };
+    for (const [x, y, full] of game.depots) if (full) marker(x, y, 'fuel');
+    if (game.ammoDepot) marker(game.ammoDepot[0], game.ammoDepot[1] + 0.5, 'ammo');
+    for (const c of game.crates) if (c && c[3]) marker(c[0], c[1], c[2]);
+    badges.end();
+  }
   // Brandstofdepot: een stapel jerrycans; leeg = grijs en omgevallen
   function drawDepots() {
     for (const [x, y, full] of game.depots) {
@@ -1248,10 +1276,35 @@ export function startWorld(style) {
       marks.rect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5).fill(col);
       marks.restore();
     }
-    const br = game.bridge;
-    if (br?.blown) { // wrak van de brug
-      const [x0, y0, x1, y1] = br.box;
-      for (let k = 0; k < 6; k++) marks.rect(x0 + ((x1 - x0) * k) / 6, (y0 + y1) / 2 - 1 + ((k % 2) * 2 - 1), (x1 - x0) / 8, 1.2).fill({ color: 0x3c3228, alpha: 0.8 });
+    if (game.bridge?.blown) drawBridgeWreck(game.bridge.box);
+  }
+  // Opgeblazen brug: brokken beton en geknakte liggers in het water, met water ertussen.
+  // De vorm volgt uit een hash van de plek, zodat iedereen hetzelfde wrak ziet.
+  function drawBridgeWreck([x0, y0, x1, y1]) {
+    const hash = (x, y, k) => { let h = (x * 374761393 + y * 668265263 + k * 2246822519) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    const step = 2.6;
+    for (let y = y0; y <= y1; y += step) {
+      for (let x = x0; x <= x1; x += step) {
+        const gx = Math.round(x * 10), gy = Math.round(y * 10);
+        if (hash(gx, gy, 0) < 0.38) continue; // hier alleen water
+        const cx = x + (hash(gx, gy, 1) - 0.5) * 1.2, cy = y + (hash(gx, gy, 2) - 0.5) * 1.2;
+        const r = 0.8 + hash(gx, gy, 3) * 0.9, rot = hash(gx, gy, 4) * Math.PI * 2, n = 5 + Math.floor(hash(gx, gy, 5) * 2);
+        const pts = [];
+        for (let k = 0; k < n; k++) {
+          const a = rot + (k / n) * Math.PI * 2, d = r * (0.6 + 0.4 * hash(gx, gy, 6 + k));
+          pts.push(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+        }
+        marks.poly(pts.map((v, k) => v + (k % 2 ? 0.35 : 0.25))).fill({ color: 0x14202a, alpha: 0.45 }); // schaduw op het water
+        const shade = 0x6e6a62 + Math.floor(hash(gx, gy, 12) * 3) * 0x0c0c0c;
+        marks.poly(pts).fill(shade).stroke({ color: 0x3a3832, width: 0.2 });
+      }
+    }
+    // een paar liggers die schuin uit het water steken
+    for (let k = 0; k < 3; k++) {
+      const hx = x0 + (x1 - x0) * (0.2 + 0.3 * k + (hash(x0, y0, 20 + k) - 0.5) * 0.15), hy = y0 + (y1 - y0) * hash(x0, y0, 30 + k);
+      marks.save(); marks.translateTransform(hx, hy); marks.rotateTransform((hash(x0, y0, 40 + k) - 0.5) * 1.6);
+      marks.rect(-2.2, -0.35, 4.4, 0.7).fill(0x4a3a2c);
+      marks.restore();
     }
   }
   // Brandend graan (Koersk): vlammen op de brandende vakken

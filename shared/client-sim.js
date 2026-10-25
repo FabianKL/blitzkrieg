@@ -54,6 +54,17 @@ export function createState() {
 
 // ---------- Berichten van de server ----------
 
+// Gevaren en schaarse middelen uit een snapshot (instapbericht, of bij de start vanuit de wachtkamer)
+function applyHz(state, hz = {}) {
+  state.depots = hz.depots || [];
+  state.barrage = hz.barrage || null;
+  state.fires = new Set(hz.fires || []);
+  state.guns = hz.guns || [];
+  state.crates = hz.crates || [];
+  state.bridge = hz.bridge || null;
+  state.ammoDepot = hz.ammoDepot || null;
+}
+
 export function applyInit(state, msg, hooks = {}, now = 0) {
   state.me = msg.you;
   state.mapW = msg.w ?? G.BASE_W_CELLS;
@@ -64,13 +75,7 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.lobby = !!msg.lobby;
   state.host = msg.host ?? -1;
   state.landmarks = msg.lm || [];
-  state.depots = msg.hz?.depots || [];
-  state.barrage = msg.hz?.barrage || null;
-  state.fires = new Set(msg.hz?.fires || []);
-  state.guns = msg.hz?.guns || [];
-  state.crates = msg.hz?.crates || [];
-  state.bridge = msg.hz?.bridge || null;
-  state.ammoDepot = msg.hz?.ammoDepot || null;
+  applyHz(state, msg.hz);
   const n = G.W * G.H;
   const decode = (b64) => G.rleDecode(G.fromBase64(b64), n);
   const decode16 = (b64) => G.rleDecode16(G.fromBase64(b64), n);
@@ -156,6 +161,8 @@ export function applyState(state, msg, hooks = {}, now = 0) {
       if (e.m0 !== undefined) state.mapTick = e.m0; // spel gestart: storm- en weerklok beginnen nu
       if (e.r0 !== undefined) state.roundTick = e.r0;
       newRound = true;
+    } else if (e.t === 'hz') { // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
+      applyHz(state, e.hz);
     } else if (e.t === 'h') { // andere host (de vorige is weg)
       state.host = e.i;
     } else if (e.t === 'z') { // (artillerie)barrage aangekondigd

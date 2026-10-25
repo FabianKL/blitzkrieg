@@ -64,7 +64,6 @@ html, body { overscroll-behavior: none; }
   aside .card .wins { font-size: 8px; }
   aside .card .wins b { font-size: 14px; margin-top: 0; padding: 0 4px; }
   aside .card .tag, aside .card .portrait, aside .card .num { display: none; }
-  aside .card .row, aside .gauge, aside .stat { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
+  aside .card .row, aside .gauge { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
   aside .card .track { height: 6px; }
-  aside .segs { height: 9px; gap: 1px; padding: 1px; }
 }
