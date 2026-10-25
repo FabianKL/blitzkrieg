@@ -2,12 +2,12 @@
 // Daardoor rekenen beide precies hetzelfde (graven, kogels, kraters) en hoeft de
 // kaart nooit per frame over het netwerk.
 import {
-  FELL, GAME, T, MAP_SIZES, DEFAULT_SIZE, VISION, DISPLAY, BULLETS, BUILDING as BUILDING_CFG, MAP_MENU, DEFAULT_MAP,
+  FELL, GAME, TANK, MINES, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, DISPLAY, BULLETS, BUILDING as BUILDING_CFG, MAP_MENU, DEFAULT_MAP,
   TUNNEL, TERRAIN, VEGETATION, TRACK_ERASER, ICE, MAPS, TOUCH,
 } from './config.js';
 import { generateFeatureMap } from './mapgen.js';
 
-export { MAPS, VEGETATION, ICE, GAME, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH };
+export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH };
 
 // Uiterlijk van de 4 tanks op een kaart (§4): ploeg A en B uit de config, C en D als variant.
 // Alleen het uiterlijk; alle tanks rijden, schieten en incasseren precies hetzelfde.
@@ -63,8 +63,8 @@ export const visionRadius = (viewH, inT = VISION.defaultT) => Math.max(minRadius
 // Regels die een kaart kan overschrijven
 export const bulletsDig = (rules) => rules?.bulletsDig ?? BULLETS.dig;
 export const minimapOn = (rules) => rules?.minimap ?? DISPLAY.minimap;
-export const TICK_RATE = 30; // simulatiestappen per seconde
-export const MAX_PLAYERS = 4;
+export const TICK_RATE = NET.tickRate; // simulatiestappen per seconde
+export const MAX_PLAYERS = GAME.maxPlayers;
 
 // Celtypes in de kaart (1 byte per cel)
 export const EMPTY = 0; // uitgegraven tunnel
@@ -78,18 +78,11 @@ export const BASE = 10; // BASE + spelernummer = vloer van die basis (10..13)
 
 export const TANK_R = 3; // tank past in 7x7 cellen (middelpunt ± 3)
 
-export const FUEL_MAX = 3000;
-export const SHIELD_MAX = 100;
-export const AMMO_MAX = 50;
-export const IDLE_DRAIN_EVERY = 10; // buiten de basis: 1 brandstof per N ticks
-export const BULLET_SPEED = 3; // cellen per tick
-export const BULLET_DAMAGE = 10;
-export const BULLET_DIG_R = 4; // krater bij inslag in zand
-export const HIT_DIG_R = 3; // krater bij treffer op een tank
-export const DEATH_DIG_R = 12; // krater als een tank ontploft
-export const MINE_DAMAGE = 15; // schade als je over een mijn rijdt
-export const MINE_DIG_R = 2; // krater van een mijn
-export const FIRE_COOLDOWN = 4; // ticks tussen schoten
+// Korte namen voor de getallen uit config.js (TANK, BULLETS, MINES)
+export const FUEL_MAX = TANK.fuelMax, SHIELD_MAX = TANK.shieldMax, AMMO_MAX = TANK.ammoMax;
+export const IDLE_DRAIN_EVERY = TANK.idleDrainEvery, FIRE_COOLDOWN = TANK.fireCooldown, DEATH_DIG_R = TANK.deathDigR;
+export const BULLET_SPEED = BULLETS.speed, BULLET_DAMAGE = BULLETS.damage, BULLET_DIG_R = BULLETS.digR, HIT_DIG_R = BULLETS.hitDigR;
+export const MINE_DAMAGE = MINES.damage, MINE_DIG_R = MINES.digR;
 
 export const BASE_W = 23; // buitenmaat basis incl. muur
 export const BASE_H = 19;

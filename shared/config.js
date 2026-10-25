@@ -6,7 +6,27 @@
 // bij meer spelers wie eerst killsToWin kills heeft. roundPauseSeconds: even stil tussen
 // rondes; gameOverSeconds: zo lang staat de winnaar in beeld, daarna een nieuw spel met
 // een nieuwe kaart. Tunnels en andere veranderingen aan de kaart blijven tussen rondes liggen.
-export const GAME = { roundsToWin: 3, killsToWin: 5, roundPauseSeconds: 3, gameOverSeconds: 8 };
+export const GAME = { roundsToWin: 3, killsToWin: 5, roundPauseSeconds: 3, gameOverSeconds: 8, maxPlayers: 4 };
+
+// Tank (§5): voorraden (brandstof in eenheden, pantser en munitie), buiten de basis 1 brandstof per
+// idleDrainEvery ticks, fireCooldown ticks tussen schoten, deathDigR: krater als hij ontploft.
+// Alle tanks zijn gelijk; per kaart verschilt alleen het uiterlijk.
+export const TANK = { fuelMax: 3000, shieldMax: 100, ammoMax: 50, idleDrainEvery: 10, fireCooldown: 4, deathDigR: 12 };
+// Bijvullen in de eigen basis: fuel per tick, 1 pantser per armorEvery ticks, 1 munitie per
+// ammoEvery ticks (een kaart kan dat uitzetten met refill)
+export const REFILL = { fuel: 15, armorEvery: 4, ammoEvery: 6 };
+// Mijnen (El Alamein): schade en krater
+export const MINES = { damage: 15, digR: 2 };
+
+// Netwerk en klok. tickRate: simulatiestappen per seconde (server en clients). Server: hartslag
+// (wie niet antwoordt, wordt afgesloten), max. berichten per seconde per speler en max. grootte.
+// Client: renderDelay ticks buffer voor andere tanks, histLen posities om tussen te interpoleren,
+// maxPred onbevestigde ticks invoer, smoothMs om correcties weg te werken, messageSeconds:
+// zo lang staat een melding van de server in beeld.
+export const NET = {
+  tickRate: 30, heartbeatMs: 5000, maxMsgsPerSec: 60, maxPayload: 4 * 1024,
+  renderDelay: 1, histLen: 12, maxPred: 120, smoothMs: 100, messageSeconds: 6,
+};
 
 // Maten (SPEC-blitzkrieg §5.1): breedtes in de spec staan in T, de breedte van een tank.
 // T is hier in cellen; de tank zelf is 7 lang en 5 breed.
@@ -83,11 +103,21 @@ export const TOUCH = { deadZone: 0.3, stickRadius: 60, selfDestructMs: 1000 };
 // Tunneler). Standaard niet: ze vliegen over grond en water tot een tank, begroeiing, gebouw,
 // rots of muur. Een kaart kan dit overschrijven met bulletsDig. De krater van een
 // exploderende tank blijft altijd.
-export const BULLETS = { dig: false };
+// speed in cellen per tick, damage in pantser, digR: krater bij inslag in de grond (alleen met dig),
+// hitDigR: krater bij een treffer op een tank (alleen met dig).
+export const BULLETS = { dig: false, speed: 3, damage: 10, digR: 4, hitDigR: 3 };
 
 // Gebouwen (§5.4): zoveel treffers tot het puin is; daarna wordt de cel de klasse rubble met
 // een puinpatroon dat nooit vervaagt.
 export const BUILDING = { hp: 4, rubble: 'soft', color: '#8c8a86' };
+// Rook die het zicht blokkeert (§9): straal in T, seconden; farm (Grebbeberg, links van de vallei-
+// grens valleyX) en city (boven Arnhem, verspreid over spreadT) komen elke everySeconds,
+// battle bij elke treffer als het weer battleSmoke heeft (Koersk)
+export const SMOKE = {
+  farm: { everySeconds: 5, rT: 2.5, seconds: 20, valleyX: 0.55 },
+  city: { everySeconds: 4, rT: 2, seconds: 16, spreadT: [20, 12] },
+  battle: { rT: 1.5, seconds: 20 },
+};
 // De brug die kan ontploffen (Market Garden): betongrijs, heel en als brokken in het water
 export const BRIDGE = { color: '#8e8c88' };
 
@@ -219,7 +249,7 @@ export const MAPS = {
       { type: 'road', from: [0.65, 0.75], to: [1, 0.35], width: 2 },
     ],
     refill: { ammo: false }, // munitie alleen bij het depot in Rhenen
-    scarce: { type: 'ammoDepot' },
+    scarce: { type: 'ammoDepot', perSecond: 5, radiusT: 2.5 }, // munitie per seconde binnen radiusT van het depot
     look: { grade: { saturation: 0.05, tint: '#fff2d8', tintStrength: 0.08 }, noise: { strength: 0.08 } },
     tunnelColor: '#4a3a22',
     weather: [
@@ -271,7 +301,8 @@ export const MAPS = {
       { type: 'sea', side: 'north', depth: 0.13 }, // ~10% van het speelbare deel (zonder de rotsrand)
       { type: 'road', from: [0, 0.17], to: [1, 0.17], width: 2, bridges: false },
     ],
-    meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040' },
+    // per vak (T) zand +soft, op hard/verhard firm; boven danger armorPct% pantser per vak zand, bij 100 snelheid slow
+    meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040', soft: 2, firm: -5, armorPct: 1, slow: 0.7 },
     look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35 },
     tunnelColor: '#6e5430',
     weather: [
@@ -300,7 +331,9 @@ export const MAPS = {
       { type: 'road', from: [0.7, 0], to: [0.7, 1], width: 2 },
       { type: 'area', name: 'zuid', rect: [0, 0.56, 1, 1], classes: { soft: 75, hard: 25 } },
     ],
-    meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40' },
+    // per seconde warm (rijden of in de basis) of cool (stil of langzamer dan idleBelow van de topsnelheid);
+    // bij 0 bevroren: in rampSeconds van rampFrom naar volle snelheid
+    meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40', warm: 10, cool: -5, idleBelow: 0.3, rampSeconds: 4, rampFrom: 0.1 },
     look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32, blur: 3 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
     tunnelColor: '#3a2f27',
     weather: [
@@ -335,7 +368,9 @@ export const MAPS = {
       { type: 'ridge', from: [0.55, 0.92], to: [0.95, 0.7], width: 1.5, openings: 2, wiggle: 0.5 },
     ],
     hazard: { type: 'grainFire', shotChance: 0.1, stormShotChance: 0.03, everySeconds: 120, spreadSeconds: 1, burnSeconds: 15, armorPerSecond: 5, wind: true },
-    meter: { type: 'temp', label: 'Motortemperatuur', danger: 100, color: '#e0603a' },
+    // per seconde: in een brandend vak fire, in de eigen basis base, sneller dan fastAbove van de
+    // topsnelheid fast, anders idle; bij 100 oververhit (snelheid hotSlow) tot onder coolTo
+    meter: { type: 'temp', label: 'Motortemperatuur', danger: 100, color: '#e0603a', fire: 15, base: -20, fast: 4, idle: -6, fastAbove: 0.8, coolTo: 50, hotSlow: 0.4 },
     look: { grade: { saturation: 0.05, tint: '#ffe8c0', tintStrength: 0.1 }, noise: { strength: 0.08 } },
     tunnelColor: '#2e2418',
     weather: [
@@ -441,7 +476,8 @@ export const MAPS = {
       storm('Sneeuwstorm'),
     ],
     hazard: { type: 'forestBarrage', everySeconds: 20, area: 6, warningSeconds: 2, armorLoss: 15 },
-    scarce: { type: 'fuelDepots', count: { klein: 2, middel: 2, groot: 3, extragroot: 3 } },
+    // depots per kaartgrootte, minstens fromBase cellen van een basis en apart van elkaar; oppakken binnen reach cellen
+    scarce: { type: 'fuelDepots', count: { klein: 2, middel: 2, groot: 3, extragroot: 3 }, fromBase: 40, apart: 60, reach: 4 },
   },
 
   seelow: { // §10.9

@@ -48,9 +48,7 @@ const server = http.createServer((req, res) => {
 
 // ---------- Instellingen (via omgevingsvariabelen, handig voor tests) ----------
 const FIXED_SEED = process.env.TUNNELER_SEED ? Number(process.env.TUNNELER_SEED) >>> 0 : null; // vaste kaart (tests)
-const HEARTBEAT_MS = 5000; // zo vaak pingen; wie niet antwoordt, wordt afgesloten
-const MAX_MSGS_PER_SEC = 60; // meer berichten van één speler negeren we
-const MAX_PAYLOAD = 4 * 1024; // spelers sturen alleen kleine berichten
+const { heartbeatMs: HEARTBEAT_MS, maxMsgsPerSec: MAX_MSGS_PER_SEC, maxPayload: MAX_PAYLOAD } = G.NET; // zie config.js
 // Spelregels; de tests zetten roundsToWin lager om een heel spel snel uit te spelen
 const GAME = { ...G.GAME, roundsToWin: Number(process.env.TUNNELER_ROUNDS_TO_WIN) || G.GAME.roundsToWin };
 // Weerklok: de tests laten het weer sneller lopen (0.05 = twintig keer zo snel)
@@ -357,9 +355,9 @@ function step(room) {
     if (map[t.y * G.W + t.x] === G.BASE + t.id) {
       // In eigen basis: bijtanken en repareren, tenzij de kaart dat schaars maakt (refill)
       const refill = room.rules.refill || {};
-      if (refill.fuel !== false) t.fuel = Math.min(G.FUEL_MAX, t.fuel + 15);
-      if (refill.armor !== false && tick % 4 === 0) t.shield = Math.min(G.SHIELD_MAX, t.shield + 1);
-      if (refill.ammo !== false && tick % 6 === 0) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+      if (refill.fuel !== false) t.fuel = Math.min(G.FUEL_MAX, t.fuel + G.REFILL.fuel);
+      if (refill.armor !== false && tick % G.REFILL.armorEvery === 0) t.shield = Math.min(G.SHIELD_MAX, t.shield + 1);
+      if (refill.ammo !== false && tick % G.REFILL.ammoEvery === 0) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
     } else if (tick % G.IDLE_DRAIN_EVERY === 0) {
       t.fuel--;
     }

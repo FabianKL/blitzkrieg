@@ -6,10 +6,8 @@ import * as G from './game.js';
 import * as Weather from './weather.js';
 
 const TICK_MS = 1000 / G.TICK_RATE;
-const RENDER_DELAY = 1; // andere tanks zo veel ticks achter de server tekenen (buffer tegen haperingen)
-const HIST_LEN = 12; // posities per tank om tussen te interpoleren
-const MAX_PRED = 120; // nooit meer dan 4 seconden onbevestigde invoer bewaren
-const SMOOTH_MS = 100; // correcties van de voorspelling in ~100 ms wegwerken
+// buffer voor andere tanks, interpolatie, voorspelling en correcties: zie NET in config.js
+const { renderDelay: RENDER_DELAY, histLen: HIST_LEN, maxPred: MAX_PRED, smoothMs: SMOOTH_MS } = G.NET;
 
 export function createState() {
   return {
@@ -198,7 +196,7 @@ export function applyState(state, msg, hooks = {}, now = 0) {
     } else if (e.t === 'smoke') { // rookvlek die het zicht blokkeert
       state.smokes.push({ x: e.x, y: e.y, r: e.r, until: tick + Math.round(e.s * G.TICK_RATE) });
     } else if (e.t === 'err') { // melding (bv. bases passen niet op deze kaartgrootte)
-      state.message = { text: e.msg, until: tick + 6 * G.TICK_RATE };
+      state.message = { text: e.msg, until: tick + G.NET.messageSeconds * G.TICK_RATE };
     } else if (e.t === 'c') { // passage over een ijsvak (barsten)
       world.ice[e.b] = e.n;
     } else if (e.t === 'w') { // ijs gebroken: wak (de server gooide de dobbelsteen)
