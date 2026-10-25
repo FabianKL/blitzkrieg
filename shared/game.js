@@ -198,70 +198,35 @@ export function makeNoise(seed) {
 const BASE_SPOTS = [[0.18, 0.25], [0.82, 0.75], [0.82, 0.25], [0.18, 0.75]];
 
 // Kaart maken. players = aantal bases (zoveel spelers als de kaartgrootte toelaat).
-// Kaarten met features (het formaat uit §11) gaan via de kaartmaker in mapgen.js.
+// Kaarten met features (het formaat uit §11) gaan via de kaartmaker in mapgen.js; zonder features
+// is het de retrokaart: één terreinklasse, losse rotsblokken, een rotsrand en de bases.
 export function generateMap(seed, opts = {}, players = MAX_PLAYERS) {
   if (opts.features) return generateFeatureMap(seed, opts, players);
   const rnd = mulberry32(seed);
   const noise = makeNoise(seed ^ 0x5bd1e995);
   const map = new Uint8Array(W * H).fill(DIRT);
-  const terrain = makeTerrain(seed, opts);
-  const veg = new Uint16Array(W * H);
-  const vegHp = [];
-  // Aantallen in de configuratie gelden voor middel; op andere groottes naar verhouding
-  const area = (W * H) / (BASE_W_CELLS * BASE_H_CELLS), scaled = (n) => Math.round((n || 0) * area);
-  opts = {
-    ...opts,
-    rocks: opts.rocks && { ...opts.rocks, count: scaled(opts.rocks.count) },
-    vegetation: opts.vegetation && { ...opts.vegetation, clumps: scaled(opts.vegetation.clumps) },
-    marshAreas: opts.marshAreas && { ...opts.marshAreas, count: scaled(opts.marshAreas.count) },
-  };
-
-  // Rotsblokken met gekartelde randen, plus rotsen langs kronkelende geulen (balka's)
-  const rockBlob = (cx, cy, r) => {
+  const terrain = new Uint8Array(W * H).fill(CLASS[Object.keys(opts.classes || { normal: 1 })[0]]);
+  // het aantal rotsen in de configuratie geldt voor middel; op andere groottes naar verhouding
+  const rk = opts.rocks || {}, count = Math.round((rk.count || 0) * (W * H) / (BASE_W_CELLS * BASE_H_CELLS));
+  for (let i = 0; i < count; i++) {
+    const cx = rnd() * W, cy = rnd() * H, r = rk.min + rnd() * (rk.max - rk.min);
     for (let y = Math.floor(cy - r - 2); y <= cy + r + 2; y++) {
       for (let x = Math.floor(cx - r - 2); x <= cx + r + 2; x++) {
-        if (!inBounds(x, y)) continue;
-        if (Math.hypot(x - cx, y - cy) < r + (rnd() - 0.5) * 2.5) map[y * W + x] = ROCK;
+        if (inBounds(x, y) && Math.hypot(x - cx, y - cy) < r + (rnd() - 0.5) * 2.5) map[y * W + x] = ROCK; // gekartelde rand
       }
     }
-  };
-  const rk = opts.rocks || {};
-  for (let i = 0; i < (rk.count ?? 0); i++) rockBlob(rnd() * W, rnd() * H, rk.min + rnd() * (rk.max - rk.min));
-  for (let g = 0; g < (rk.ridges || 0); g++) {
-    const across = rnd() < 0.5, len = across ? W : H, side = across ? H : W;
-    const a = side * (0.15 + rnd() * 0.7), b = side * (0.15 + rnd() * 0.7);
-    const t0 = len * rnd() * 0.4, t1 = t0 + len * (0.35 + rnd() * 0.25);
-    for (let t = t0; t < Math.min(len, t1); t += 3 + rnd() * 4) {
-      if (rnd() < 0.25) continue; // gaten in de geul: je kunt er doorheen
-      const off = a + (b - a) * (t / len) + (noise(t / 30, g * 71 + 5) - 0.5) * 60;
-      rockBlob(across ? t : off, across ? off : t, 1.2 + rnd() * 2);
-    }
   }
-
   const isBorder = makeBorder(map, noise);
-
   const bases = BASE_SPOTS.slice(0, players).map(([fx, fy]) => ({
     x: Math.round(fx * W + (rnd() - 0.5) * 30),
     y: Math.round(fy * H + (rnd() - 0.5) * 20),
   }));
-  const nearBase = (x, y, d) => bases.some((b) => Math.abs(x - b.x) < (BASE_W >> 1) + d && Math.abs(y - b.y) < (BASE_H >> 1) + d);
-
-  if (opts.water) addWater(map, terrain, rnd, noise, opts, nearBase);
-  if (opts.marshAreas) addMarshAreas(map, terrain, rnd, noise, opts.marshAreas, nearBase);
-  if (opts.vegetation?.pattern === 'hedges') addHedges(map, terrain, veg, vegHp, rnd, opts.vegetation, nearBase);
-  else if (opts.vegetation) addVegetation(map, terrain, veg, vegHp, rnd, opts.vegetation, nearBase);
-  if (opts.buildings) addBuildings(map, terrain, veg, vegHp, rnd, opts.buildings, nearBase);
-
+  const veg = new Uint16Array(W * H);
   drawBases(map, veg, bases, isBorder, noise);
-
   connectBases(map, bases, isBorder);
-  ensureThawRoute(map, terrain, bases, isBorder);
-
-  const { fields, mines } = opts.mines ? addMines(map, bases, rnd, Math.max(2, scaled(8))) : { fields: [], mines: [] };
-
-  const w = { map, terrain, track: new Uint16Array(W * H), veg, vegHp: Uint8Array.from(vegHp), scar: new Uint8Array(W * H), ice: new Uint8Array(ICE_BW * ICE_BH) };
+  const w = { map, terrain, track: new Uint16Array(W * H), veg, vegHp: new Uint8Array(0), scar: new Uint8Array(W * H), ice: new Uint8Array(ICE_BW * ICE_BH) };
   indexVeg(w);
-  return { ...w, bases, fields, mines };
+  return { ...w, bases, fields: [], mines: [] };
 }
 
 // ---------- Bouwstenen voor de kaartmakers ----------
@@ -365,227 +330,6 @@ export function addMines(map, bases, rnd, count) {
     }
   }
   return { fields, mines };
-}
-
-// Een kronkelende lijn van rand tot rand: across = van links naar rechts. Geeft per stap t
-// de afstand tot de rand aan de andere kant (off). wiggle = hoeveel cellen hij opzij kronkelt.
-function meander(rnd, noise, salt, wiggle) {
-  const across = rnd() < 0.5;
-  const len = across ? W : H, side = across ? H : W;
-  const a = side * (0.2 + rnd() * 0.6), b = side * (0.2 + rnd() * 0.6);
-  return { across, len, off: (t) => a + (b - a) * (t / len) + (noise(t / 35, salt) - 0.5) * wiggle };
-}
-const cellOf = (line, t, o) => (line.across ? [t, Math.round(line.off(t) + o)] : [Math.round(line.off(t) + o), t]);
-
-// Water uit de kaartconfiguratie: rivieren (met doorwaadbare plekken), kanalen (met bruggen en
-// eventueel een dijkweg ernaast), meren, zee langs de bovenrand (met kustweg) en een moerasrand.
-// Waar een verharde weg ligt, komt geen water: daar ligt een brug.
-function addWater(map, terrain, rnd, noise, opts, nearBase) {
-  const cfg = opts.water;
-  const put = (x, y) => {
-    if (!inBounds(x, y)) return;
-    const i = y * W + x;
-    if (map[i] === DIRT && terrain[i] !== CLASS.paved && !nearBase(x, y, 6)) map[i] = WATER;
-  };
-  const setClass = (x, y, cls) => { if (inBounds(x, y) && terrain[y * W + x] !== CLASS.paved && map[y * W + x] === DIRT) terrain[y * W + x] = cls; };
-  for (let r = 0; r < (cfg.rivers || 0); r++) {
-    const line = meander(rnd, noise, r * 53 + 11, 60);
-    const fordEvery = Math.round(45 + rnd() * 20), fordAt = Math.round(rnd() * fordEvery);
-    for (let t = 0; t < line.len; t++) {
-      const half = 1.6 + noise(t / 12, r * 53 + 29) * 1.8;
-      const ford = (t + fordAt) % fordEvery < 3 * T; // doorwaadbare plek van 3 T
-      for (let o = -Math.ceil(half); o <= Math.ceil(half); o++) {
-        if (Math.abs(o) > half) continue;
-        const [x, y] = cellOf(line, t, o);
-        if (ford) setClass(x, y, CLASS.ford ?? CLASS.hard); else put(x, y);
-      }
-    }
-  }
-  // Kanalen: smal, bijna recht, met om de zoveel cellen een brug en een dijkweg langs beide kanten
-  for (let k = 0; k < (cfg.canals || 0); k++) {
-    const line = meander(rnd, noise, k * 97 + 3, 10);
-    const bridgeEvery = Math.round(60 + rnd() * 30), bridgeAt = Math.round(rnd() * bridgeEvery);
-    for (let t = 0; t < line.len; t++) {
-      const bridge = (t + bridgeAt) % bridgeEvery < 8;
-      for (let o = -1; o <= 1; o++) {
-        const [x, y] = cellOf(line, t, o);
-        if (bridge) { if (inBounds(x, y) && map[y * W + x] === DIRT) terrain[y * W + x] = CLASS.paved; } else put(x, y);
-      }
-      if (cfg.dikes && CLASS.hard !== undefined) for (const o of [-4, -3, -2, 2, 3, 4]) { const [x, y] = cellOf(line, t, o); setClass(x, y, CLASS.hard); }
-    }
-  }
-  for (let k = 0; k < (cfg.lakes || 0); k++) {
-    const cx = 30 + rnd() * (W - 60), cy = 25 + rnd() * (H - 50), r = 6 + rnd() * 8;
-    if (nearBase(cx, cy, r + 10)) continue;
-    for (let y = Math.floor(cy - r * 1.4); y <= cy + r * 1.4; y++) {
-      for (let x = Math.floor(cx - r * 1.4); x <= cx + r * 1.4; x++) {
-        if (Math.hypot(x - cx, y - cy) < r * (0.7 + noise(x / 5 + k * 13, y / 5) * 0.6)) put(x, y);
-      }
-    }
-  }
-  if (cfg.frozenRiver) addFrozenRiver(map, terrain, rnd, noise, cfg.frozenRiver, nearBase);
-  if (cfg.sea === 'north') {
-    // golvende kustlijn; de kustweg loopt er op een paar cellen afstand langs. Een weg die
-    // naar de zee loopt, houdt op bij de kust (geen brug de zee in).
-    const coast = (x) => 14 + noise(x / 40, 777) * 18 + noise(x / 9, 778) * 4;
-    for (let x = 0; x < W; x++) {
-      const c = coast(x);
-      for (let y = 0; y < c; y++) {
-        if (inBounds(x, y) && terrain[y * W + x] === CLASS.paved) terrain[y * W + x] = CLASS.hard ?? terrain[y * W + x];
-        put(x, y);
-      }
-      if (opts.coastRoad) for (let y = Math.round(c + 6); y <= Math.round(c + 8); y++) setClass(x, y, CLASS.paved);
-    }
-  }
-  const m = cfg.marsh || 0;
-  if (m > 0 && CLASS.marsh !== undefined) {
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (map[y * W + x] !== WATER) continue;
-        for (let j = -m; j <= m; j++) {
-          for (let i = -m; i <= m; i++) {
-            const nx = x + i, ny = y + j;
-            if (!inBounds(nx, ny) || i * i + j * j > m * m) continue;
-            const ni = ny * W + nx;
-            if (map[ni] === DIRT && terrain[ni] !== CLASS.paved && terrain[ni] !== CLASS.hard && noise(nx / 4, ny / 4) > 0.35) terrain[ni] = CLASS.marsh;
-          }
-        }
-      }
-    }
-  }
-}
-
-// Bevroren rivier (de Neva bij Leningrad): horizontaal op hoogte `at`, van ijs (geen water, je
-// kunt erover), met één brug (weg die de hele kaart doorloopt), een steile oever van rots langs
-// de noordkant met een paar openingen, en een paar wakken.
-function addFrozenRiver(map, terrain, rnd, noise, fr, nearBase) {
-  if (CLASS.ice === undefined) return;
-  const bx = Math.round(W * fr.bridgeAt + (rnd() - 0.5) * W * 0.06), bh = fr.bridgeWidth >> 1;
-  const top = (x) => Math.round(H * fr.at - fr.width / 2 + (noise(x / 60, 901) - 0.5) * 16 + (noise(x / 9, 902) - 0.5) * 3);
-  const bot = (x) => Math.round(H * fr.at + fr.width / 2 + (noise(x / 60, 901) - 0.5) * 16 + (noise(x / 9, 903) - 0.5) * 3);
-  // openingen in de noordoever, niet bij de brug en niet bij elkaar
-  const gaps = [];
-  for (let tries = 0; gaps.length < fr.openings && tries < 200; tries++) {
-    const g = Math.round(20 + rnd() * (W - 40));
-    if (Math.abs(g - bx) < bh + fr.openingWidth || gaps.some((o) => Math.abs(o - g) < fr.openingWidth * 2)) continue;
-    gaps.push(g);
-  }
-  // weg van boven naar beneden over de brug
-  for (let y = 0; y < H; y++) for (let x = bx - 2; x <= bx + 2; x++) if (inBounds(x, y)) terrain[y * W + x] = CLASS.paved;
-  for (let x = 0; x < W; x++) {
-    const t = top(x), b = bot(x), bridge = Math.abs(x - bx) <= bh;
-    for (let y = t; y <= b; y++) {
-      if (!inBounds(x, y) || nearBase(x, y, 4)) continue;
-      const i = y * W + x;
-      if (map[i] === ROCK && (x < 14 || x >= W - 14)) continue; // rotsrand van de kaart blijft
-      map[i] = DIRT;
-      terrain[i] = bridge ? CLASS.paved : CLASS.ice;
-    }
-    if (bridge || gaps.some((g) => Math.abs(x - g) <= fr.openingWidth / 2)) continue;
-    for (let y = t - 2; y < t; y++) if (inBounds(x, y) && !nearBase(x, y, 4)) map[y * W + x] = ROCK;
-  }
-  for (let k = 0; k < (fr.holes || 0); k++) {
-    let cx;
-    do cx = 20 + rnd() * (W - 40); while (Math.abs(cx - bx) < bh + 10);
-    const cy = (top(cx | 0) + bot(cx | 0)) / 2 + (rnd() - 0.5) * fr.width * 0.4, r = 3 + rnd() * 2;
-    for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) {
-      for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
-        if (inBounds(x, y) && terrain[y * W + x] === CLASS.ice && Math.hypot(x - cx, y - cy) < r * (0.8 + noise(x / 3, y / 3) * 0.4)) map[y * W + x] = WATER;
-      }
-    }
-  }
-}
-
-// Moerasvlekken (Carentan): een kern moeras met een rand modder eromheen
-function addMarshAreas(map, terrain, rnd, noise, cfg, nearBase) {
-  for (let k = 0; k < cfg.count; k++) {
-    const cx = 30 + rnd() * (W - 60), cy = 25 + rnd() * (H - 50), r = cfg.size * (0.7 + rnd() * 0.6);
-    if (nearBase(cx, cy, r)) continue;
-    for (let y = Math.floor(cy - r * 1.6); y <= cy + r * 1.6; y++) {
-      for (let x = Math.floor(cx - r * 1.6); x <= cx + r * 1.6; x++) {
-        if (!inBounds(x, y) || map[y * W + x] !== DIRT || terrain[y * W + x] === CLASS.paved || nearBase(x, y, 4)) continue;
-        const d = Math.hypot(x - cx, y - cy) / (r * (0.75 + noise(x / 6 + k * 17, y / 6) * 0.5));
-        if (d < 1) terrain[y * W + x] = CLASS.marsh;
-        else if (d < 1.35 && CLASS.soft !== undefined) terrain[y * W + x] = CLASS.soft;
-      }
-    }
-  }
-}
-
-// Plukken planten in bosjes van `group` stuks, elk een eigen plant met eigen treffers.
-// Onder elke plant ligt de ondergrond die overblijft als hij weggeschoten is.
-function addVegetation(map, terrain, veg, vegHp, rnd, cfg, nearBase) {
-  const size = cfg.size || 3, group = cfg.group || 6;
-  const spread = size * (2 + Math.sqrt(group) * 1.4); // grotere bosjes liggen verder uit elkaar
-  while (vegHp.length < cfg.clumps) {
-    const gx = 20 + rnd() * (W - 40), gy = 15 + rnd() * (H - 30);
-    for (let k = 0; k < group && vegHp.length < cfg.clumps; k++) {
-      const cx = gx + (rnd() - 0.5) * spread * 1.6, cy = gy + (rnd() - 0.5) * spread;
-      const r = size * (0.7 + rnd() * 0.6);
-      plant(map, terrain, veg, vegHp, cfg, nearBase, (add) => {
-        for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) {
-          for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) if (Math.hypot(x - cx, y - cy) < r + (rnd() - 0.5) * 1.2) add(x, y);
-        }
-      });
-    }
-  }
-}
-
-// Heggen (Carentan, bocage): lange rechte stroken langs denkbeeldige velden, verdeeld in
-// stukken van ~7 cellen; elk stuk is een eigen plant, zodat je er een gat in kunt schieten.
-function addHedges(map, terrain, veg, vegHp, rnd, cfg, nearBase) {
-  const width = cfg.size || 2, PIECE = 7;
-  while (vegHp.length < cfg.clumps) {
-    const horiz = rnd() < 0.5, len = 30 + rnd() * 40;
-    const x0 = 15 + rnd() * (W - 30), y0 = 12 + rnd() * (H - 24), slope = (rnd() - 0.5) * 0.25;
-    for (let t0 = 0; t0 < len && vegHp.length < cfg.clumps; t0 += PIECE) {
-      plant(map, terrain, veg, vegHp, cfg, nearBase, (add) => {
-        for (let t = t0; t < Math.min(len, t0 + PIECE); t++) {
-          for (let w = 0; w < width; w++) {
-            const along = t, across = w + Math.round(t * slope);
-            add(Math.round(horiz ? x0 + along : x0 + across), Math.round(horiz ? y0 + across : y0 + along));
-          }
-        }
-      });
-    }
-  }
-}
-
-// Losse huizen rond een plek (voorlopig, tot de dorpsmodule): rechthoeken op vrije grond,
-// niet op een weg en met ruimte ertussen. Elk huis is een eigen doelwit met BUILDING_HP treffers
-// (in dezelfde nummering als de planten, zodat het wegschieten hetzelfde werkt).
-function addBuildings(map, terrain, veg, vegHp, rnd, cfg, nearBase) {
-  const cx = cfg.at[0] * W, cy = cfg.at[1] * H, placed = [];
-  for (let tries = 0; placed.length < cfg.count && tries < cfg.count * 40; tries++) {
-    const bw = Math.round(cfg.min + rnd() * (cfg.max - cfg.min)), bh = Math.round(cfg.min + rnd() * (cfg.max - cfg.min));
-    const x0 = Math.round(cx + (rnd() - 0.5) * 2 * cfg.spread * W - bw / 2), y0 = Math.round(cy + (rnd() - 0.5) * 2 * cfg.spread * H - bh / 2);
-    if (placed.some((o) => x0 < o[2] + 3 && x0 + bw + 3 > o[0] && y0 < o[3] + 3 && y0 + bh + 3 > o[1])) continue;
-    let ok = true;
-    for (let y = y0; y < y0 + bh && ok; y++) {
-      for (let x = x0; x < x0 + bw && ok; x++) {
-        ok = inBounds(x, y) && map[y * W + x] === DIRT && terrain[y * W + x] !== CLASS.paved && !nearBase(x, y, 8);
-      }
-    }
-    if (!ok) continue;
-    placed.push([x0, y0, x0 + bw, y0 + bh]);
-    const id = vegHp.length + 1;
-    vegHp.push(BUILDING_HP);
-    for (let y = y0; y < y0 + bh; y++) {
-      for (let x = x0; x < x0 + bw; x++) { const i = y * W + x; map[i] = BUILDING; veg[i] = id; terrain[i] = CLASS[BUILDING_CFG.rubble]; }
-    }
-  }
-}
-
-// Eén plant: cells(add) roept add(x, y) aan voor elke cel die hij zou bedekken
-function plant(map, terrain, veg, vegHp, cfg, nearBase, cells) {
-  const id = vegHp.length + 1, ground = CLASS[cfg.groundAfter];
-  vegHp.push(VEGETATION[cfg.type].hp);
-  cells((x, y) => {
-    if (!inBounds(x, y)) return;
-    const i = y * W + x;
-    if (map[i] !== DIRT || terrain[i] === CLASS.paved || terrain[i] === CLASS.marsh || terrain[i] === CLASS.ice || nearBase(x, y, 6)) return;
-    map[i] = VEG; veg[i] = id; terrain[i] = ground;
-  });
 }
 
 // Kunnen alle bases elkaar bereiken? Rots, water en muren blokkeren, begroeiing en gebouwen
@@ -757,49 +501,6 @@ export function pickThawPools(w, bases, cfg, rnd = Math.random) {
     pools.push([x, y, cfg.poolRadius]);
   }
   return pools;
-}
-
-// Terreinlaag: vlekken van hard tot zacht volgens de aandelen in de kaartconfiguratie,
-// plus kronkelende verharde wegen dwars over de kaart.
-function makeTerrain(seed, opts) {
-  const terrain = new Uint8Array(W * H);
-  const mix = Object.entries(opts.classes || { normal: { share: 1 } }).filter(([, c]) => c.share).map(([name, c]) => [name, c.share]);
-  const noise = makeNoise(seed ^ 0x27d4eb2f);
-  const val = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) val[y * W + x] = noise(x / 22, y / 22) * 0.75 + noise(x / 7 + 50, y / 7) * 0.25;
-  }
-  // grenzen zo kiezen dat elke klasse precies zijn aandeel van de kaart krijgt
-  const sorted = Float32Array.from(val).sort();
-  const total = mix.reduce((n, [, share]) => n + share, 0);
-  let acc = 0;
-  const cuts = mix.map(([name, share], k) => {
-    acc += share;
-    const cut = k === mix.length - 1 ? Infinity : sorted[Math.min(sorted.length - 1, Math.floor((acc / total) * sorted.length))];
-    return [CLASS[name], cut];
-  });
-  for (let i = 0; i < terrain.length; i++) {
-    let k = 0;
-    while (val[i] > cuts[k][1]) k++;
-    terrain[i] = cuts[k][0];
-  }
-  const rnd = mulberry32(seed ^ 0x9e3779b9);
-  for (let r = 0; r < (opts.roads || 0); r++) {
-    // van de ene kant naar de andere, met een golvende afwijking opzij
-    const across = rnd() < 0.5;
-    const len = across ? W : H, side = across ? H : W;
-    const a = side * (0.15 + rnd() * 0.7), b = side * (0.15 + rnd() * 0.7);
-    for (let t = 0; t < len; t++) {
-      // zigzag (loopgraven): een zaagtand van ~12 cellen bovenop het kronkelen
-      const zig = opts.zigzag ? (Math.abs(((t / 12) % 2) - 1) - 0.5) * 10 : 0;
-      const off = a + (b - a) * (t / len) + (noise(t / 40, r * 31 + 7) - 0.5) * 50 + zig;
-      for (let o = -1; o <= 1; o++) {
-        const x = across ? t : Math.round(off + o), y = across ? Math.round(off + o) : t;
-        if (inBounds(x, y)) terrain[y * W + x] = CLASS.paved;
-      }
-    }
-  }
-  return terrain;
 }
 
 // ---------- Sporen ----------

@@ -676,12 +676,12 @@ export const tests = [
       const out = [];
       for (const id of MAP_IDS) {
         const cfg = G.MAPS[id];
-        const sum = { cls: new Array(G.CLASS_NAMES.length).fill(0), water: 0, veg: 0, seaTop: 0, n: 0 };
+        const sum = { cls: new Array(G.CLASS_NAMES.length).fill(0), water: 0, veg: 0, n: 0 };
         for (let seed = 1; seed <= 20; seed++) {
           const w = G.generateMap(seed * 104729, cfg);
           for (let i = 0; i < w.map.length; i++) {
             if (w.map[i] === G.DIRT || w.map[i] === G.EMPTY) sum.cls[w.terrain[i]]++;
-            if (w.map[i] === G.WATER) { sum.water++; if (((i / G.W) | 0) < 40) sum.seaTop++; } // kust: 14 tot 36 cellen van de rand
+            if (w.map[i] === G.WATER) sum.water++;
           }
           for (let k = 0; k < w.vegHp.length; k++) {
             if (!w.vegCells[k].length) continue;
@@ -701,12 +701,10 @@ export const tests = [
           check(named || sum.cls[i] === 0, `${id}: klasse ${name} komt voor maar staat niet in de configuratie`);
           check(!named || sum.cls[i] > 0, `${id}: klasse ${name} staat in de configuratie maar komt niet voor`);
         }
-        const wantWater = (cfg.water && (cfg.water.rivers || cfg.water.canals || cfg.water.lakes || cfg.water.sea || cfg.water.frozenRiver?.holes)) ||
-          cfg.terrainPercent?.water || cfg.features?.some((f) => f.type === 'river' && !f.frozen);
+        const wantWater = cfg.terrainPercent?.water || cfg.features?.some((f) => f.type === 'river' && !f.frozen);
         check(!wantWater === !sum.water, `${id}: ${sum.water} watercellen, ${wantWater ? 'wel' : 'geen'} water verwacht`);
-        if (cfg.water?.sea === 'north') check(sum.seaTop > sum.water * 0.8, `${id}: de zee ligt niet langs de bovenrand`);
         check(!cfg.vegetation === !sum.veg, `${id}: ${sum.veg} planten`);
-        const wantBuildings = cfg.buildings || cfg.features?.some((f) => f.type === 'village');
+        const wantBuildings = cfg.terrainPercent?.building || cfg.features?.some((f) => f.type === 'village');
         check(!wantBuildings === !sum.buildings, `${id}: ${sum.buildings || 0} gebouwen`);
         out.push(`${id}: ${(sum.water / sum.n) | 0} water, ${(sum.veg / sum.n) | 0} planten`);
       }

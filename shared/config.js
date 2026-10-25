@@ -152,35 +152,20 @@ export const TRACK_ERASER = { fadeFactor: 10, warnSeconds: 5, burialSeconds: 2 }
 // Kaarten (SPEC-terrein §6). Elke kaart is een eigen potje. Per kaart:
 //   name        naam in beeld; header: titelregel (na 'BLITZKRIEG — '); style: welke weergave
 //               (zomer, winter, woestijn); tanks: {A, B} uiterlijk van de ploegen (zie boven)
-//   classes     per terreinklasse {label, color, share}: share = aandeel van de vlakken, in volgorde
-//               van hard naar zacht. Wegen, moeras en de ondergrond onder planten komen er los bij,
-//               dus een klasse zonder share kan toch op de kaart staan (bv. paved via roads).
-//   rocks       {label, color, count, min, max: straal in cellen, ridges: aantal geulen met rotsen}
-//   water       {label, color, rivers (met doorwaadbare plekken), lakes, canals (met bruggen),
-//               dikes: dijkweg (hard) langs kanalen, sea: 'north' = zee langs de bovenrand,
-//               marsh: breedte moerasrand langs het water}
-//   marshAreas  {count, size}: moerasvlekken met een rand modder (soft)
-//   roads       aantal verharde wegen (over rivieren en kanalen ligt dan een brug);
-//               zigzag: wegen zigzaggen (loopgraven), coastRoad: weg langs de zee
-//   vegetation  {type (uit VEGETATION), label, groundAfter, clumps: aantal planten, size: straal,
-//               group: planten per bosje, pattern: 'clumps' of 'hedges' (heggen langs velden)}
-//               frozenRiver: bevroren rivier dwars over de kaart {at: hoogte (0..1), width, bridgeAt,
-//               bridgeWidth, openings: gaten in de steile noordoever, openingWidth, holes: wakken}
-//   vegetation  ... color: kleur van het bladerdek
+//   terrainPercent  {klasse | rock | water | vegetation | building: procent van het speelbare deel}
+//   features    vaste kenmerken voor de kaartmaker (mapgen.js): village, road, river, area, ...
+//   classes     per terreinklasse {label, color}: naam en kleur in de legenda
+//   rocks, water, vegetation, buildings   {label, color, ...}: naam en kleur; vegetation.type (uit VEGETATION),
+//               groundAfter: de grond die overblijft als een plant weggeschoten is
 //   tunnelColor kleur van een vers spoor
-//   hazard, scarce  gevaar en schaars middel (§10, zie hazards.js); refill: {fuel, armor, ammo}
-//               false = in de basis niet aangevuld
+//   hazard, scarce, meter  gevaar, schaars middel en meter (§10, zie hazards.js);
+//               refill: {fuel, armor, ammo} false = in de basis niet aangevuld
 //   weather     weerregels (§7, zie shared/weather.js): zicht, sporenwisser, onderduiken,
 //               terreinveranderingen per ronde (dooi, modder) en vlaggen zoals fog (witte mist)
-//   buildings   {at: [x, y] als fractie, count, spread: fractie, min, max: zijde in cellen}: losse
-//               huizen (voorlopig; de dorpsmodule komt in fase 4)
 //   bulletsDig, minimap   overschrijven BULLETS.dig en DISPLAY.minimap voor deze kaart
 //   look        uiterlijk in de weergave (kleurfilter, grondtextuur, weer, licht): zie LOOK
 //   mines       mijnenvelden (El Alamein)
-// Kaarten met terrainPercent en features (§11) gaan via de kaartmaker in mapgen.js:
-//   terrainPercent  {klasse | rock | water | vegetation | building: procent van het speelbare deel}
-//   features    village {at, size, name, buildings: [min, max], landmark}, road {from, to, width (T)},
-//               river {from, to, width (T), frozen, bridges: 'atRoads', fords}
+// Zonder features (alleen retro): classes met één klasse en rocks {count, min, max}.
 // De kleuren (SPEC-blitzkrieg §10) zijn voor de weergave; de spelregels gebruiken alleen de klassen.
 // Terugkerende storm (§7): elke 90 s, 20 s lang; sporenwisser en onderduiken, zichtstraal 4 T
 const storm = (label, extra = {}) => ({ label, from: { secondsInGame: 0 }, every: 90, duration: 20, effect: { visibility: 4, trackEraser: true, burial: true }, ...extra });
