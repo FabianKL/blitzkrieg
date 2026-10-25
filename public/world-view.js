@@ -43,6 +43,7 @@ import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter, DisplacementFilter } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
+import { KawaseBlurFilter } from 'pixi-filters';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
   eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, camera,
@@ -667,6 +668,9 @@ export function startWorld(style) {
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
+  // zachte schaduwranden: de hele schaduwlaag in één keer vervaagd (goedkoper dan per sprite)
+  const shadowBlur = new KawaseBlurFilter({ strength: 2, quality: 3 });
+  L.shadows.filters = [shadowBlur];
   const gradeFilter = new ColorMatrixFilter();
   // Hittewaas (weer heatHaze): het beeld trilt licht via een verschuivingskaart van ruis die
   // langzaam meedrijft. Alleen aan als het weer het zegt; anders kost hij niets.
@@ -718,6 +722,7 @@ export function startWorld(style) {
     gradeFilter.matrix = gradeMatrix(look.grade);
     filterKey = '';
     vignette.alpha = look.vignette;
+    shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
     visionKey = '';
   }
 

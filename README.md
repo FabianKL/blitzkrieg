@@ -97,8 +97,40 @@ npm test -- ijs     # alleen tests met 'ijs' in de naam
 npm run test:gen    # de grote generatietest: elke map 100 keer, 4 groottes, 2/3/4 spelers
 npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
 ```
-Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwikkelen:
-`?debug=alles` in de adresbalk (alleen op localhost) toont alle tanks en zet het zicht uit.
+Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwikkelen (alleen op
+localhost, in de adresbalk):
+- `?debug=alles` toont alle tanks en zet het zicht uit;
+- `?zoom=3` zet de camera dichter op je tank (om details te bekijken);
+- `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
+- `blitzView.bench()` in de console van de weergave (het iframe) tekent 120 beelden direct na
+  elkaar en geeft de tijd per beeld, ook als het venster niet zichtbaar is.
+
+## Uiterlijk per map (`look`)
+Alle maps gebruiken dezelfde weergave (PixiJS); alleen de instellingen verschillen. Die staan in
+`shared/config.js`: `LOOK` is de standaard, en elke map kan met `look: { ... }` velden overschrijven.
+De spelregels kijken er niet naar.
+
+| Veld | Wat |
+|---|---|
+| `grade` | Kleurfilter over de wereld: `saturation` (-1 grijs .. 1 feller), `brightness`, `contrast` (1 = gelijk), `tint` (`#rrggbb`) met `tintStrength` (0..1). |
+| `noise` | Grondtextuur met simplex-ruis: `scale` (cellen per vlek), `strength`, `octaves`. Werkt vooral op donkere grond. |
+| `blend` | Breedte van de zachte overgang tussen terreinklassen, in cellen. |
+| `light` | Eén lichtbron voor alle schaduwen: verschuiving `dx`, `dy` (cellen), `alpha`, `blur` (zachte rand). |
+| `weather`, `amount` | Deeltjes in beeld: `'snow'`, `'dust'`, `'rain'` of `null`, en hoeveel per 100×100 cellen (in een storm `stormFactor` keer zoveel). |
+| `vignette`, `fogSoft` | Donkere hoeken; hoe zacht de rand van je zichtveld inloopt. |
+| `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
+
+**Een nieuwe map een eigen stijl geven:**
+1. Kies in de map de weergave met `style` (`zomer`, `winter` of `woestijn`). Die bepaalt de vormen:
+   bomen, bases, tanks, en de textuur over de kaartkleuren.
+2. Geef de kleuren van het terrein in `classes`, `rocks`, `water`, `vegetation` en `tunnelColor`.
+3. Voeg een `look`-blok toe, bijvoorbeeld koud en besneeuwd:
+   `look: { grade: { saturation: -0.15, tint: '#d2e2ff', tintStrength: 0.18 }, weather: 'snow', amount: 30 }`.
+4. Herstart de server en bekijk de map met `?zoom=2` en `?fps=1`.
+
+Een heel ander soort vormen (bijvoorbeeld een stad in de sneeuw) betekent een nieuwe stijlmodule naast
+`1942/1943/1944.js`. Die levert alleen pixelkleuren, `drawTank`, `drawBase` en objecten;
+zie de uitleg bovenaan `public/world-view.js`.
 
 ## Opbouw
 | Bestand | Wat |
@@ -112,7 +144,9 @@ Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwi
 | `hazards.js` | Gevaren, schaarse middelen en meters (alleen server; die gooit de dobbelsteen). |
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, en de weergave in een iframe. |
-| `public/world-view.js` | Gedeelde wereldweergave: kaart, zicht, hints, objecten, weer. |
+| `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, weer, `look`. |
+| `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
+| `public/render-common.js` | Kaartschilder (tegelcanvassen), camera, kleuren en ruis. |
 | `public/1944.js`, `1943.js`, `1942.js` + `.html` | Stijlen zomer, winter en woestijn. |
 | `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van de stijlpagina's. |
 | `public/manifest.webmanifest`, `icon.svg` | Op het beginscherm zetten: volledig scherm, liggend. |
@@ -131,10 +165,16 @@ omgevingsvariabelen `TUNNELER_*` en de potnaam van retro.
   De server bevestigt per tick hoe ver hij is; afwijkingen worden in ~0,1 s weggewerkt.
 - **Buffer tegen haperingen**: andere tanks en kogels worden ~1 tick achter de servertijd getekend,
   op basis van een geschatte serverklok, zodat ze niet springen als berichten in groepjes aankomen.
-- **Kaartschilder per tegel**: een tegel (32×32 cellen) wordt pas geschilderd als hij in beeld komt;
+- **PixiJS (WebGL)**: de weergave tekent in lagen (grond, markeringen, schaduwen, objecten, tanks,
+  kruinen, effecten, mist, UI). Wat duur is (kaart, bomen, bases, tanks) wordt één keer getekend en
+  daarna alleen verplaatst of gedraaid; ~4 ms per beeld op 1560×1012. De pakketten (`pixi.js`,
+  `pixi-filters`, `simplex-noise`) komen via `npm install` en de server geeft ze op `/vendor/`; een
+  import map in de stijlpagina's koppelt de namen. Geen build-stap, en het werkt zonder internet.
+- **Kaartschilder per tegel**: een tegel (32×32 cellen) is een eigen texture en wordt pas geschilderd als hij in beeld komt;
   dure ruiskleuren worden per pixel onthouden, zodat graven/vervagen alleen nog opzoeken is. Pixels en
   kleurgeheugen bestaan alleen voor de 48 laatst geziene tegels (`?tiles=8` in de adresbalk om dat te
-  testen). Een omgeschoten plant werkt alleen het stukje kaart eromheen bij.
+  testen). Een omgeschoten plant werkt alleen het stukje kaart eromheen bij; alleen die tegel gaat
+  opnieuw naar de videokaart.
 - **Robuust**: berichten max. 4 KB, max. 60 berichten/s per speler, hartslag elke 5 s ruimt
   verbindingen van slapende laptops op, en een fout in één verbinding laat de server niet crashen.
 

@@ -44,7 +44,8 @@ export const DISPLAY = { minimap: true };
 // Uiterlijk per kaart (alleen de weergave, public/world-view.js; de spelregels kijken er niet
 // naar). Een kaart overschrijft dit met look: {...}; grade en noise worden per veld gemengd.
 //   light       schaduw van tanks, bases, bomen en rotsen: verschuiving in cellen (dx, dy) en
-//               donkerte (alpha). Eén lichtbron voor alles: linksboven = positieve dx en dy.
+//               donkerte (alpha), blur: zachtheid van de rand in pixels. Eén lichtbron voor alles:
+//               licht van linksboven = schaduw naar rechtsonder (positieve dx en dy).
 //   grade       kleurfilter over de hele wereld: saturation (-1 grijs .. 0 .. 1 feller),
 //               brightness en contrast (1 = gelijk), tint (#rrggbb) met tintStrength (0..1)
 //   noise       grondtextuur met simplex-ruis over de terreinkleur: scale (cellen per vlek),
@@ -57,7 +58,7 @@ export const DISPLAY = { minimap: true };
 //   iceShine    glinstering op ijs (0..1); shakeOnHit: schudden als je eigen tank geraakt wordt
 //   haze        hittewaas in pixels zolang het weer heatHaze heeft (0 = uit)
 export const LOOK = {
-  light: { dx: 0.45, dy: 0.6, alpha: 0.36 },
+  light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },
   blend: 2.2,
@@ -308,7 +309,7 @@ export const MAPS = {
       { type: 'area', name: 'zuid', rect: [0, 0.56, 1, 1], classes: { soft: 75, hard: 25 } },
     ],
     meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40' },
-    look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
+    look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32, blur: 3 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 },
     tunnelColor: '#3a2f27',
     weather: [
       { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },
