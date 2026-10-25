@@ -1,0 +1,13 @@
+# pakketten (npm install)
+node_modules/
+
+# lokale instellingen
+.claude/
+.vscode/
+.env
+
+# logs en tijdelijke bestanden
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

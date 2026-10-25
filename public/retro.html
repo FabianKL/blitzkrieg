@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BLITZKRIEG retro</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #ddd;
+      font-family: "Courier New", Consolas, monospace; font-weight: bold; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    canvas { display: block; image-rendering: pixelated; }
+    .hud { position: fixed; pointer-events: none; text-shadow: 2px 2px 0 #000; }
+    #scores { top: 10px; left: 12px; font-size: 18px; line-height: 1.3; }
+    #net { top: 10px; right: 12px; font-size: 12px; opacity: .6; }
+    #switch { position: fixed; top: 28px; right: 12px; font-size: 12px; color: #8a8; }
+    #msg { top: 38%; left: 50%; transform: translate(-50%, -50%); font-size: 34px; text-align: center; color: #ff5a5a; }
+    #msg small { font-size: 16px; color: #ddd; }
+    #help { height: 24px; line-height: 24px; font-size: 12px; opacity: .55; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="help">PIJLTJES/WASD rijden · SPATIE schieten · K zelfvernietiging · eigen basis = tanken &amp; repareren</div>
+  <div id="scores" class="hud"></div>
+  <div id="net" class="hud"></div>
+  <a id="switch" href="/">BLITZKRIEG</a>
+  <div id="msg" class="hud">VERBINDEN…</div>
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
