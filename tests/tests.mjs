@@ -314,7 +314,7 @@ export const tests = [
     },
   },
   {
-    name: 'zicht: zichtcirkel rondom, zichtlijn alleen in de kijkboog (gebouw, begroeiing, rots, rook), contour, 8 richtingen, gehoorafstand',
+    name: 'zicht: zichtcirkel rondom, obstakels en rook overal, langs randen kijken alleen in de kijkboog, contour, 8 richtingen, gehoorafstand',
     async run() {
       const w = testWorld('soft'), map = w.map;
       // kijkt naar rechts (ang 0); venster 140 x 96 rond de tank, dus cirkel 48 cellen
@@ -330,17 +330,25 @@ export const tests = [
       check(V.sightOf(map, me, at(70, 30), opts) === 'sharp' && V.sightOf(map, me, at(180, 30), opts) === 'sharp', 'binnen de cirkel niet rondom te zien');
       check(V.sightOf(map, me, at(60, r + 6), opts) === 'contour', 'buiten de cirkel, 60 graden opzij (in de boog), geen contour');
       check(V.sightOf(map, me, at(70, r + 6), opts) === null && V.sightOf(map, me, at(180, r + 6), opts) === null, 'buiten de cirkel en de boog toch iets te zien');
-      // in de kijkboog verbergen obstakels en rook wat erachter ligt; naast en achter je niet
+      // obstakels en rook verbergen overal wat erachter ligt, voor en achter je
+      const put = (x, cell) => { map[100 * G.W + x] = cell; };
       for (const [cell, name] of [[G.BUILDING, 'gebouw'], [G.VEG, 'begroeiing'], [G.ROCK, 'rots']]) {
-        map[100 * G.W + 108] = cell; map[100 * G.W + 92] = cell;
+        put(108, cell); put(92, cell);
         check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === null, `${name} in de boog blokkeert het zicht niet`);
-        check(V.sightOf(map, me, { x: 85, y: 100 }, opts) === 'sharp', `${name} achter je blokkeert het zicht`);
-        check(!V.visibleCell(map, me, 115, 100, r) && V.visibleCell(map, me, 85, 100, r), `${name}: de schaduw volgt de zichtregel niet`);
+        check(V.sightOf(map, me, { x: 85, y: 100 }, opts) === null, `${name} achter je blokkeert het zicht niet`);
+        check(!V.visibleCell(map, me, 115, 100, r) && !V.visibleCell(map, me, 85, 100, r), `${name}: de schaduw volgt de zichtregel niet`);
+        // in de boog zie je het obstakel zelf (de rand), achter je niet
+        check(V.visibleCell(map, me, 108, 100, r) && !V.visibleCell(map, me, 92, 100, r), `${name}: zicht op het obstakel zelf klopt niet`);
+        // net langs een hoek kijken (obstakel vlak voor de tank): in de boog wel, achter je niet
+        put(108, G.DIRT); put(92, G.DIRT); put(112, cell); put(88, cell);
+        check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === 'sharp', `${name}: in de boog niet langs de hoek te zien`);
+        check(V.sightOf(map, me, { x: 85, y: 100 }, opts) === null, `${name}: achter je toch langs de hoek te zien`);
+        put(112, G.DIRT); put(88, G.DIRT);
       }
-      map[100 * G.W + 108] = map[100 * G.W + 92] = G.WATER;
-      check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === 'sharp', 'water blokkeert het zicht');
+      put(108, G.WATER); put(92, G.WATER);
+      check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === 'sharp' && V.sightOf(map, me, { x: 85, y: 100 }, opts) === 'sharp', 'water blokkeert het zicht');
       check(V.sightOf(map, me, { x: 115, y: 100 }, { ...opts, smokes: smoke(108) }) === null, 'rook in de boog blokkeert het zicht niet');
-      check(V.sightOf(map, me, { x: 85, y: 100 }, { ...opts, smokes: smoke(92) }) === 'sharp', 'rook achter je blokkeert het zicht');
+      check(V.sightOf(map, me, { x: 85, y: 100 }, { ...opts, smokes: smoke(92) }) === null, 'rook achter je blokkeert het zicht niet');
       check(!V.visibleCell(map, me, 115, 100, r, smoke(108)), 'rook: de schaduw volgt de zichtregel niet');
       check(!V.visibleCell(map, me, 40, 100, r) && V.visibleCell(map, me, 70, 100, r), 'schaduw achter je, buiten de cirkel, klopt niet');
       // weer maakt de cirkel kleiner (in T, 12 T = vol), nooit kleiner dan 2 tankbreedtes

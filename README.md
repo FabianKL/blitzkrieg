@@ -49,11 +49,14 @@ B- of M-badge met een pulserende ring.
   binnen 4 cellen mee: zo schiet je altijd een doorgang waar je tank door past.
 - **Kogels** vliegen over grond en water en stoppen bij een tank, begroeiing, gebouw, rots of geschut.
 - **Zicht**: binnen je zichtcirkel (de halve hoogte van het beeld) zie je rondom: tegenstanders en
-  hun kogels scherp. In je kijkboog (130° in je rijrichting) verbergen gebouwen, begroeiing, rotsen
-  en rook wat erachter ligt; naast en achter je niet. Buiten de cirkel wordt het beeld steeds
-  vager. Daar zie je alleen in je kijkboog nog iets: een tank als vage, donkere contour, zonder
-  kleur of kenmerken. Alles wat je niet kunt zien, is donkerder getekend, met precies dezelfde
-  regel.
+  hun kogels scherp. Gebouwen, begroeiing, rotsen en rook verbergen overal wat erachter ligt. In je
+  kijkboog (130° in je rijrichting) kijk je er net langs: je ziet de rand van het obstakel en een
+  tank die half achter een hoek staat. Naast en achter je zie je het obstakel zelf niet, en ook
+  niets erlangs. Buiten de cirkel wordt het beeld steeds vager. Daar zie je alleen in je kijkboog
+  nog iets: een tank als vage, donkere contour, zonder kleur of kenmerken. Waar je niets kunt
+  zien, is het beeld donkerder en zie je geen tunnels, sporen, kraters of ijsbarsten, alleen het
+  kale terrein. Met de knop **ZICHT AAN/UIT** in de bovenste balk zet je de mist, schaduw en
+  vervaging uit; wat je niet kunt zien, blijft verborgen.
 - **Richtingshints**: een gloed aan de rand in één van 8 richtingen bij een schot, een omgeschoten
   plant of krakend ijs van een tegenstander binnen 20 T, en bij grote gebeurtenissen overal. Zie je
   die tegenstander scherp, dan komt er geen hint.
@@ -82,10 +85,12 @@ tanks. Zie de uitleg bovenaan elk blok.
 ### Afwijkingen van de spec (bewust)
 - **Zicht** (§9): in plaats van een vaste zichtstraal van 12 T is de zichtcirkel de halve hoogte van
   het beeld. Het weer houdt zijn waarden in T: 12 T = de volle cirkel, 6 T = de helft, nooit kleiner
-  dan 2 tankbreedtes (`VISION`). De zichtlijn telt alleen in een kijkboog van 130° in je
-  rijrichting, en rotsen blokkeren daar ook. Buiten de cirkel zie je geen schim maar, alleen in de
-  kijkboog, een contour die naar de rand van het venster vervaagt. Kogels van anderen zie je alleen scherp in je zichtveld. Een tegenstander die je scherp
-  ziet, geeft geen richtingshint.
+  dan 2 tankbreedtes (`VISION`). Rotsen blokkeren het zicht ook. In een kijkboog van 130° in je
+  rijrichting kijk je langs de randen van obstakels, naast en achter je niet. Buiten de cirkel zie
+  je geen schim maar, alleen in de kijkboog, een contour die naar de rand van het venster
+  vervaagt. Kogels van anderen zie je alleen scherp in je zichtveld. Tunnels en sporen zie je
+  alleen waar je zicht hebt (de spec laat ze overal zien). Een tegenstander die je scherp ziet,
+  geeft geen richtingshint.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard
   daardoor meer dan 8% (bv. Ardennen ~13%), en dat gaat van de andere klassen af. De test houdt daar
   rekening mee; Ardennen klein heeft daarvoor 1 procentpunt extra marge (`tolerance`).

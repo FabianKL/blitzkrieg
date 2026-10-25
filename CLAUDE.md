@@ -67,11 +67,16 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - Zicht (`VISION`, regel in `shared/vision.js`):
   - de zichtcirkel is de halve hoogte van het beeld; het weer (in T) maakt hem kleiner, met als
     minimum 2 tankbreedtes;
-  - binnen de cirkel zie je rondom;
-  - de zichtlijn telt alleen in een kijkboog van 130° in de rijrichting: daar verbergen gebouwen,
-    begroeiing, rotsen en rook wat erachter ligt, naast en achter je niet;
+  - binnen de cirkel zie je rondom; gebouwen, begroeiing, rotsen en rook verbergen overal wat
+    erachter ligt;
+  - in een kijkboog van 130° in de rijrichting kijk je langs randen (de rand zelf en een tank half
+    achter een hoek zie je); naast en achter je niet, en daar zie je het obstakel zelf ook niet;
   - buiten de cirkel zie je alleen in de kijkboog iets: een vage contour zonder kleur (geen schim);
   - de donkere schaduw volgt precies dezelfde regel (`visibleCell`);
+  - waar je geen zicht hebt, zie je geen tunnels, sporen, kraters of ijsbarsten: daar ligt de
+    schone kaart (`L.clean`, met masker) over de grond;
+  - de knop ZICHT AAN/UIT in de bovenste balk (`blitz.visionOverlay`) zet mist, schaduw en
+    vervaging uit; de zichtregel blijft gelden;
   - een tegenstander die je scherp ziet, geeft geen hint;
   - gehoord binnen 20 T.
 - Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk.

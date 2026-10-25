@@ -17,7 +17,21 @@ const game = connect({
   onEvent: (e) => { viewHooks.onEvent?.(e); update(); },
   onStatus: (s) => { viewHooks.onStatus?.(s); update(); },
 }, { room: 'blitzkrieg' });
-window.blitz = { game, setHooks: (h) => { viewHooks = h; } };
+window.blitz = { game, setHooks: (h) => { viewHooks = h; }, visionOverlay: true };
+
+// ZICHT AAN/UIT: het zichtveld in beeld (mist, schaduw, vervaging). Uit ziet de kaart er helder
+// uit; wat je niet kunt zien blijft verborgen. De weergave leest blitz.visionOverlay elk frame.
+// Per browser onthouden (later naar een instellingenmenu).
+const VISION_KEY = 'blitzkrieg.zicht';
+try { window.blitz.visionOverlay = localStorage.getItem(VISION_KEY) !== 'uit'; } catch { /* geen opslag: standaard aan */ }
+const visionLabel = () => { $('vision').textContent = window.blitz.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT'; };
+visionLabel();
+$('vision').addEventListener('click', () => {
+  $('vision').blur();
+  window.blitz.visionOverlay = !window.blitz.visionOverlay;
+  try { localStorage.setItem(VISION_KEY, window.blitz.visionOverlay ? 'aan' : 'uit'); } catch { /* niet bewaard */ }
+  visionLabel();
+});
 
 // ---------- Menu's ----------
 for (const m of G.MAP_MENU) {
