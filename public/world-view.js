@@ -31,7 +31,7 @@ import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
-  drawEraser, eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, fitCanvas, camera,
+  drawEraser, eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, fitCanvas, camera,
   smoothTankAngles, visibleCells, drawTracer, createParticles, createOverlay, statusOverlay, showBandwidth,
 } from '/render-common.js';
 
@@ -311,24 +311,30 @@ export function startWorld(style) {
   // box = [x0, y0, x1, y1] in cellen: alleen dat stuk opnieuw tekenen (na een omgeschoten
   // plant), anders de hele kaart. Objecten die over de rand hangen, worden mee getekend maar
   // afgeknipt, zodat het precies zo uitkomt als bij de hele kaart.
-  let objCanvas = null, octx = null;
+  let objects = null; // tegelcanvassen (createTileCanvases), alleen als de stijl objecten heeft
   function makeObjects() {
-    if (!style.objects) return;
-    objCanvas = document.createElement('canvas');
-    objCanvas.width = G.W * R;
-    objCanvas.height = G.H * R;
-    octx = objCanvas.getContext('2d');
+    objects = style.objects ? createTileCanvases(R) : null;
   }
   function buildObjects(box) {
-    if (!octx) return;
+    if (!objects) return;
     const [x0, y0, x1, y1] = box ? [box[0] - OBJ_PAD, box[1] - OBJ_PAD, box[2] + OBJ_PAD + 1, box[3] + OBJ_PAD + 1] : [0, 0, G.W, G.H];
-    octx.setTransform(1, 0, 0, 1, 0, 0);
-    octx.save();
-    octx.beginPath(); octx.rect(x0 * R, y0 * R, (x1 - x0) * R, (y1 - y0) * R); octx.clip();
-    octx.clearRect(x0 * R, y0 * R, (x1 - x0) * R, (y1 - y0) * R);
-    octx.setTransform(R, 0, 0, R, 0, 0);
-    style.objects.draw(octx, x0 - OBJ_PAD, y0 - OBJ_PAD, x1 + OBJ_PAD, y1 + OBJ_PAD);
-    octx.restore();
+    for (let ty = Math.max(0, Math.floor(y0 / TILE)); ty <= Math.min(objects.TILES_Y - 1, Math.floor((y1 - 1) / TILE)); ty++) {
+      for (let tx = Math.max(0, Math.floor(x0 / TILE)); tx <= Math.min(objects.TILES_X - 1, Math.floor((x1 - 1) / TILE)); tx++) {
+        // het stuk van de rechthoek in deze tegel, in cellen
+        const cx0 = Math.max(x0, tx * TILE), cy0 = Math.max(y0, ty * TILE);
+        const cx1 = Math.min(x1, (tx + 1) * TILE), cy1 = Math.min(y1, (ty + 1) * TILE);
+        const t = ty * objects.TILES_X + tx, g = objects.get(t).getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.save();
+        g.translate(-tx * TILE * R, -ty * TILE * R);
+        g.beginPath(); g.rect(cx0 * R, cy0 * R, (cx1 - cx0) * R, (cy1 - cy0) * R); g.clip();
+        g.clearRect(cx0 * R, cy0 * R, (cx1 - cx0) * R, (cy1 - cy0) * R);
+        g.scale(R, R);
+        style.objects.draw(g, cx0 - OBJ_PAD, cy0 - OBJ_PAD, cx1 + OBJ_PAD, cy1 + OBJ_PAD);
+        g.restore();
+        objects.touch(t);
+      }
+    }
   }
 
   // ---------- Effecten ----------
@@ -498,8 +504,8 @@ export function startWorld(style) {
     if (!spot) return;
     const [sx, sy] = spot;
     painter.flush({ x: sx, y: sy, w: N, h: N }); // zorgt dat dat stuk kaart geschilderd is
-    g.drawImage(painter.canvas, sx * R, sy * R, N * R, N * R, 0, 0, sw.width, sw.height);
-    if (objCanvas) g.drawImage(objCanvas, sx * R, sy * R, N * R, N * R, 0, 0, sw.width, sw.height);
+    painter.layer.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
+    objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
   }
   const hooks = {
     onMap: loadMap,
@@ -541,8 +547,8 @@ export function startWorld(style) {
     ctx.setTransform(cam.Z, 0, 0, cam.Z, -cam.drawX * cam.Z, -cam.drawY * cam.Z);
     ctx.imageSmoothingEnabled = true;
     const { sx, sy, sw, sh } = visibleCells(cam);
-    ctx.drawImage(painter.canvas, sx * R, sy * R, sw * R, sh * R, sx, sy, sw, sh);
-    if (objCanvas && !style.objects.over) ctx.drawImage(objCanvas, sx * R, sy * R, sw * R, sh * R, sx, sy, sw, sh);
+    painter.layer.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
+    if (objects && !style.objects.over) objects.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
     style.drawUnder?.(ctx, cam, now);
     drawLandmarks();
     drawDepots();
@@ -563,7 +569,7 @@ export function startWorld(style) {
       else if (seen === 'ghost') drawGhost(t.rx + 0.5, t.ry + 0.5);
     }
     // objecten boven de tanks: takken hangen over tunnels en tanks heen
-    if (objCanvas && style.objects.over) ctx.drawImage(objCanvas, sx * R, sy * R, sw * R, sh * R, sx, sy, sw, sh);
+    if (objects && style.objects.over) objects.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
 
     drawBarrage(now);
     drawFires(now);

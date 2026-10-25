@@ -175,29 +175,63 @@ export function createFieldSampler(R) {
   };
 }
 
+// ---------- Tegelcanvassen ----------
+// Een kaartlaag in losse canvassen van TILE x TILE cellen (TP pixels per zijde). Eén groot
+// canvas kan op een grote kaart niet als textuur naar de videokaart (te groot), en zo hoeft
+// bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
+export const TILE = 32;
+export function createTileCanvases(R) {
+  const TP = TILE * R, TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
+  const list = new Array(TILES_X * TILES_Y).fill(null);
+  const changed = new Set(); // tegels die sinds de laatste takeChanged() veranderd zijn
+  return {
+    TP, TILES_X, TILES_Y, list, changed,
+    // canvas van tegel t (wordt gemaakt als hij er nog niet is)
+    get(t) {
+      if (!list[t]) {
+        const c = list[t] = document.createElement('canvas');
+        c.width = c.height = TP;
+      }
+      return list[t];
+    },
+    touch(t) { changed.add(t); },
+    takeChanged() { const out = [...changed]; changed.clear(); return out; },
+    reset() { list.fill(null); changed.clear(); },
+    // Stuk van de laag (in cellen) tekenen op een gewoon canvas (legenda, minikaart)
+    drawRegion(g, sx, sy, sw, sh, dx, dy, dw, dh) {
+      const kx = dw / sw, ky = dh / sh;
+      for (let ty = Math.floor(sy / TILE); ty <= Math.floor((sy + sh - 1e-6) / TILE); ty++) {
+        for (let tx = Math.floor(sx / TILE); tx <= Math.floor((sx + sw - 1e-6) / TILE); tx++) {
+          const c = list[ty * TILES_X + tx];
+          if (!c || tx >= TILES_X || ty >= TILES_Y) continue;
+          const x0 = Math.max(sx, tx * TILE), y0 = Math.max(sy, ty * TILE);
+          const x1 = Math.min(sx + sw, (tx + 1) * TILE), y1 = Math.min(sy + sh, (ty + 1) * TILE);
+          g.drawImage(c, (x0 - tx * TILE) * R, (y0 - ty * TILE) * R, (x1 - x0) * R, (y1 - y0) * R,
+            dx + (x0 - sx) * kx, dy + (y0 - sy) * ky, (x1 - x0) * kx, (y1 - y0) * ky);
+        }
+      }
+    },
+  };
+}
+
 // ---------- Kaartschilder ----------
-// Eén groot canvas met R pixels per cel, opgedeeld in tegels van 32x32 cellen.
+// Tegels van 32x32 cellen met R pixels per cel, elk een eigen canvas (createTileCanvases).
 // - Een tegel wordt pas geschilderd als hij (bijna) in beeld komt: snel instappen.
 // - Bij graven worden alleen de geraakte cellen en hun buren opnieuw geschilderd.
 // - cache(slot, X, Y, fn) onthoudt dure pixelkleuren (ruis), zodat opnieuw schilderen
 //   alleen nog opzoeken is. fn(X, Y) geeft een kleur terug als 0xRRGGBB.
 // - Pixels en kleurgeheugen bestaan per tegel en alleen voor de MAX_TILES tegels die het
-//   laatst in beeld waren. Een opgeruimde tegel blijft gewoon op het canvas staan; verandert
-//   er iets in, dan wordt hij helemaal opnieuw geschilderd zodra hij weer in beeld komt.
+//   laatst in beeld waren. Een opgeruimde tegel houdt zijn canvas; verandert er iets in, dan
+//   wordt hij helemaal opnieuw geschilderd zodra hij weer in beeld komt.
 // paintCell(x, y, setPx) schildert één cel; afterTile(tx, ty, setPx) mag er iets overheen zetten.
 // Gemaakt voor de kaartmaat van dat moment (G.W x G.H): bij een andere kaartgrootte een nieuwe.
-const TILE = 32;
 // ruim twee schermen vol; met ?tiles=8 in de adresbalk kun je het opruimen testen
 const MAX_TILES = Number(new URLSearchParams(location.search).get('tiles')) || 48;
-const UNPAINTED = 0, LIVE = 1, PARKED = 2; // PARKED: op het canvas, maar zonder pixels in het geheugen
+const UNPAINTED = 0, LIVE = 1, PARKED = 2; // PARKED: canvas bestaat, maar zonder pixels in het geheugen
 
 export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
-  const TP = TILE * R; // pixels per tegelzijde
-  const TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
-  const canvas = document.createElement('canvas');
-  canvas.width = G.W * R;
-  canvas.height = G.H * R;
-  const ctx = canvas.getContext('2d');
+  const layer = createTileCanvases(R);
+  const { TP, TILES_X, TILES_Y } = layer;
   const state = new Uint8Array(TILES_X * TILES_Y);
   const tiles = new Array(TILES_X * TILES_Y).fill(null); // {img, caches, used}
   const dirtyCells = new Set();
@@ -211,7 +245,7 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
     if (t !== curT) {
       curT = t;
       cur = tiles[t];
-      if (!cur) { cur = tiles[t] = { img: ctx.createImageData(TP, TP), caches: [], used: clock }; live++; }
+      if (!cur) { cur = tiles[t] = { img: new ImageData(TP, TP), caches: [], used: clock }; live++; }
     }
     return cur;
   };
@@ -219,7 +253,7 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
     const d = tileAt(X, Y).img.data, i = ((Y % TP) * TP + (X % TP)) * 4;
     d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
   };
-  const putTile = (t) => ctx.putImageData(tiles[t].img, (t % TILES_X) * TP, ((t / TILES_X) | 0) * TP);
+  const putTile = (t) => { layer.get(t).getContext('2d').putImageData(tiles[t].img, 0, 0); layer.touch(t); };
   function paintTile(tx, ty) {
     for (let y = ty * TILE; y < Math.min(G.H, (ty + 1) * TILE); y++) {
       for (let x = tx * TILE; x < Math.min(G.W, (tx + 1) * TILE); x++) paintCell(x, y, setPx);
@@ -242,14 +276,14 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
   }
 
   return {
-    canvas,
+    layer,
     // Nieuwe kaart: alles vergeten
     reset() {
       state.fill(UNPAINTED);
       tiles.fill(null);
       live = 0; curT = -1;
       dirtyCells.clear();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      layer.reset();
     },
     // Cel is veranderd: hem en zijn buren (randjes) opnieuw schilderen
     markDig(x, y) {
