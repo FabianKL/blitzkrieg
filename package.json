@@ -9,6 +9,9 @@
     "test:gen": "node tests/gen.mjs"
   },
   "dependencies": {
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.22.0",
+    "simplex-noise": "^4.0.3",
     "ws": "^8.18.0"
   }
 }

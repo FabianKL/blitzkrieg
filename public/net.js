@@ -1,4 +1,4 @@
-// Browserkant van de verbinding: websocket, toetsenbord en klok.
+// Browserkant van de verbinding: websocket, toetsenbord, touch en klok.
 // Alle spellogica (berichten verwerken, voorspellen, posities) zit in shared/client-sim.js,
 // zodat de tests precies dezelfde code gebruiken.
 import * as Sim from '/shared/client-sim.js';
@@ -27,11 +27,15 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
     ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', Space: 'f',
   };
   const held = new Set();
+  // Touch (public/touch.js) is een tweede bron met dezelfde letters; blur wist alleen het
+  // toetsenbord, want duimen op het scherm blijven liggen als de focus wisselt
+  const touchHeld = new Set();
+  const has = (k) => held.has(k) || touchHeld.has(k);
   let lastInput = '';
   function sendInput() {
-    const dx = (held.has('r') ? 1 : 0) - (held.has('l') ? 1 : 0);
-    const dy = (held.has('d') ? 1 : 0) - (held.has('u') ? 1 : 0);
-    const f = held.has('f') ? 1 : 0;
+    const dx = (has('r') ? 1 : 0) - (has('l') ? 1 : 0);
+    const dy = (has('d') ? 1 : 0) - (has('u') ? 1 : 0);
+    const f = has('f') ? 1 : 0;
     const key = `${dx},${dy},${f}`;
     if (key === lastInput || ws.readyState !== 1) return;
     lastInput = key;
@@ -44,7 +48,7 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
   state.key = (e) => {
     if (e.type === 'blur') { held.clear(); sendInput(); return; }
     // K: zelfvernietiging (niet bij ingedrukt houden herhalen)
-    if (e.code === 'KeyK') { e.preventDefault(); if (e.type === 'keydown' && !e.repeat && ws.readyState === 1) ws.send(JSON.stringify({ t: 'sd' })); return; }
+    if (e.code === 'KeyK') { e.preventDefault(); if (e.type === 'keydown' && !e.repeat) state.selfDestruct(); return; }
     const k = KEYS[e.code];
     if (!k) return;
     e.preventDefault();
@@ -52,6 +56,15 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
     sendInput();
   };
   for (const type of ['keydown', 'keyup', 'blur']) addEventListener(type, state.key);
+  state.selfDestruct = () => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'sd' })); };
+  // Joystick en vuurknop: dx, dy in {-1, 0, 1}, f 0 of 1
+  state.touch = (dx, dy, f) => {
+    touchHeld.clear();
+    if (dx) touchHeld.add(dx > 0 ? 'r' : 'l');
+    if (dy) touchHeld.add(dy > 0 ? 'd' : 'u');
+    if (f) touchHeld.add('f');
+    sendInput();
+  };
 
   // Andere berichten naar de server (wachtkamer: kaart kiezen, starten)
   state.send = (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); };

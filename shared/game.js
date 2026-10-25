@@ -3,11 +3,11 @@
 // kaart nooit per frame over het netwerk.
 import {
   FELL, GAME, T, MAP_SIZES, DEFAULT_SIZE, VISION, DISPLAY, BULLETS, BUILDING as BUILDING_CFG, MAP_MENU, DEFAULT_MAP,
-  TUNNEL, TERRAIN, VEGETATION, TRACK_ERASER, ICE, MAPS,
+  TUNNEL, TERRAIN, VEGETATION, TRACK_ERASER, ICE, MAPS, TOUCH,
 } from './config.js';
 import { generateFeatureMap } from './mapgen.js';
 
-export { MAPS, VEGETATION, ICE, GAME, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP };
+export { MAPS, VEGETATION, ICE, GAME, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH };
 
 // Uiterlijk van de 4 tanks op een kaart (§4): ploeg A en B uit de config, C en D als variant.
 // Alleen het uiterlijk; alle tanks rijden, schieten en incasseren precies hetzelfde.
@@ -100,6 +100,13 @@ export const COLORS = ['#3cdc3c', '#3c5cff', '#ffa020', '#ff40c0'];
 export const DIRS = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
 export function dirIndex(dx, dy) {
   return DIRS.findIndex(([x, y]) => x === dx && y === dy);
+}
+// Joystick: verschuiving van de duim (x, y; y omlaag) als fractie van de stickstraal → een van
+// de 8 richtingen als [dx, dy], of [0, 0] binnen de dode zone. Elke richting krijgt 45°.
+export function stickDirection(x, y) {
+  if (Math.hypot(x, y) < TOUCH.deadZone) return [0, 0];
+  const sector = (Math.round(Math.atan2(x, -y) / (Math.PI / 4)) + 8) % 8;
+  return DIRS[sector].slice();
 }
 
 export const inBounds = (x, y) => x >= 0 && y >= 0 && x < W && y < H;

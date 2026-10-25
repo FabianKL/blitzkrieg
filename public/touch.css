@@ -1,0 +1,70 @@
+/* Touchbesturing (touch.js) en de telefoonstand, voor alle drie de stijlpagina's.
+   Komt na de eigen <style> van de pagina, zodat deze regels bij gelijke selectors winnen. */
+
+/* De pagina is voor de duimen: niet scrollen, zoomen, selecteren of een menu bij lang drukken */
+.panel, aside, .touch-on { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html, body { overscroll-behavior: none; }
+
+.touch { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
+.touch-on .touch { display: block; }
+.touch > div { position: absolute; }
+
+/* Zwevende joystick: de voet staat waar je duim neerkomt */
+.touch-stick {
+  width: calc(var(--stick) * 2); height: calc(var(--stick) * 2); margin: calc(var(--stick) * -1) 0 0 calc(var(--stick) * -1);
+  border-radius: 50%; border: 2px solid rgba(255, 255, 255, .5); background: rgba(0, 0, 0, .2);
+  opacity: .35; transition: opacity .15s;
+}
+.touch-stick.active { opacity: 1; transition: none; }
+.touch-knob {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  border-radius: 50%; background: rgba(255, 255, 255, .55); box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+
+/* Vuren: alles rechts van het midden van het veld telt (ook het zijpaneel); de knop staat
+   rechtsonder tegen de rand, over de legenda, waar je rechterduim ligt */
+.touch-fire {
+  right: 3vh; bottom: 3vh; width: min(24vh, 120px); height: min(24vh, 120px);
+  border-radius: 50%; border: 2px solid rgba(255, 255, 255, .6); background: rgba(160, 40, 30, .75);
+  display: flex; align-items: center; justify-content: center;
+  font: 700 15px/1 "Black Ops One", Impact, sans-serif; letter-spacing: 2px; color: rgba(255, 255, 255, .85);
+  text-shadow: 0 1px 2px #000;
+}
+.touch-fire.active { background: rgba(230, 60, 40, .9); }
+
+/* Zelfvernietiging: vasthouden tot de cirkel vol is */
+.touch-sd {
+  width: 40px; height: 40px; margin-left: -20px; overflow: hidden;
+  border-radius: 50%; border: 2px solid rgba(255, 255, 255, .45); background: rgba(0, 0, 0, .35);
+  display: flex; align-items: center; justify-content: center;
+  font: 700 15px/1 "Black Ops One", Impact, sans-serif; color: rgba(255, 255, 255, .8);
+}
+.touch-sd i { position: absolute; inset: 0; border-radius: 50%; background: rgba(220, 50, 40, .85); transform: scale(0); }
+.touch-sd.hold i { transform: scale(1); transition: transform var(--hold) linear; }
+
+/* ---------- Telefoon liggend: speelveld over het hele scherm, zijpaneel als kleine HUD ---------- */
+@media (pointer: coarse) and (max-height: 500px) {
+  body { padding: 0; overflow: hidden; }
+  main, .frame, .main { display: block; position: relative; height: 100%; padding: 0; margin: 0; }
+  .panel { position: absolute; inset: 0; height: auto; min-height: 0; border-width: 2px; }
+  .caution, .title, .ploeg, .fog { display: none; }
+  .overlay .big { font-size: 26px; padding: 3px 14px; border-width: 3px; }
+  .overlay .small { font-size: 12px; margin-top: 8px; }
+
+  /* tankkaart en minikaart rechtsboven; de rest van het zijpaneel weg */
+  aside {
+    position: absolute; top: 6px; right: 6px; z-index: 5; width: 150px; height: auto;
+    padding: 5px; gap: 4px; overflow: hidden; pointer-events: none; opacity: .9;
+  }
+  aside .legend, aside .label, aside .legend-title { display: none; }
+  aside #cards { padding-top: 0 !important; }
+  aside .card { padding: 4px 6px; margin: 0; }
+  aside .card .top { margin-bottom: 2px; padding-bottom: 2px; }
+  aside .card .name { font-size: 13px; letter-spacing: 1px; }
+  aside .card .wins { font-size: 8px; }
+  aside .card .wins b { font-size: 14px; margin-top: 0; padding: 0 4px; }
+  aside .card .tag, aside .card .portrait, aside .card .num { display: none; }
+  aside .card .row, aside .gauge, aside .stat { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
+  aside .card .track { height: 6px; }
+  aside .segs { height: 9px; gap: 1px; padding: 1px; }
+}

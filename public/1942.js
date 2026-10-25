@@ -101,8 +101,6 @@ function drawObjects(g, x0, y0, x1, y1) {
       if (!edge) continue;
       const rnd = G.mulberry32(hash(x, y));
       const cx = x + 0.5, cy = y + 0.5, r = 0.7 + rnd() * 0.5;
-      g.fillStyle = 'rgba(70, 45, 20, 0.3)';
-      g.beginPath(); g.ellipse(cx + 0.3, cy + 0.35, r, r * 0.7, 0, 0, Math.PI * 2); g.fill();
       for (let k = 0; k < 7; k++) { // kameeldoorn: pluisjes in donker olijf
         const a = rnd() * Math.PI * 2, d = rnd() * r * 0.7;
         g.fillStyle = k % 2 ? '#6b6a3a' : '#837f48';
@@ -115,19 +113,16 @@ function drawObjects(g, x0, y0, x1, y1) {
 // ---------- Mijnen ----------
 // Bijna onzichtbaar: een heel licht bobbeltje in het zand. In een loopgraaf
 // (blootgegraven door een granaat) iets duidelijker.
-function drawMine(ctx, x, y, inTrench) {
+// g is een Pixi-Graphics in celmaten (laag onder de tanks, zie world-view.js)
+function drawMine(g, x, y, inTrench) {
   const cx = x + 0.5, cy = y + 0.5;
   if (inTrench) {
-    ctx.fillStyle = 'rgba(86, 87, 63, 0.45)';
-    ctx.beginPath(); ctx.arc(cx, cy, 0.55, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(123, 124, 94, 0.45)';
-    ctx.beginPath(); ctx.arc(cx, cy, 0.2, 0, Math.PI * 2); ctx.fill();
+    g.circle(cx, cy, 0.55).fill({ color: 0x56573f, alpha: 0.45 });
+    g.circle(cx, cy, 0.2).fill({ color: 0x7b7c5e, alpha: 0.45 });
     return;
   }
-  ctx.fillStyle = 'rgba(255, 240, 205, 0.16)'; // iets lichter zandheuveltje
-  ctx.beginPath(); ctx.ellipse(cx - 0.1, cy - 0.1, 0.8, 0.65, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(120, 90, 50, 0.12)'; // zacht schaduwrandje
-  ctx.beginPath(); ctx.ellipse(cx + 0.2, cy + 0.25, 0.7, 0.45, 0, 0, Math.PI * 2); ctx.fill();
+  g.ellipse(cx - 0.1, cy - 0.1, 0.8, 0.65).fill({ color: 0xfff0cd, alpha: 0.16 }); // iets lichter zandheuveltje
+  g.ellipse(cx + 0.2, cy + 0.25, 0.7, 0.45).fill({ color: 0x785a32, alpha: 0.12 }); // zacht schaduwrandje
 }
 function drawMines(ctx, cam) {
   const { game } = view;
@@ -156,14 +151,12 @@ function bagRow(ctx, a, b, fixed, horizontal) {
   }
 }
 function drum(ctx, x, y) {
-  ctx.fillStyle = 'rgba(70, 45, 20, 0.35)'; ctx.beginPath(); ctx.arc(x + 0.25, y + 0.3, 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#6f5a36'; ctx.beginPath(); ctx.arc(x, y, 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#3e301b'; ctx.lineWidth = 0.12; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, 0.5, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = '#9a8352'; ctx.beginPath(); ctx.arc(x - 0.25, y - 0.25, 0.14, 0, Math.PI * 2); ctx.fill();
 }
 function jerrycan(ctx, x, y) {
-  ctx.fillStyle = 'rgba(70, 45, 20, 0.35)'; ctx.fillRect(x + 0.2, y + 0.25, 1.1, 1.5);
   ctx.fillStyle = '#7a7444'; ctx.fillRect(x, y, 1.1, 1.5);
   ctx.strokeStyle = '#3f3b20'; ctx.lineWidth = 0.1; ctx.strokeRect(x, y, 1.1, 1.5);
   ctx.beginPath(); ctx.moveTo(x + 0.15, y + 0.3); ctx.lineTo(x + 0.95, y + 1.25); ctx.moveTo(x + 0.95, y + 0.3); ctx.lineTo(x + 0.15, y + 1.25); ctx.stroke();
@@ -182,16 +175,11 @@ function drawBase(ctx, b) {
 
 // ---------- Tanks ----------
 // Neus naar rechts (+x), in celmaten. Woestijnkleur met camouflagevlekken,
-// een gekleurd herkenningspaneel op het achterdek en een wimpel aan de antenne.
-function drawTank(g, team, x, y, ang, now, shadow = true) {
+// een gekleurd herkenningspaneel op het achterdek en een wimpel aan de antenne. De schaduw
+// tekent de wereldweergave (style.shadow); de wimpel wappert in tankFrames plaatjes.
+function drawTank(g, team, x, y, ang, now) {
   g.save();
   g.translate(x, y);
-  if (shadow) {
-    g.fillStyle = 'rgba(80, 50, 20, 0.35)';
-    g.save(); g.translate(0.5, 0.65); g.rotate(ang);
-    g.beginPath(); g.roundRect(-3.6, -2.6, 7.4, 5.2, 0.6); g.fill();
-    g.restore();
-  }
   g.rotate(ang);
 
   for (const ty of [-2.65, 1.45]) { // rupsbanden
@@ -323,6 +311,8 @@ const view = startWorld({
   objects: { draw: drawObjects, over: false },
   clouds: { dust: '226, 200, 150', smoke: '64, 56, 46' }, cloudAlpha: { dust: 0.6, smoke: 0.45 },
   onEvent, drawUnder: drawMines, drawBase, drawTank,
+  tankFrames: 8, tankPeriod: 754, // één golf van de wimpel (sin(now / 120))
+  shadow: { color: 0x50321a, alpha: 0.35, dx: 0.5, dy: 0.65 },
   eraser: { name: 'ZANDSTORM', haze: '196, 156, 98', hazeAlpha: 0.42, streak: '245, 226, 182' },
   hud,
 });

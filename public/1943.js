@@ -6,7 +6,7 @@ import { startWorld, R } from '/world-view.js';
 import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots } from '/render-common.js';
 
 const $ = (id) => document.getElementById(id);
-const ctx = $('game').getContext('2d'); // hetzelfde canvas als de wereldweergave (voor de basis)
+let ctx = null; // canvas waarop de basis getekend wordt (zie drawBase)
 
 // Uiterlijk per kaart (config: tanks, via teamLook); mini = vaste kleur per speler op de minikaart
 const TEAMS = [
@@ -137,7 +137,6 @@ function drawBoulder(g, x, y, r, rnd) {
     g.closePath();
   };
   const stone = view.colors.rock;
-  g.fillStyle = 'rgba(55, 70, 95, 0.3)'; poly(1.05, r * 0.3, r * 0.35); g.fill(); // schaduw
   g.fillStyle = shade(stone, 0.92); poly(1, 0, 0); g.fill();
   g.fillStyle = mix(stone, '#ffffff', 0.22); poly(0.7, -r * 0.15, -r * 0.15); g.fill(); // lichte kant
   g.strokeStyle = shade(stone, 0.52); g.lineWidth = 0.14; poly(1, 0, 0); g.stroke();
@@ -167,9 +166,7 @@ function drawObjects(g, x0, y0, x1, y1) {
     }
   }
   for (const k of rocks) drawBoulder(g, k.x, k.y, k.r, k.rnd);
-  trees.sort((a, b) => a.y - b.y);
-  g.fillStyle = 'rgba(55, 70, 100, 0.28)';
-  for (const t of trees) { g.beginPath(); g.ellipse(t.x + t.r * 0.35, t.y + t.r * 0.45, t.r, t.r * 0.8, 0, 0, Math.PI * 2); g.fill(); }
+  trees.sort((a, b) => a.y - b.y); // schaduwen tekent de wereldweergave (look.light)
   const birch = view.game.rules.vegetation?.type === 'birch';
   for (const t of trees) {
     (birch ? drawBirch : drawTree)(g, t.x, t.y, t.r, t.rot);
@@ -220,14 +217,14 @@ function wallV(a, b, x) {
   post(x + 0.5, b - 0.6);
 }
 function crate(x, y, s) {
-  ctx.fillStyle = 'rgba(55, 70, 100, 0.3)'; ctx.fillRect(x + 0.25, y + 0.3, s, s);
   ctx.fillStyle = '#946535'; ctx.fillRect(x, y, s, s);
   ctx.strokeStyle = '#4e3218'; ctx.lineWidth = 0.14;
   ctx.strokeRect(x, y, s, s);
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s, y + s); ctx.moveTo(x + s, y); ctx.lineTo(x, y + s); ctx.stroke();
   ctx.fillStyle = '#f3f7fa'; ctx.fillRect(x + 0.1, y + 0.1, s - 0.2, s * 0.22);
 }
-function drawBase(b) {
+function drawBase(c, b) {
+  ctx = c;
   const { x0, y0, x1, y1, d0, d1 } = b;
   crate(x0 + 2, y1 - 3.8, 1.8);
   crate(x0 + 4.1, y1 - 3.8, 1.8);
@@ -241,16 +238,11 @@ function drawBase(b) {
 }
 
 // ---------- Tanks ----------
-// Getekend met de neus naar rechts (+x), in celmaten. Licht valt van linksboven.
-function drawTank(g, team, x, y, ang, shadow = true) {
+// Getekend met de neus naar rechts (+x), in celmaten. Licht valt van linksboven; de schaduw
+// tekent de wereldweergave (style.shadow).
+function drawTank(g, team, x, y, ang) {
   g.save();
   g.translate(x, y);
-  if (shadow) {
-    g.fillStyle = 'rgba(40, 55, 85, 0.35)';
-    g.save(); g.translate(0.45, 0.6); g.rotate(ang);
-    g.beginPath(); g.roundRect(-3.6, -2.6, 7.4, 5.2, 0.6); g.fill();
-    g.restore();
-  }
   g.rotate(ang);
 
   // rupsbanden met platen
@@ -380,10 +372,11 @@ function fogProgress() {
 const smooth = (t) => t * t * (3 - 2 * t);
 const fogClearRadius = () => FOG_CLEAR_START + (FOG_CLEAR_END - FOG_CLEAR_START) * smooth(fogProgress());
 
-function drawFog(ctx, cam, now) {
+// Geeft het mistcanvas terug (op een kwart van het speelveld), of niets als er geen mist is
+function drawFog(cam, now) {
   const { canvas } = view;
   const density = 1 - smooth(fogProgress());
-  if (density <= 0.01) return;
+  if (density <= 0.01) return null;
   const Z = cam.Z;
   // op een kwart van de resolutie: mist is zacht, dat scheelt veel rekenwerk
   const fw = Math.ceil(canvas.width / 4), fh = Math.ceil(canvas.height / 4);
@@ -413,10 +406,7 @@ function drawFog(ctx, cam, now) {
   fctx.fillStyle = hole;
   fctx.fillRect(0, 0, fw, fh);
   fctx.globalCompositeOperation = 'source-over';
-
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(fogCanvas, 0, 0, canvas.width, canvas.height);
+  return fogCanvas;
 }
 
 // ---------- Zijbalk ----------
@@ -467,9 +457,8 @@ const view = startWorld({
   },
   objects: { draw: drawObjects, over: true },
   clouds: { puff: '245, 248, 252', smoke: '62, 64, 66' }, cloudAlpha: { puff: 0.7, smoke: 0.45 },
-  onEvent, drawOver: drawFog, teamLook, onTeams,
-  drawBase: (c, b) => drawBase(b),
-  drawTank: (g, team, x, y, ang) => drawTank(g, team, x, y, ang),
+  onEvent, overlay: drawFog, teamLook, onTeams, drawBase, drawTank,
+  shadow: { color: 0x283755, alpha: 0.35 },
   tracer: ['rgba(255, 170, 60, 0)', 'rgba(255, 210, 110, 1)'],
   eraser: { name: 'SNEEUWSTORM', haze: '232, 238, 245', hazeAlpha: 0.38, streak: '255, 255, 255' },
   hud,

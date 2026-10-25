@@ -13,8 +13,18 @@ import * as Hazards from './hazards.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png',
+};
 const ALLOWED = [path.join(ROOT, 'public'), path.join(ROOT, 'shared')];
+// Pakketten voor de weergave (PixiJS e.d.), rechtstreeks uit node_modules: alleen deze bestanden.
+// De stijlpagina's koppelen de namen eraan met een import map.
+const VENDOR = {
+  '/vendor/pixi.mjs': 'node_modules/pixi.js/dist/pixi.min.mjs',
+  '/vendor/pixi-filters.mjs': 'node_modules/pixi-filters/dist/pixi-filters.mjs',
+  '/vendor/simplex-noise.mjs': 'node_modules/simplex-noise/dist/esm/simplex-noise.js',
+};
 
 // ---------- Statische bestanden ----------
 // / is het spel (BLITZKRIEG), /retro het originele Tunneler. De weergaves (1944.html enz.)
@@ -28,9 +38,9 @@ const server = http.createServer((req, res) => {
   let urlPath;
   try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { urlPath = '/'; }
   if (OLD_PAGES.has(urlPath)) { res.writeHead(302, { Location: '/' }); res.end(); return; }
-  const rel = PAGES[urlPath] || (urlPath.startsWith('/shared/') ? urlPath.slice(1) : 'public' + urlPath);
+  const rel = VENDOR[urlPath] || PAGES[urlPath] || (urlPath.startsWith('/shared/') ? urlPath.slice(1) : 'public' + urlPath);
   const file = path.join(ROOT, rel);
-  if (!ALLOWED.some((d) => file.startsWith(d + path.sep))) { res.writeHead(404); res.end(); return; }
+  if (!VENDOR[urlPath] && !ALLOWED.some((d) => file.startsWith(d + path.sep))) { res.writeHead(404); res.end(); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end('Niet gevonden'); return; }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });

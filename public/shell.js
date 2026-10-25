@@ -32,6 +32,21 @@ $('map').addEventListener('change', () => { sendConfig(); $('map').blur(); });
 $('size').addEventListener('change', () => { sendConfig(); $('size').blur(); });
 $('start').addEventListener('click', () => { game.send({ t: 'start' }); $('start').blur(); });
 
+// Volledig scherm (tablet/telefoon): de hele spelpagina, op Android ook liggend vastzetten.
+// iPhone kent dit niet; daar (en op de iPad) werkt "Zet op beginscherm" via het manifest.
+const root = document.documentElement;
+const requestFull = root.requestFullscreen || root.webkitRequestFullscreen;
+const fullElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+$('full').hidden = !requestFull;
+$('full').addEventListener('click', async () => {
+  $('full').blur();
+  if (fullElement()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  try {
+    await requestFull.call(root);
+    await screen.orientation?.lock?.('landscape');
+  } catch { /* niet toegestaan (bv. desktop of iPad): dan gewoon zonder vastzetten */ }
+});
+
 // ---------- Weergave ----------
 let page = '';
 function showView() {

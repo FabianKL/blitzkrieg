@@ -172,9 +172,6 @@ function drawTank(ctx, team, x, y, ang) {
   ctx.translate(x, y);
   ctx.rotate(ang);
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'; // schaduw
-  ctx.beginPath(); ctx.roundRect(-3.3, -2.25, 7.2, 5.1, 0.5); ctx.fill();
-
   // rupsbanden met schakels
   ctx.fillStyle = '#25251f';
   ctx.fillRect(-3.5, -2.55, 7, 1.15);
@@ -254,6 +251,7 @@ const view = startWorld({
   onMap: buildCracks,
   clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
   onEvent, drawBase, drawTank, teamLook, onTeams,
+  shadow: { color: 0x000000, alpha: 0.38 },
   eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },
   hud,
 });

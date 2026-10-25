@@ -80,40 +80,6 @@ export function createObstacleSampler(R) {
 // Puin/stronken in het permanente gat van een weggeschoten plant (h = pixelhash)
 export const isDebris = (game, i, h) => game.world?.scar[i] === 1 && (h >>> 8) % 100 < 24;
 
-// ---------- Sporenwisser (storm) ----------
-// Waas en waaiende strepen over het hele beeld zolang hij woedt, en een melding bovenin
-// (waarschuwing vooraf, aftellen tijdens). style: {name, haze, hazeAlpha, streak, banner}.
-export function drawEraser(ctx, canvas, info, now, style) {
-  if (!info || (!info.active && !info.warn)) return;
-  const W = canvas.width, H = canvas.height, s = devicePixelRatio || 1;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (info.active) {
-    ctx.fillStyle = `rgba(${style.haze}, ${style.hazeAlpha})`;
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = `rgba(${style.streak}, 0.45)`;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 140; i++) {
-      const speed = 0.35 + (i % 7) * 0.08, len = (18 + (i % 5) * 14) * s;
-      const x = ((i * 137.3 + now * speed * s) % (W + 200 * s)) - 100 * s;
-      const y = ((i * 71.9) % 100) / 100 * H + Math.sin(now / 900 + i) * 12 * s;
-      ctx.lineWidth = (1 + (i % 3)) * s;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y + len * 0.18); ctx.stroke();
-    }
-  }
-  if (style.banner === false) return;
-  const name = style.name || info.label.toUpperCase();
-  const txt = info.active ? `${name} — NOG ${info.secs} S` : `${name} OVER ${info.secs} S`;
-  if (!info.active && Math.floor(now / 400) % 2) return; // knipperen tijdens de waarschuwing
-  ctx.font = `bold ${14 * s}px monospace`;
-  const tw = ctx.measureText(txt).width, pad = 10 * s;
-  ctx.fillStyle = 'rgba(20, 14, 10, 0.78)';
-  ctx.fillRect((W - tw) / 2 - pad, 12 * s, tw + pad * 2, 26 * s);
-  ctx.fillStyle = info.active ? '#ffd27a' : '#ff8a5a';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(txt, (W - tw) / 2, 25 * s);
-  ctx.textBaseline = 'alphabetic';
-}
-
 // Pixel van een tunnelcel: tunnelkleur of toch terrein? Hoe vager het spoor, hoe meer
 // pixels terrein blijven (h = pixelhash, mix = trackMix van de cel).
 export const showsTunnel = (h, mix) => ((h >>> 20) & 1023) / 1023 < mix;
@@ -175,29 +141,63 @@ export function createFieldSampler(R) {
   };
 }
 
+// ---------- Tegelcanvassen ----------
+// Een kaartlaag in losse canvassen van TILE x TILE cellen (TP pixels per zijde). Eén groot
+// canvas kan op een grote kaart niet als textuur naar de videokaart (te groot), en zo hoeft
+// bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
+export const TILE = 32;
+export function createTileCanvases(R) {
+  const TP = TILE * R, TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
+  const list = new Array(TILES_X * TILES_Y).fill(null);
+  const changed = new Set(); // tegels die sinds de laatste takeChanged() veranderd zijn
+  return {
+    TP, TILES_X, TILES_Y, list, changed,
+    // canvas van tegel t (wordt gemaakt als hij er nog niet is)
+    get(t) {
+      if (!list[t]) {
+        const c = list[t] = document.createElement('canvas');
+        c.width = c.height = TP;
+      }
+      return list[t];
+    },
+    touch(t) { changed.add(t); },
+    takeChanged() { const out = [...changed]; changed.clear(); return out; },
+    reset() { list.fill(null); changed.clear(); },
+    // Stuk van de laag (in cellen) tekenen op een gewoon canvas (legenda, minikaart)
+    drawRegion(g, sx, sy, sw, sh, dx, dy, dw, dh) {
+      const kx = dw / sw, ky = dh / sh;
+      for (let ty = Math.floor(sy / TILE); ty <= Math.floor((sy + sh - 1e-6) / TILE); ty++) {
+        for (let tx = Math.floor(sx / TILE); tx <= Math.floor((sx + sw - 1e-6) / TILE); tx++) {
+          const c = list[ty * TILES_X + tx];
+          if (!c || tx >= TILES_X || ty >= TILES_Y) continue;
+          const x0 = Math.max(sx, tx * TILE), y0 = Math.max(sy, ty * TILE);
+          const x1 = Math.min(sx + sw, (tx + 1) * TILE), y1 = Math.min(sy + sh, (ty + 1) * TILE);
+          g.drawImage(c, (x0 - tx * TILE) * R, (y0 - ty * TILE) * R, (x1 - x0) * R, (y1 - y0) * R,
+            dx + (x0 - sx) * kx, dy + (y0 - sy) * ky, (x1 - x0) * kx, (y1 - y0) * ky);
+        }
+      }
+    },
+  };
+}
+
 // ---------- Kaartschilder ----------
-// Eén groot canvas met R pixels per cel, opgedeeld in tegels van 32x32 cellen.
+// Tegels van 32x32 cellen met R pixels per cel, elk een eigen canvas (createTileCanvases).
 // - Een tegel wordt pas geschilderd als hij (bijna) in beeld komt: snel instappen.
 // - Bij graven worden alleen de geraakte cellen en hun buren opnieuw geschilderd.
 // - cache(slot, X, Y, fn) onthoudt dure pixelkleuren (ruis), zodat opnieuw schilderen
 //   alleen nog opzoeken is. fn(X, Y) geeft een kleur terug als 0xRRGGBB.
 // - Pixels en kleurgeheugen bestaan per tegel en alleen voor de MAX_TILES tegels die het
-//   laatst in beeld waren. Een opgeruimde tegel blijft gewoon op het canvas staan; verandert
-//   er iets in, dan wordt hij helemaal opnieuw geschilderd zodra hij weer in beeld komt.
+//   laatst in beeld waren. Een opgeruimde tegel houdt zijn canvas; verandert er iets in, dan
+//   wordt hij helemaal opnieuw geschilderd zodra hij weer in beeld komt.
 // paintCell(x, y, setPx) schildert één cel; afterTile(tx, ty, setPx) mag er iets overheen zetten.
 // Gemaakt voor de kaartmaat van dat moment (G.W x G.H): bij een andere kaartgrootte een nieuwe.
-const TILE = 32;
 // ruim twee schermen vol; met ?tiles=8 in de adresbalk kun je het opruimen testen
 const MAX_TILES = Number(new URLSearchParams(location.search).get('tiles')) || 48;
-const UNPAINTED = 0, LIVE = 1, PARKED = 2; // PARKED: op het canvas, maar zonder pixels in het geheugen
+const UNPAINTED = 0, LIVE = 1, PARKED = 2; // PARKED: canvas bestaat, maar zonder pixels in het geheugen
 
 export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
-  const TP = TILE * R; // pixels per tegelzijde
-  const TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
-  const canvas = document.createElement('canvas');
-  canvas.width = G.W * R;
-  canvas.height = G.H * R;
-  const ctx = canvas.getContext('2d');
+  const layer = createTileCanvases(R);
+  const { TP, TILES_X, TILES_Y } = layer;
   const state = new Uint8Array(TILES_X * TILES_Y);
   const tiles = new Array(TILES_X * TILES_Y).fill(null); // {img, caches, used}
   const dirtyCells = new Set();
@@ -211,7 +211,7 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
     if (t !== curT) {
       curT = t;
       cur = tiles[t];
-      if (!cur) { cur = tiles[t] = { img: ctx.createImageData(TP, TP), caches: [], used: clock }; live++; }
+      if (!cur) { cur = tiles[t] = { img: new ImageData(TP, TP), caches: [], used: clock }; live++; }
     }
     return cur;
   };
@@ -219,7 +219,7 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
     const d = tileAt(X, Y).img.data, i = ((Y % TP) * TP + (X % TP)) * 4;
     d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
   };
-  const putTile = (t) => ctx.putImageData(tiles[t].img, (t % TILES_X) * TP, ((t / TILES_X) | 0) * TP);
+  const putTile = (t) => { layer.get(t).getContext('2d').putImageData(tiles[t].img, 0, 0); layer.touch(t); };
   function paintTile(tx, ty) {
     for (let y = ty * TILE; y < Math.min(G.H, (ty + 1) * TILE); y++) {
       for (let x = tx * TILE; x < Math.min(G.W, (tx + 1) * TILE); x++) paintCell(x, y, setPx);
@@ -242,14 +242,14 @@ export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
   }
 
   return {
-    canvas,
+    layer,
     // Nieuwe kaart: alles vergeten
     reset() {
       state.fill(UNPAINTED);
       tiles.fill(null);
       live = 0; curT = -1;
       dirtyCells.clear();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      layer.reset();
     },
     // Cel is veranderd: hem en zijn buren (randjes) opnieuw schilderen
     markDig(x, y) {
@@ -304,16 +304,6 @@ export const unpack = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 export const pack = (r, g, b) => (clamp(Math.round(r), 0, 255) << 16) | (clamp(Math.round(g), 0, 255) << 8) | clamp(Math.round(b), 0, 255);
 
 // ---------- Canvas, camera en tanks ----------
-export function fitCanvas(canvas, panel) {
-  const resize = () => {
-    const dpr = devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.round(panel.clientWidth * dpr));
-    canvas.height = Math.max(1, Math.round(panel.clientHeight * dpr));
-  };
-  new ResizeObserver(resize).observe(panel);
-  resize();
-}
-
 // Camera rond je eigen tank; viewCells langs de kortste kant, nooit meer dan de kaart
 export function camera(game, canvas, viewCells, shake) {
   const Z = Math.max(Math.min(canvas.width, canvas.height) / viewCells, canvas.width / G.W, canvas.height / G.H);
@@ -336,95 +326,6 @@ export function smoothTankAngles(game, dt) {
     const diff = Math.atan2(Math.sin(target - t.ang), Math.cos(target - t.ang));
     t.ang += diff * Math.min(1, dt * 16);
   }
-}
-
-// Stuk kaart dat in beeld is (in cellen, met marge), voor drawImage van kaartlagen
-export function visibleCells(cam, margin = 3) {
-  const sx = Math.max(0, Math.floor(cam.x) - margin), sy = Math.max(0, Math.floor(cam.y) - margin);
-  return { sx, sy, sw: Math.min(Math.ceil(cam.w) + 2 * margin, G.W - sx), sh: Math.min(Math.ceil(cam.h) + 2 * margin, G.H - sy) };
-}
-
-// Kogel als lichtspoor met een felle kop
-export function drawTracer(ctx, b, tail, head) {
-  const [dx, dy] = G.DIRS[b.d];
-  const hx = b.rx + 0.5, hy = b.ry + 0.5;
-  const tx = hx - dx * b.trail, ty = hy - dy * b.trail;
-  const g = ctx.createLinearGradient(tx, ty, hx, hy);
-  g.addColorStop(0, tail);
-  g.addColorStop(1, head);
-  ctx.strokeStyle = g; ctx.lineWidth = 0.45; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
-  ctx.fillStyle = '#fff4cc';
-  ctx.beginPath(); ctx.arc(hx, hy, 0.33, 0, Math.PI * 2); ctx.fill();
-}
-
-// ---------- Deeltjes ----------
-// Soorten: flash, ring, fire, spark (licht), chunk (brokjes), en wolken (kleur per weergave).
-// clouds: {soort: 'r, g, b'}, bv. { smoke: '74, 70, 62', dust: '226, 200, 150' }.
-export function createParticles(clouds, cloudAlpha = {}) {
-  const list = [];
-  const LIGHT = new Set(['fire', 'spark', 'flash']);
-  const order = [...Object.keys(clouds), 'chunk', 'ring', 'fire', 'spark', 'flash'];
-  return {
-    spawn(kind, x, y, n, o) {
-      for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2, v = (0.25 + Math.random() * 0.75) * (o.speed || 0);
-        const life = (0.6 + Math.random() * 0.4) * o.life;
-        list.push({
-          kind, x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
-          ttl: life, max: life, r0: o.r0 ?? 0.4, r1: o.r1 ?? 0.4,
-          col: o.cols ? o.cols[(Math.random() * o.cols.length) | 0] : null, rot: Math.random() * 6,
-        });
-      }
-    },
-    draw(ctx, dt) {
-      // bijwerken; dode deeltjes in één keer opruimen (geen splice per deeltje)
-      let w = 0;
-      for (const p of list) {
-        p.x += p.vx * dt; p.y += p.vy * dt;
-        const drag = Math.pow(p.kind in clouds ? 0.5 : 0.06, dt);
-        p.vx *= drag; p.vy *= drag;
-        p.ttl -= dt;
-        if (p.ttl > 0) list[w++] = p;
-      }
-      list.length = w;
-      for (const kind of order) {
-        ctx.globalCompositeOperation = LIGHT.has(kind) ? 'lighter' : 'source-over';
-        for (const p of list) {
-          if (p.kind !== kind) continue;
-          const k = p.ttl / p.max; // 1 -> 0
-          const r = p.r1 + (p.r0 - p.r1) * k;
-          if (kind in clouds) {
-            ctx.fillStyle = `rgba(${clouds[kind]}, ${(cloudAlpha[kind] ?? 0.45) * k})`;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-          } else if (kind === 'chunk') {
-            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot + (1 - k) * 4);
-            ctx.fillStyle = p.col; ctx.fillRect(-0.35, -0.25, 0.7, 0.5);
-            ctx.restore();
-          } else if (kind === 'ring') {
-            ctx.strokeStyle = `rgba(255, 240, 210, ${0.8 * k})`; ctx.lineWidth = 0.35 * k + 0.05;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-          } else if (kind === 'fire') {
-            ctx.globalAlpha = k; ctx.fillStyle = p.col;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = 1;
-          } else if (kind === 'spark') {
-            ctx.strokeStyle = p.col; ctx.globalAlpha = k; ctx.lineWidth = 0.22;
-            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke();
-            ctx.globalAlpha = 1;
-          } else {
-            const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-            g.addColorStop(0, `rgba(255, 236, 170, ${k})`);
-            g.addColorStop(0.5, `rgba(255, 150, 50, ${0.6 * k})`);
-            g.addColorStop(1, 'rgba(255, 90, 20, 0)');
-            ctx.fillStyle = g;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-          }
-        }
-      }
-      ctx.globalCompositeOperation = 'source-over';
-    },
-  };
 }
 
 // ---------- Schermmeldingen ----------
