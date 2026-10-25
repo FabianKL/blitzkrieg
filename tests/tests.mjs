@@ -314,25 +314,53 @@ export const tests = [
     },
   },
   {
-    name: 'zicht: zichtstraal, zichtlijn (gebouw, begroeiing, rook), schim, 8 richtingen, gehoorafstand',
+    name: 'zicht: zichtcirkel rondom, zichtlijn alleen in de kijkboog (gebouw, begroeiing, rots, rook), contour, 8 richtingen, gehoorafstand',
     async run() {
       const w = testWorld('soft'), map = w.map;
-      const me = { x: 100, y: 100 }, view = { x: 30, y: 52, w: 140, h: 96 }, r = G.visionCells(12);
-      check(V.sightOf(map, me, { x: 100 + r - 2, y: 100 }, r, view) === 'sharp', 'binnen de zichtstraal niet scherp');
-      check(V.sightOf(map, me, { x: 100 + r + 10, y: 100 }, r, view) === 'ghost', 'buiten de straal in het venster geen schim');
-      check(V.sightOf(map, me, { x: 100 + 90, y: 100 }, r, view) === null, 'buiten het venster toch iets te zien');
-      check(V.sightOf(map, me, { x: 110, y: 100, buried: true }, r, view) === null, 'bedekte tank te zien');
-      map[100 * G.W + 108] = G.BUILDING;
-      check(V.sightOf(map, me, { x: 115, y: 100 }, r, view) === null, 'gebouw blokkeert het zicht niet');
-      map[100 * G.W + 108] = G.VEG;
-      check(V.sightOf(map, me, { x: 115, y: 100 }, r, view) === null, 'begroeiing blokkeert het zicht niet');
-      map[100 * G.W + 108] = G.WATER;
-      check(V.sightOf(map, me, { x: 115, y: 100 }, r, view) === 'sharp', 'water blokkeert het zicht');
-      check(V.sightOf(map, me, { x: 115, y: 100 }, r, view, [{ x: 108, y: 101, r: 3 }]) === null, 'rook blokkeert het zicht niet');
+      // kijkt naar rechts (ang 0); venster 140 x 96 rond de tank, dus cirkel 48 cellen
+      const me = { x: 100, y: 100, ang: 0 }, view = { x: 30, y: 52, w: 140, h: 96 }, r = G.visionRadius(view.h);
+      const opts = { radius: r, view }, smoke = (x) => [{ x, y: 101, r: 3 }];
+      check(r === 48, `zichtcirkel ${r}, verwacht de halve hoogte van het venster (48)`);
+      check(V.sightOf(map, me, { x: 100 + r - 2, y: 100 }, opts) === 'sharp', 'binnen de cirkel niet scherp');
+      check(V.sightOf(map, me, { x: 100 + r + 10, y: 100 }, opts) === 'contour', 'buiten de cirkel in de boog geen contour');
+      check(V.sightOf(map, me, { x: 100 + 90, y: 100 }, opts) === null, 'buiten het venster toch iets te zien');
+      check(V.sightOf(map, me, { x: 110, y: 100, buried: true }, opts) === null, 'bedekte tank te zien');
+      // binnen de cirkel rondom; buiten de cirkel alleen in de kijkboog van 130 graden
+      const at = (deg, d) => ({ x: Math.round(100 + Math.cos((deg * Math.PI) / 180) * d), y: Math.round(100 + Math.sin((deg * Math.PI) / 180) * d) });
+      check(V.sightOf(map, me, at(70, 30), opts) === 'sharp' && V.sightOf(map, me, at(180, 30), opts) === 'sharp', 'binnen de cirkel niet rondom te zien');
+      check(V.sightOf(map, me, at(60, r + 6), opts) === 'contour', 'buiten de cirkel, 60 graden opzij (in de boog), geen contour');
+      check(V.sightOf(map, me, at(70, r + 6), opts) === null && V.sightOf(map, me, at(180, r + 6), opts) === null, 'buiten de cirkel en de boog toch iets te zien');
+      // in de kijkboog verbergen obstakels en rook wat erachter ligt; naast en achter je niet
+      for (const [cell, name] of [[G.BUILDING, 'gebouw'], [G.VEG, 'begroeiing'], [G.ROCK, 'rots']]) {
+        map[100 * G.W + 108] = cell; map[100 * G.W + 92] = cell;
+        check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === null, `${name} in de boog blokkeert het zicht niet`);
+        check(V.sightOf(map, me, { x: 85, y: 100 }, opts) === 'sharp', `${name} achter je blokkeert het zicht`);
+        check(!V.visibleCell(map, me, 115, 100, r) && V.visibleCell(map, me, 85, 100, r), `${name}: de schaduw volgt de zichtregel niet`);
+      }
+      map[100 * G.W + 108] = map[100 * G.W + 92] = G.WATER;
+      check(V.sightOf(map, me, { x: 115, y: 100 }, opts) === 'sharp', 'water blokkeert het zicht');
+      check(V.sightOf(map, me, { x: 115, y: 100 }, { ...opts, smokes: smoke(108) }) === null, 'rook in de boog blokkeert het zicht niet');
+      check(V.sightOf(map, me, { x: 85, y: 100 }, { ...opts, smokes: smoke(92) }) === 'sharp', 'rook achter je blokkeert het zicht');
+      check(!V.visibleCell(map, me, 115, 100, r, smoke(108)), 'rook: de schaduw volgt de zichtregel niet');
+      check(!V.visibleCell(map, me, 40, 100, r) && V.visibleCell(map, me, 70, 100, r), 'schaduw achter je, buiten de cirkel, klopt niet');
+      // weer maakt de cirkel kleiner (in T, 12 T = vol), nooit kleiner dan 2 tankbreedtes
+      check(G.visionRadius(96, 6) === 24 && G.visionRadius(96, 2) === G.minRadius() && G.visionRadius(96, 20) === 48, 'weer en zichtcirkel kloppen niet');
+      check(V.contourAlpha(r, r, 80) > V.contourAlpha(70, r, 80) && V.contourAlpha(80, r, 80) === 0, 'contour wordt niet vager naar de rand');
       const dirs = [[0, -5], [5, -5], [5, 0], [5, 5], [0, 5], [-5, 5], [-5, 0], [-5, -5]].map(([dx, dy]) => V.hintDirection(dx, dy)).join('');
       check(dirs === '01234567', `richtingen ${dirs}, verwacht 01234567`);
       check(V.canHear(me, 100 + 20 * G.T, 100) && !V.canHear(me, 100 + 20 * G.T + 1, 100), 'gehoorafstand is niet 20 T');
-      return `zichtstraal ${r} cellen, schim tot de rand van het venster, gehoor ${V.hearingCells()} cellen`;
+      // hints: alleen voor wat je niet scherp ziet; eigen geluiden en buiten gehoor niet
+      const ctx = (seen) => ({ me, self: 0, seenOf: () => seen, posOf: () => ({ x: 150, y: 100 }) });
+      const shot = { t: 'b', x: 150, y: 100, i: 1 };
+      check(V.hintSource(shot, ctx('sharp')) === null, 'hint voor een schot dat je ziet');
+      check(V.hintSource(shot, ctx('contour')) && V.hintSource(shot, ctx(null)), 'geen hint voor een schot buiten je zichtcirkel');
+      check(V.hintSource({ ...shot, i: 0 }, ctx(null)) === null, 'hint voor je eigen schot');
+      check(V.hintSource({ ...shot, x: 100 + 20 * G.T + 5 }, ctx(null)) === null, 'hint voor een schot buiten gehoorafstand');
+      check(V.hintSource({ t: 'x', fell: true, x: 150, y: 100, o: 1 }, ctx(null)) && !V.hintSource({ t: 'x', x: 150, y: 100, o: 1 }, ctx(null)), 'begroeiing kapot: hint klopt niet');
+      check(V.hintSource({ t: 'c', i: 1 }, ctx(null)), 'geen hint voor krakend ijs');
+      check(V.hintSource({ t: 'hint', x: 900, y: 900, i: 1 }, ctx(null)) && !V.hintSource({ t: 'hint', x: 900, y: 900, i: 1 }, ctx('sharp')), 'grote gebeurtenis: hint klopt niet');
+      check(V.hintSource(shot, { ...ctx(null), me: null }) === null, 'hint terwijl je dood bent');
+      return `zichtcirkel ${r} cellen (halve vensterhoogte, minstens ${G.minRadius()}), boog ${G.VISION.coneDegrees} graden, gehoor ${V.hearingCells()} cellen`;
     },
   },
   {
@@ -523,11 +551,11 @@ export const tests = [
     },
   },
   {
-    name: 'maten: T, zichtstraal en kaartgroottes (alle kaarten op elke grootte, bases bereikbaar)',
+    name: 'maten: T, kleinste zichtcirkel en kaartgroottes (alle kaarten op elke grootte, bases bereikbaar)',
     async run() {
       const width = Math.max(...G.MASKS[2].map((c) => c.y)) - Math.min(...G.MASKS[2].map((c) => c.y)) + 1;
       check(width === G.T, `tank is ${width} cellen breed, T = ${G.T}`);
-      check(G.visionCells(12) === 12 * G.T * G.VISION.scale, 'zichtstraal klopt niet');
+      check(G.minRadius() === G.VISION.minTanks * width, 'kleinste zichtcirkel is niet het aantal tankbreedtes uit de config');
       const out = [];
       try {
         for (const size of Object.keys(G.MAP_SIZES)) {
@@ -545,7 +573,7 @@ export const tests = [
           out.push(`${size} ${w}x${h}`);
         }
       } finally { G.setMapSize(G.BASE_W_CELLS, G.BASE_H_CELLS); }
-      return `T = ${G.T} cellen, zicht 12 T = ${G.visionCells(12)} cellen; ${out.join(', ')}`;
+      return `T = ${G.T} cellen, kleinste zichtcirkel ${G.minRadius()} cellen; ${out.join(', ')}`;
     },
   },
   {

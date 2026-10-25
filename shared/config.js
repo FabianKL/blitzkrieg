@@ -22,9 +22,12 @@ export const MAP_SIZES = {
 };
 export const DEFAULT_SIZE = 'middel';
 
-// Zicht (§9): de zichtstralen in de spec staan in T (standaard 12 T). Met scale worden ze
-// kleiner, zodat ze in het venster passen: 12 T x 0.4 = 4.8 T = 24 cellen.
-export const VISION = { scale: 0.4, defaultT: 12 };
+// Zicht (§9, met afwijkingen: zie README). De zichtcirkel is de halve hoogte van het beeld;
+// het weer (in T, zoals de spec) maakt hem kleiner: defaultT = de volle cirkel, 6 T = de helft.
+// Binnen de cirkel zie je rondom. coneDegrees: kijkboog in de rijrichting; alleen daarin
+// verbergen gebouwen, begroeiing, rotsen en rook wat erachter ligt, en alleen daarin zie je
+// buiten de cirkel nog contouren. minTanks: de kleinste cirkel, in tankbreedtes.
+export const VISION = { defaultT: 12, coneDegrees: 130, minTanks: 2 };
 
 // Venster in cellen (de grootste weergave): §6.2, vanuit je basis zie je geen andere basis
 export const VIEW_CELLS = { w: 140, h: 96 };
@@ -33,10 +36,12 @@ export const VIEW_CELLS = { w: 140, h: 96 };
 // en hoe vaak het stofspoor (Barbarossa) een hint geeft.
 export const HINTS = { hearingT: 20, glowSeconds: 3, dustEverySeconds: 10 };
 
-// Zicht (§9) in de weergave: buiten de zichtstraal steeds vager en donkerder naar de rand
-// (fade: donkerte aan de rand van het venster, 0..1), achter gebouwen en begroeiing donkerder
-// (shadow). debug: ?debug=alles in de adresbalk toont alles, alleen op localhost.
-export const FOG = { fade: 0.62, shadow: 0.35, ghostAlpha: 0.45 };
+// Zicht (§9) in de weergave: buiten de zichtcirkel steeds vager en donkerder naar de rand
+// (fade: donkerte aan de rand van het venster, 0..1; blur: vervaging aan de rand, in pixels),
+// buiten je zichtveld (achter gebouwen, begroeiing, rotsen, rook en buiten de kijkboog)
+// donkerder (shadow). contourAlpha: dekking van een contour net buiten de cirkel; naar de
+// rand van het venster loopt hij af tot 0. debug: ?debug=alles toont alles, alleen op localhost.
+export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5 };
 
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
