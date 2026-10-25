@@ -4,7 +4,7 @@
 // zijpaneel staat in woestijn.css.
 import * as G from '/shared/game.js';
 import { startWorld, R } from '/world-view.js';
-import { shade, mix, rgb, hash, vnoise, pack, drawEmblem } from '/render-common.js';
+import { shade, mix, rgb, hash, vnoise, pack, drawEmblem, FIRE, sandbagRow } from '/render-common.js';
 
 // Uiterlijk per kaart (config: tanks, via teamLook); de herkenningspanelen en wimpels geven de
 // vaste kleur van de speler
@@ -132,22 +132,7 @@ function drawMines(ctx, cam) {
 }
 
 // ---------- Basis: zandzakken, olievaten, jerrycans ----------
-function bag(ctx, x, y, w, h) {
-  ctx.fillStyle = '#b39a68';
-  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.fill();
-  ctx.fillStyle = '#c9b282';
-  ctx.beginPath(); ctx.roundRect(x + 0.4, y + 0.38, w - 0.8, (h - 0.2) * 0.38, 0.35); ctx.fill();
-  ctx.strokeStyle = '#6a5634'; ctx.lineWidth = 0.16;
-  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.stroke();
-}
-function bagRow(ctx, a, b, fixed, horizontal) {
-  const len = b - a;
-  if (len <= 0.5) return;
-  const n = Math.max(1, Math.round(len / 5)), L = len / n;
-  for (let k = 0; k < n; k++) {
-    if (horizontal) bag(ctx, a + k * L, fixed, L, 3); else bag(ctx, fixed, a + k * L, 3, L);
-  }
-}
+const BAGS = { bag: '#b39a68', top: '#c9b282', edge: '#6a5634', line: 0.16, len: 5 };
 function drum(ctx, x, y) {
   ctx.fillStyle = '#6f5a36'; ctx.beginPath(); ctx.arc(x, y, 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#3e301b'; ctx.lineWidth = 0.12; ctx.stroke();
@@ -163,11 +148,11 @@ function drawBase(ctx, b) {
   const { x0, y0, x1, y1, d0, d1 } = b;
   for (let k = 0; k < 3; k++) jerrycan(ctx, x0 + 2 + k * 1.3, y1 - 3.2);
   drum(ctx, x1 - 2.6, y0 + 2.7); drum(ctx, x1 - 4.3, y0 + 2.7); drum(ctx, x1 - 2.6, y0 + 4.4);
-  bagRow(ctx, y0 - 1, y1 + 2, x0 - 1, false);
-  bagRow(ctx, y0 - 1, y1 + 2, x1 - 1, false);
+  sandbagRow(ctx, y0 - 1, y1 + 2, x0 - 1, false, BAGS);
+  sandbagRow(ctx, y0 - 1, y1 + 2, x1 - 1, false, BAGS);
   for (const y of [y0 - 1, y1 - 1]) {
-    bagRow(ctx, x0 + 2, d0, y, true);
-    bagRow(ctx, d1 + 1, x1 - 1, y, true);
+    sandbagRow(ctx, x0 + 2, d0, y, true, BAGS);
+    sandbagRow(ctx, d1 + 1, x1 - 1, y, true, BAGS);
   }
 }
 
@@ -234,7 +219,6 @@ function drawTank(g, team, x, y, ang, now) {
 
 // ---------- Effecten ----------
 const SAND_BITS = ['#e2c48a', '#d4b273', '#c9a463', '#efd8a6'];
-const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
 const METAL = ['#3a342a', '#5a5040', '#6f6650'];
 const TWIGS = ['#706838', '#58422a', '#8a7a4a', '#a08c5a'];
 

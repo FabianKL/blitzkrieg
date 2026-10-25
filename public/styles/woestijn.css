@@ -43,7 +43,7 @@
   height: 14px; background: rgba(46,36,22,.18); border: 1px solid var(--ink-soft);
   background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(46,36,22,.45) calc(10% - 1px) 10%);
 }
-[data-style="woestijn"] .card .fill { position: absolute; inset: 1px auto 1px 1px; height: auto; }
+[data-style="woestijn"] .card .fill { position: absolute; inset: 1px auto 1px 1px; height: auto; max-width: calc(100% - 2px); }
 [data-style="woestijn"] #mini { border: 1px solid var(--ink-soft); background: #d6bf8e; }
 [data-style="woestijn"] .legend-swatch { border: 1px solid var(--canvas-edge); }
 [data-style="woestijn"] .legend-name { color: var(--ink); }

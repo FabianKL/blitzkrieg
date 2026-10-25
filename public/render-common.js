@@ -340,6 +340,28 @@ export function createOverlay(el) {
   };
 }
 
+// Vuur en vonken bij explosies: in elke stijl dezelfde kleuren
+export const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
+
+// Zandzakken rond een basis: een rij van a tot b op hoogte (of x) fixed, 3 cellen dik.
+// look = { bag, top, edge: kleuren, line: dikte van de rand, len: lengte van een zak in cellen }
+export function sandbagRow(ctx, a, b, fixed, horizontal, look) {
+  const len = b - a;
+  if (len <= 0.5) return;
+  const n = Math.max(1, Math.round(len / look.len)), L = len / n;
+  for (let k = 0; k < n; k++) {
+    if (horizontal) sandbag(ctx, a + k * L, fixed, L, 3, look); else sandbag(ctx, fixed, a + k * L, 3, L, look);
+  }
+}
+function sandbag(ctx, x, y, w, h, look) {
+  ctx.fillStyle = look.bag;
+  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.fill();
+  ctx.fillStyle = look.top;
+  ctx.beginPath(); ctx.roundRect(x + 0.4, y + 0.38, w - 0.8, (h - 0.2) * 0.38, 0.35); ctx.fill();
+  ctx.strokeStyle = look.edge; ctx.lineWidth = look.line;
+  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.stroke();
+}
+
 // ---------- Tankuiterlijk per kaart (config: tanks) ----------
 function starPath(g, cx, cy, r) {
   g.beginPath();

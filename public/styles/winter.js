@@ -4,7 +4,7 @@
 // de opmaak van het zijpaneel staat in winter.css.
 import * as G from '/shared/game.js';
 import { startWorld, R } from '/world-view.js';
-import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots } from '/render-common.js';
+import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots, FIRE } from '/render-common.js';
 
 let ctx = null; // canvas waarop de basis getekend wordt (zie drawBase)
 
@@ -296,7 +296,6 @@ function drawTank(g, team, x, y, ang) {
 const SNOW_BITS = ['#ffffff', '#e6ecf1', '#d2dae0'];
 const NEEDLES = ['#1c3529', '#274837', '#345c46', '#6b4a2c'];
 const FROZEN = ['#5a4232', '#463326', '#6e5442'];
-const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
 const METAL = ['#2a2c2e', '#3e4246', '#5a5e62'];
 
 function onEvent(e, spawn) {
