@@ -56,8 +56,10 @@ export function gameWinner(players, cfg = GAME) {
   return best ? best.id : -1;
 }
 
-// Zichtstraal in cellen voor een straal in T uit de spec (§9, met VISION.scale)
-export const visionCells = (inT = VISION.defaultT) => inT * T * VISION.scale;
+// Zichtcirkel in cellen: de halve hoogte van het beeld (viewH in cellen), kleiner gemaakt door
+// het weer (inT, in T zoals de spec; VISION.defaultT = vol), nooit kleiner dan minRadius
+export const minRadius = () => VISION.minTanks * T; // een tank is T breed (zie de maattest)
+export const visionRadius = (viewH, inT = VISION.defaultT) => Math.max(minRadius(), (viewH / 2) * Math.min(1, inT / VISION.defaultT));
 // Regels die een kaart kan overschrijven
 export const bulletsDig = (rules) => rules?.bulletsDig ?? BULLETS.dig;
 export const minimapOn = (rules) => rules?.minimap ?? DISPLAY.minimap;

@@ -16,9 +16,9 @@ export const CRITERIA = [
   ['10. Kogels over grond en water, graven niet, stoppen bij tank, begroeiing, gebouw, rots of object', ['kogels:', 'gevaren: brandend']],
   ['11. Onderduiken in een storm na 2 s stilstaan', ['onderduiken']],
   ['12. Door het ijs: langzaam pantser kwijt, langzaam eruit, dood als je blijft', ['ijs:']],
-  ['13. Zichtstraal, zichtlijn, schim; gebouwen, begroeiing en rook blokkeren; valse schimmen bij El Alamein', ['zicht:', 'weer per map']],
+  ['13. Zichtcirkel rondom (halve vensterhoogte), contour buiten de cirkel; in de kijkboog van 130° blokkeren gebouwen, begroeiing, rotsen en rook; valse contouren bij El Alamein', ['zicht:', 'weer per map']],
   ['14. Gevaar, schaars middel en weer per map, op de juiste ronde of timer', ['weer per map', 'gevaren: brandend', 'schaarse middelen en', 'gevaren en schaarse middelen (Ardennen)']],
-  ['15. Richtingshints in 8 richtingen; geluiden alleen binnen 20 T', ['zicht:']],
+  ['15. Richtingshints in 8 richtingen; geluiden alleen binnen 20 T; geen hint van wie je scherp ziet', ['zicht:']],
   ['16. Iedereen ziet dezelfde kaart, hetzelfde weer, dezelfde score en ronde', ['sporen en terrein gelijk', 'ronde en spel via de server', 'wachtkamer']],
 ];
 

@@ -47,8 +47,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   bases, effecten en de tankkaart.
 - **Uiterlijk per map**: `LOOK` en `look` per map in `shared/config.js` (kleurfilter, grondtextuur,
   weerdeeltjes, lichtbron, vignet, ijs). Alleen voor de weergave; zie README "Uiterlijk per map".
-- **Effecten verraden niets**: mondingsvuur en splinters alleen als je de schutter/tank scherp ziet;
-  geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
+- **Effecten verraden niets**: mondingsvuur, splinters en kogels van anderen alleen als je ze scherp
+  ziet; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Kaartmaker**: `shared/mapgen.js` plaatst eerst de bases, dan de vaste kenmerken, en vult daarna
   het terrein tot de percentages. Lukt een poging niet, dan probeert hij het opnieuw met een andere
   seed. Bij krappe kaarten worden de regels stap voor stap versoepeld: eerst de vensterregel, dan de
@@ -64,7 +64,16 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   de rondes (`hazard.chance`/`chanceStep`).
 - Kogels **graven standaard niet** (`BULLETS.dig`, per map aan te zetten; retro graaft wel). De krater
   van een ontploffende tank blijft.
-- Zichtstraal × 0,4 (`VISION.scale`), zodat hij in het venster past. Gehoord binnen 20 T.
+- Zicht (`VISION`, regel in `shared/vision.js`):
+  - de zichtcirkel is de halve hoogte van het beeld; het weer (in T) maakt hem kleiner, met als
+    minimum 2 tankbreedtes;
+  - binnen de cirkel zie je rondom;
+  - de zichtlijn telt alleen in een kijkboog van 130° in de rijrichting: daar verbergen gebouwen,
+    begroeiing, rotsen en rook wat erachter ligt, naast en achter je niet;
+  - buiten de cirkel zie je alleen in de kijkboog iets: een vage contour zonder kleur (geen schim);
+  - de donkere schaduw volgt precies dezelfde regel (`visibleCell`);
+  - een tegenstander die je scherp ziet, geeft geen hint;
+  - gehoord binnen 20 T.
 - Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk.
 - Mijnen bij El Alamein zijn onzichtbaar. Gevaren en weer worden alleen in de browser verborgen
   (geen anti-cheat nodig).

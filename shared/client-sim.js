@@ -147,7 +147,7 @@ export function applyState(state, msg, hooks = {}, now = 0) {
       state.mines.delete(e.y * G.W + e.x);
       G.digStar(world, e.x, e.y, e.r, changed);
     } else if (e.t === 'b') {
-      bullets.set(e.id, { x: e.x, y: e.y, d: e.d, sx: e.x, sy: e.y, sk: tick });
+      bullets.set(e.id, { x: e.x, y: e.y, d: e.d, i: e.i, sx: e.x, sy: e.y, sk: tick }); // i: van wie (eigen kogels altijd te zien)
     } else if (e.t === 'l') {
       tanks.delete(e.i);
     } else if (e.t === 'r') { // ronde voorbij: even pauze

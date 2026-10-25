@@ -48,10 +48,15 @@ B- of M-badge met een pulserende ring.
   Een kogel raakt begroeiing over de hele breedte van je tank, en een plant die omgaat neemt alles
   binnen 4 cellen mee: zo schiet je altijd een doorgang waar je tank door past.
 - **Kogels** vliegen over grond en water en stoppen bij een tank, begroeiing, gebouw, rots of geschut.
-- **Zicht**: binnen je zichtstraal zie je tegenstanders scherp, daarbuiten in je venster als vage schim;
-  gebouwen, begroeiing en rook blokkeren het zicht (en het terrein erachter is donkerder).
+- **Zicht**: binnen je zichtcirkel (de halve hoogte van het beeld) zie je rondom: tegenstanders en
+  hun kogels scherp. In je kijkboog (130° in je rijrichting) verbergen gebouwen, begroeiing, rotsen
+  en rook wat erachter ligt; naast en achter je niet. Buiten de cirkel wordt het beeld steeds
+  vager. Daar zie je alleen in je kijkboog nog iets: een tank als vage, donkere contour, zonder
+  kleur of kenmerken. Alles wat je niet kunt zien, is donkerder getekend, met precies dezelfde
+  regel.
 - **Richtingshints**: een gloed aan de rand in één van 8 richtingen bij een schot, een omgeschoten
-  plant of krakend ijs van een tegenstander binnen 20 T, en bij grote gebeurtenissen overal.
+  plant of krakend ijs van een tegenstander binnen 20 T, en bij grote gebeurtenissen overal. Zie je
+  die tegenstander scherp, dan komt er geen hint.
 - **Weer** per map, per ronde of op een timer: zichtstraal, stormen die sporen wissen (stilstaan =
   onderduiken), mist, regen, nacht met zoeklichten, en terrein dat verandert (dooi, modder, inundatie).
 - **Gevaren en schaarse middelen** per map: zie de tabel hieronder.
@@ -60,7 +65,7 @@ B- of M-badge met een pulserende ring.
 |---|---|---|---|
 | 1940 Grebbeberg | – | munitie alleen bij het depot in Rhenen | inundatie vanaf ronde 2, regen in ronde 3, rook |
 | 1941 Russische vlakte | – | dubbel brandstof in de modder | zomer met stofspoor; vanaf ronde 3 modder |
-| 1942 El Alamein | zandmeter, mijnen | – | hitte met valse schimmen; zandstorm elke 90 s |
+| 1942 El Alamein | zandmeter, mijnen | – | hitte met valse contouren; zandstorm elke 90 s |
 | 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, sneeuwjacht; dooi in ronde 4 |
 | 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer vanaf ronde 3 |
 | 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenbuien bij het water |
@@ -75,8 +80,12 @@ gebouwen, rondes, hints, kaartgroottes en per map het terrein in procenten, de v
 tanks. Zie de uitleg bovenaan elk blok.
 
 ### Afwijkingen van de spec (bewust)
-- **Zicht**: de zichtstralen uit de spec zijn met 0,4 vermenigvuldigd (`VISION.scale`), zodat ze in
-  het venster passen: 12 T = 24 cellen.
+- **Zicht** (§9): in plaats van een vaste zichtstraal van 12 T is de zichtcirkel de halve hoogte van
+  het beeld. Het weer houdt zijn waarden in T: 12 T = de volle cirkel, 6 T = de helft, nooit kleiner
+  dan 2 tankbreedtes (`VISION`). De zichtlijn telt alleen in een kijkboog van 130° in je
+  rijrichting, en rotsen blokkeren daar ook. Buiten de cirkel zie je geen schim maar, alleen in de
+  kijkboog, een contour die naar de rand van het venster vervaagt. Kogels van anderen zie je alleen scherp in je zichtveld. Een tegenstander die je scherp
+  ziet, geeft geen richtingshint.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard
   daardoor meer dan 8% (bv. Ardennen ~13%), en dat gaat van de andere klassen af. De test houdt daar
   rekening mee; Ardennen klein heeft daarvoor 1 procentpunt extra marge (`tolerance`).
@@ -149,7 +158,7 @@ zie de uitleg bovenaan `public/world-view.js`.
 | `shared/game.js` | Spelregels: terrein, rijden, graven, sporen, kogels, ijs, terreinveranderingen, rondes. Server én browser. |
 | `shared/mapgen.js` | Kaartmaker (§6): bases eerst, dan kenmerken, terrein tot de percentages, controle. |
 | `shared/weather.js` | Weerregels per ronde en timer. |
-| `shared/vision.js` | Zichtlijn, schim, richtingshints, zoeklichten. |
+| `shared/vision.js` | Zichtregel (kijkboog, zichtlijn, scherp of contour), richtingshints, zoeklichten. |
 | `shared/client-sim.js` | Clientkant zonder browsercode: berichten, voorspelling, posities. Browser én tests. |
 | `hazards.js` | Gevaren, schaarse middelen en meters (alleen server; die gooit de dobbelsteen). |
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |

@@ -251,7 +251,7 @@ function sendInit(room, t) {
     t: 'init', you: t.id, k: room.tick, w: G.W, h: G.H, size: room.size,
     map: G.toBase64(G.rleEncode(room.world.map)),
     tanks: players.map((o) => ({ i: o.id, ...(o === t || !Object.keys(o.sent).length ? tankFields(o, players.length) : o.sent) })),
-    bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, d: b.d })),
+    bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, d: b.d, i: b.owner })),
     terrain: G.toBase64(G.rleEncode(room.world.terrain)),
     track: G.toBase64(G.rleEncode16(room.world.track)), // exacte sporen, daarna rekent de client zelf mee
     veg: G.toBase64(G.rleEncode16(room.world.veg)), // welke plant waar staat

@@ -38,10 +38,10 @@
 //   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
 import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
-import { sightOf, lineOfSight, blocksSight, hintDirection, canHear, searchlightBeams, searchlightAt } from '/shared/vision.js';
+import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter, DisplacementFilter } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
@@ -656,7 +656,19 @@ export function startWorld(style) {
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
-  const ghosts = spritePool(L.tanks.addChild(new Container()), TEX.soft);
+  // Contour: één neutraal silhouet voor alle tanks (romp, rupsen, koepel, loop), zodat je niet
+  // ziet welke speler het is; zachte randen door een eigen vervaging op de laag
+  const contourTex = drawnTexture(14 * 16, 14 * 16, (g) => {
+    g.scale(16, 16); g.translate(7, 7); g.fillStyle = '#fff';
+    g.fillRect(-3.5, -3.2, 7, 1.4); g.fillRect(-3.5, 1.8, 7, 1.4); g.fillRect(-3, -2.2, 6, 4.4);
+    g.beginPath(); g.arc(0, 0, 1.7, 0, Math.PI * 2); g.fill();
+    g.fillRect(0, -0.35, 5.5, 0.7);
+  });
+  const contourLayer = L.tanks.addChild(new Container());
+  contourLayer.filters = [new KawaseBlurFilter({ strength: 2, quality: 2 })];
+  const contourSetup = (s) => { s.anchor.set(0.5); s.scale.set(1 / 16); s.tint = 0x0c0c0e; };
+  const contours = spritePool(contourLayer, contourTex, contourSetup);
+  const mirageSprites = spritePool(contourLayer, contourTex, contourSetup); // valse contouren (El Alamein)
   const buried = L.tanks.addChild(new Graphics());
   const effects = L.effects.addChild(new Graphics());
   L.effects.addChild(particles.layer);
@@ -666,7 +678,6 @@ export function startWorld(style) {
   visionCanvas.width = visionCanvas.height = 512;
   const visionSprite = L.fog.addChild(new Sprite(textureOf(visionCanvas)));
   visionSprite.anchor.set(0.5);
-  const mirageSprites = spritePool(L.fog.addChild(new Container()), TEX.soft);
   const lights = L.fog.addChild(new Graphics());
   const overlaySprite = L.ui.addChild(new Sprite());
   const eraserG = L.ui.addChild(new Graphics()), eraserLabel = createLabel(L.ui);
@@ -700,14 +711,52 @@ export function startWorld(style) {
   const hazeSprite = stage.addChild(new Sprite(hazeTex));
   hazeSprite.renderable = false;
   const hazeFilter = new DisplacementFilter({ sprite: hazeSprite, scale: 0 });
+  // Buiten de zichtcirkel steeds minder scherp: elke pixel mengt met zijn buren, sterker naarmate
+  // hij verder van je tank ligt (van de cirkelrand tot de rand van het venster). Eén pass.
+  const visionBlur = new Filter({
+    glProgram: GlProgram.from({
+      vertex: defaultFilterVert,
+      fragment: `
+        in vec2 vTextureCoord;
+        out vec4 finalColor;
+        uniform sampler2D uTexture;
+        uniform highp vec4 uInputSize; // highp zoals in de vertex-shader, anders linkt hij niet
+        uniform highp vec4 uOutputFrame;
+        uniform vec2 uCenter;
+        uniform vec3 uBlur; // straal, verste afstand, sterkte (in schermpixels)
+        void main(void) {
+          vec4 c = texture(uTexture, vTextureCoord);
+          vec2 px = vTextureCoord * uInputSize.xy + uOutputFrame.xy;
+          float k = smoothstep(uBlur.x, uBlur.y, distance(px, uCenter)) * uBlur.z;
+          if (k < 0.05) { finalColor = c; return; }
+          vec2 o = uInputSize.zw * k;
+          vec4 s = c * 2.0;
+          s += texture(uTexture, vTextureCoord + vec2(o.x, 0.0)) + texture(uTexture, vTextureCoord - vec2(o.x, 0.0));
+          s += texture(uTexture, vTextureCoord + vec2(0.0, o.y)) + texture(uTexture, vTextureCoord - vec2(0.0, o.y));
+          s += texture(uTexture, vTextureCoord + o * 0.7) + texture(uTexture, vTextureCoord - o * 0.7);
+          s += texture(uTexture, vTextureCoord + vec2(o.x, -o.y) * 0.7) + texture(uTexture, vTextureCoord + vec2(-o.x, o.y) * 0.7);
+          finalColor = s / 10.0;
+        }`,
+      name: 'vision-blur',
+    }),
+    resources: { visionUniforms: { uCenter: { value: new Float32Array(2), type: 'vec2<f32>' }, uBlur: { value: new Float32Array(3), type: 'vec3<f32>' } } },
+  });
   let filterKey = '';
-  // Filters op de wereld: kleurfilter (look.grade) en hittewaas (weer), alleen als ze iets doen
+  // Filters op de wereld: kleurfilter (look.grade), hittewaas (weer) en de vervaging buiten je
+  // zichtcirkel (alleen als je zicht hebt), alleen als ze iets doen
   function updateFilters(now) {
     const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
-    const key = `${isNeutral(look.grade)},${haze}`;
+    const blur = !DEBUG && !!eye() && FOG.blur > 0;
+    const key = `${isNeutral(look.grade)},${haze},${blur}`;
     if (key !== filterKey) {
       filterKey = key;
-      world.filters = [...(isNeutral(look.grade) ? [] : [gradeFilter]), ...(haze ? [hazeFilter] : [])];
+      world.filters = [...(isNeutral(look.grade) ? [] : [gradeFilter]), ...(haze ? [hazeFilter] : []), ...(blur ? [visionBlur] : [])];
+    }
+    if (blur) {
+      const me = eye(), cam = view.cam, u = visionBlur.resources.visionUniforms.uniforms, r = visionRadius();
+      u.uCenter[0] = (me.x + 0.5 - cam.drawX) * cam.Z; u.uCenter[1] = (me.y + 0.5 - cam.drawY) * cam.Z;
+      u.uBlur[0] = r * cam.Z; u.uBlur[1] = Math.max(r + 1, Math.hypot(cam.w, cam.h) / 2) * cam.Z;
+      u.uBlur[2] = FOG.blur * (devicePixelRatio || 1);
     }
     if (haze) {
       const s = devicePixelRatio || 1;
@@ -795,9 +844,12 @@ export function startWorld(style) {
     g.fillStyle = l; g.fillRect(0, 0, 64, 4);
   });
   const tracers = spritePool(bulletLayer, tracerTex, (s) => s.anchor.set(1, 0.5)), heads = spritePool(bulletLayer, TEX.disc);
-  function drawBullets() {
+  // Kogels van anderen pas als ze scherp in je zichtveld zijn (§9); je eigen altijd
+  function drawBullets(cam) {
     tracers.begin(); heads.begin();
+    const me = eye(), opts = { radius: visionRadius(), view: cam, smokes: game.smokes };
     for (const b of game.bullets.values()) {
+      if (!DEBUG && b.i !== game.me && (!me || sightAt(game.map, me, Math.round(b.rx), Math.round(b.ry), opts) !== 'sharp')) continue;
       const [dx, dy] = G.DIRS[b.d], hx = b.rx + 0.5, hy = b.ry + 0.5;
       const t = tracers.next();
       t.position.set(hx, hy); t.rotation = Math.atan2(dy, dx);
@@ -808,15 +860,17 @@ export function startWorld(style) {
     tracers.end(); heads.end();
   }
 
-  // Tanks: de eigen altijd, tegenstanders scherp, als schim of helemaal niet (§9)
+  // Tanks: de eigen altijd, tegenstanders scherp, als vage contour of helemaal niet (§9)
   function drawTanks(now, cam) {
-    const me = eye();
-    ghosts.begin();
+    const me = eye(), radius = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
+    const opts = { radius, view: cam, smokes: game.smokes };
+    contours.begin();
     buried.clear();
     for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = false;
     for (const [id, t] of game.tanks) {
-      if (!t.a || t.rx === undefined || t.ang === undefined) continue;
-      const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x: Math.round(t.rx), y: Math.round(t.ry), buried: t.b }, visionRadius(), cam, game.smokes);
+      if (!t.a || t.rx === undefined || t.ang === undefined) { t.seen = null; continue; }
+      const x = Math.round(t.rx), y = Math.round(t.ry);
+      const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x, y, buried: t.b }, opts);
       t.seen = seen;
       if (id === game.me && t.b) drawBuried(t);
       else if (seen === 'sharp') {
@@ -824,9 +878,9 @@ export function startWorld(style) {
         for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; }
         s.body.position.set(t.rx + 0.5, t.ry + 0.5);
         s.shadow.position.set(t.rx + 0.5 + SHADOW.dx, t.ry + 0.5 + SHADOW.dy);
-      } else if (seen === 'ghost') drawGhost(ghosts, t.rx + 0.5, t.ry + 0.5);
+      } else if (seen === 'contour') drawContour(contours, t.rx + 0.5, t.ry + 0.5, t.ang, contourAlpha(Math.hypot(x - me.x, y - me.y), radius, far));
     }
-    ghosts.end();
+    contours.end();
   }
 
   function drawWorld(now, dt) {
@@ -852,7 +906,7 @@ export function startWorld(style) {
     drawDepots();
     drawObjectsOfHazards(now);
     drawRefillMarkers(now);
-    drawBullets();
+    drawBullets(cam);
     drawTanks(now, cam);
 
     effects.clear();
@@ -1003,24 +1057,24 @@ export function startWorld(style) {
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
   const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
-  // zichtstraal in cellen; het weer (game.vision, in T) kan hem kleiner maken
+  // zichtcirkel in cellen: de halve hoogte van het beeld; het weer (game.vision, in T) kan hem
+  // kleiner maken
   const visionRadius = () => {
-    const cfg = game.weather?.flags.searchlights, me = eye();
+    const cfg = game.weather?.flags.searchlights, me = eye(), viewH = view.cam?.h ?? style.viewCells;
     // in een zoeklicht zie je verder (§10.9)
-    if (cfg && me && searchlightAt(cfg, game.tick - game.mapTick, me.x, me.y)) return G.visionCells(cfg.visibility);
-    return G.visionCells(game.vision ?? G.VISION.defaultT);
+    if (cfg && me && searchlightAt(cfg, game.tick - game.mapTick, me.x, me.y)) return G.visionRadius(viewH, cfg.visibility);
+    return G.visionRadius(viewH, game.vision ?? G.VISION.defaultT);
   };
-  // waar kijk je vandaan: je eigen tank (of het midden van het beeld als je dood bent)
+  // waar kijk je vandaan: je eigen tank en zijn rijrichting (null als je dood bent)
   function eye() {
     const self = game.tanks.get(game.me);
-    if (self && self.a && self.rx !== undefined) return { x: Math.round(self.rx), y: Math.round(self.ry) };
+    if (self && self.a && self.rx !== undefined) return { x: Math.round(self.rx), y: Math.round(self.ry), ang: self.ang };
     return null;
   }
-  // Schim: een vage donkere vlek zonder details en zonder richting van de loop
-  function drawGhost(pool, x, y) {
+  // Contour: het neutrale silhouet, donker en vaag, wel in de goede richting gedraaid
+  function drawContour(pool, x, y, ang, alpha) {
     const s = pool.next();
-    s.tint = 0x0c0c0e; s.alpha = FOG.ghostAlpha;
-    s.position.set(x, y); s.width = s.height = 9;
+    s.position.set(x, y); s.rotation = ang || 0; s.alpha = alpha;
   }
   // Eigen bedekte tank: een hoopje sneeuw of zand met een vage omtrek
   const burial = rgba(style.burialColor || 'rgba(236, 232, 220, 0.9)');
@@ -1052,14 +1106,18 @@ export function startWorld(style) {
     visionSprite.position.set(me.x + 0.5, me.y + 0.5);
     visionSprite.width = visionSprite.height = 2 * far;
   }
-  // Achter gebouwen en begroeiing wordt het terrein donkerder: per 2 cellen een straal vanaf
-  // je tank; opnieuw uitgerekend als je verplaatst of de kaart verandert
+  // Buiten je zichtveld wordt het terrein donkerder: in je kijkboog achter gebouwen, begroeiing,
+  // rotsen en rook, en buiten de cirkel naast en achter je. Per 2 cellen precies dezelfde regel
+  // als voor tanks (visibleCell), dus waar het licht is, zie je een tank ook. Opnieuw uitgerekend
+  // als je verplaatst of draait, of als de zichtcirkel, de kaart of de rook verandert.
   const SH = 2, shadowCanvas = document.createElement('canvas'), shctx = shadowCanvas.getContext('2d');
   let shadowKey = '', shadowAt = 0, mapVersion = 0;
   function drawShadows(me, cam) {
     const x0 = Math.floor(cam.x / SH) * SH, y0 = Math.floor(cam.y / SH) * SH;
     const gw = Math.ceil(cam.w / SH) + 2, gh = Math.ceil(cam.h / SH) + 2;
-    const key = `${me.x},${me.y},${x0},${y0},${gw},${gh},${mapVersion}`;
+    const turn = me.ang === undefined ? '' : Math.round((me.ang * 90) / Math.PI); // per 2 graden
+    const smoke = game.smokes.map((s) => s.until).join('.'), r = visionRadius();
+    const key = `${me.x},${me.y},${turn},${Math.round(r)},${x0},${y0},${gw},${gh},${mapVersion},${smoke}`;
     const now = performance.now();
     if (key !== shadowKey && now - shadowAt > 80) {
       shadowKey = key; shadowAt = now;
@@ -1068,12 +1126,8 @@ export function startWorld(style) {
       const img = shctx.createImageData(gw, gh), a = Math.round(FOG.shadow * 255);
       for (let j = 0; j < gh; j++) {
         for (let i = 0; i < gw; i++) {
-          const tx = x0 + i * SH + 1, ty = y0 + j * SH + 1;
-          const n = Math.max(Math.abs(tx - me.x), Math.abs(ty - me.y));
-          for (let s = 3; s < n - 1; s++) { // het blokkerende ding zelf blijft licht
-            const cx = Math.round(me.x + ((tx - me.x) * s) / n), cy = Math.round(me.y + ((ty - me.y) * s) / n);
-            if (G.inBounds(cx, cy) && blocksSight(game.map[cy * G.W + cx])) { img.data[(j * gw + i) * 4 + 3] = a; break; }
-          }
+          // het midden van dit beeldpunt van de schaduw (de sprite begint SH / 2 eerder)
+          if (!visibleCell(game.map, me, x0 + i * SH, y0 + j * SH, r, game.smokes)) img.data[(j * gw + i) * 4 + 3] = a;
         }
       }
       shctx.putImageData(img, 0, 0);
@@ -1128,17 +1182,16 @@ export function startWorld(style) {
     }
     hintSprites.end(); hintCorners.end();
   }
-  // Welke gebeurtenissen geven een hint? Geluiden van een tegenstander binnen gehoorafstand,
-  // grote gebeurtenissen (e.t === 'hint') overal.
+  // Welke gebeurtenissen geven een hint? Zie hintSource (shared/vision.js): geluiden binnen
+  // gehoorafstand, grote gebeurtenissen overal, en nooit van een tegenstander die je scherp ziet.
   function hintFor(e) {
-    const me = eye();
-    if (!me || DEBUG) return;
-    if (e.t === 'b' && e.i !== game.me && canHear(me, e.x, e.y)) addHint(e.x, e.y); // schot
-    else if (e.t === 'x' && e.fell && e.o !== game.me && canHear(me, e.x, e.y)) addHint(e.x, e.y); // begroeiing/gebouw kapot
-    else if (e.t === 'c' && e.i !== game.me) { // ijs kraakt onder een tegenstander
-      const t = game.tanks.get(e.i);
-      if (t && canHear(me, t.x, t.y)) addHint(t.x, t.y);
-    } else if (e.t === 'hint' && e.i !== game.me) addHint(e.x, e.y); // groot: overal te zien
+    if (DEBUG) return;
+    const at = hintSource(e, {
+      me: eye(), self: game.me,
+      seenOf: (id) => game.tanks.get(id)?.seen ?? null,
+      posOf: (id) => game.tanks.get(id) ?? null,
+    });
+    if (at) addHint(at.x, at.y);
   }
 
   // ---------- Renderer en beeldlus ----------
@@ -1346,21 +1399,28 @@ export function startWorld(style) {
       ]).fill({ color: 0xfffad2, alpha: 0.16 });
     }
   }
-  // Woestijnhallucinaties (El Alamein): buiten je zichtstraal soms een valse schim; per speler
-  // anders en niet gesynchroniseerd (§6.4)
+  // Woestijnhallucinaties (El Alamein): buiten je zichtcirkel soms een valse contour, ergens waar
+  // een echte ook zou kunnen staan (in je kijkboog, vrije zichtlijn); per speler anders en niet
+  // gesynchroniseerd (§6.4)
   const mirages = [];
   let nextMirage = 0;
   function drawMirages(me, cam, now) {
     if (!game.weather?.flags.mirages) return;
     if (!nextMirage) nextMirage = now + 15000 * Math.random();
+    const r = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
     if (now > nextMirage) {
       nextMirage = now + 15000 * (0.5 + Math.random()); // gemiddeld eens per 15 s
-      const r = visionRadius(), a = Math.random() * Math.PI * 2, d = r + 6 + Math.random() * Math.max(4, Math.min(cam.w, cam.h) / 2 - r - 6);
-      mirages.push({ x: me.x + Math.cos(a) * d, y: me.y + Math.sin(a) * d, until: now + 2000 + Math.random() * 2000 });
+      const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180), a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
+      const d = r + 4 + Math.random() * Math.max(4, far * 0.8 - r - 4);
+      const x = Math.round(me.x + Math.cos(a) * d), y = Math.round(me.y + Math.sin(a) * d);
+      if (G.inBounds(x, y) && sightAt(game.map, me, x, y, { radius: r, view: cam, smokes: game.smokes }) === 'contour') {
+        mirages.push({ x, y, ang: Math.floor(Math.random() * 8) * (Math.PI / 4), until: now + 2000 + Math.random() * 2000 });
+      }
     }
     for (let k = mirages.length - 1; k >= 0; k--) {
-      if (now > mirages[k].until) { mirages.splice(k, 1); continue; }
-      drawGhost(mirageSprites, mirages[k].x, mirages[k].y);
+      const m = mirages[k];
+      if (now > m.until) { mirages.splice(k, 1); continue; }
+      drawContour(mirageSprites, m.x + 0.5, m.y + 0.5, m.ang, contourAlpha(Math.hypot(m.x - me.x, m.y - me.y), r, far));
     }
   }
 
