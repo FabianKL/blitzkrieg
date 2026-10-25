@@ -1,6 +1,12 @@
-// Gedeelde wereldweergave voor de gedetailleerde versies (1944, 1943, 1942, Koersk, Leningrad). Hier zit alles wat voor elke stijl hetzelfde is: verbinding, kaartschilder,
-// ronde randen van rots/water/begroeiing, sporen, minikaart, objectlaag, camera, tanks,
-// deeltjes, storm en meldingen. Een stijl levert alleen kleuren, tekeningen en zijn zijbalk.
+// Gedeelde wereldweergave voor alle maps (stijlen 1944, 1943, 1942). Hier zit alles wat voor elke
+// stijl hetzelfde is: verbinding, kaartschilder, ronde randen van rots/water/begroeiing, sporen,
+// minikaart, objectlaag, camera, tanks, deeltjes, storm en meldingen. Een stijl levert alleen
+// kleuren, tekeningen en zijn zijbalk.
+//
+// Tekenen gaat met PixiJS (WebGL) in lagen, zie L in startWorld. De gamestate is de enige bron:
+// de weergave leest hem elk frame uit en zet sprites en Graphics klaar. Wat duur is om te tekenen
+// (kaart, bomen, bases, tanks) wordt één keer met Canvas 2D getekend en als texture gebruikt;
+// van de kaart worden alleen gewijzigde tegels opnieuw geüpload.
 //
 // De kleuren van terrein, tunnels, rots, water en begroeiing komen uit de kaartconfiguratie
 // (config.js); een stijl legt er zijn eigen textuur overheen (p.ground() en p.shade(), zie onder).
@@ -18,22 +24,30 @@
 // De minikaart staat aan of uit via DISPLAY.minimap in config.js (of minimap per kaart);
 // staat hij uit, dan verdwijnen het canvas en alles met data-minimap op de pagina.
 //   mini(c, x, y)              kleur [r, g, b] van een cel op de minikaart
-//   objects: {draw(octx, x0, y0, x1, y1), over}   eigen laag met bomen e.d. in celmaten; over = boven de tanks
+//   objects: {draw(ctx, x0, y0, x1, y1), over}   eigen laag met bomen e.d. (Canvas 2D, in celmaten); over = boven de tanks
 //   afterTile, skipRepaint     doorgegeven aan de kaartschilder
 //   clouds, cloudAlpha         soorten rook/stof voor de deeltjes
-//   onMap(map), onEvent(e, spawn), drawUnder(ctx, cam, now), drawOver(ctx, cam, now)
-//   drawBase(ctx, base), drawTank(ctx, team, x, y, angle, now), tracer: [kleur staart, kleur kop]
+//   onMap(map), onEvent(e, spawn)
+//   drawUnder(g, cam, now)     extra's onder de tanks; g is een Pixi-Graphics in celmaten
+//   overlay(cam, now)          canvas dat over het hele speelveld komt (witte mist), of niets
+//   drawBase(ctx, base)        Canvas 2D in celmaten, één keer per kaart
+//   drawTank(ctx, team, x, y, angle, now)   Canvas 2D in celmaten, zonder schaduw; één keer per
+//                              ploeg (tankFrames plaatjes over tankPeriod ms als er iets beweegt)
+//   shadow: {color, alpha, dx, dy}   schaduw van tanks en bases (licht van linksboven)
+//   tracer: [kleur staart, kleur kop]
 //   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
 import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL } from '/shared/config.js';
 import { sightOf, lineOfSight, blocksSight, hintDirection, canHear, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
+import { autoDetectRenderer, Container, Graphics, Sprite } from 'pixi.js';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
-  drawEraser, eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, fitCanvas, camera,
-  smoothTankAngles, visibleCells, drawTracer, createParticles, createOverlay, statusOverlay, showBandwidth,
+  eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, camera,
+  smoothTankAngles, createOverlay, statusOverlay, showBandwidth,
 } from '/render-common.js';
+import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
 export const R = 6; // pixels per cel in de kaarttextuur
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
@@ -78,7 +92,13 @@ function crackLines(b) {
 export function startWorld(style) {
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
-  const ctx = canvas.getContext('2d');
+  // Lagen van onder naar boven: grond, markeringen, schaduwen, objecten, tanks, kruinen (bomen
+  // die over de tanks hangen), effecten, mist. De wereld staat in cellen (de camera schaalt en
+  // schuift hem); de UI-laag staat in schermpixels.
+  const stage = new Container(), world = stage.addChild(new Container());
+  const L = {};
+  for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
+  L.ui = stage.addChild(new Container());
   let game = null;
   let bases = [], rockField = null, fields = null;
   const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
@@ -395,6 +415,7 @@ export function startWorld(style) {
     if (specs && style.teamLook) {
       specs.forEach((spec, i) => { style.teams[i] = style.teamLook(spec, i); });
       style.onTeams?.();
+    clearTankTextures();
     }
     pal = makePalette(game.rules);
     view.colors = pal.hex;
@@ -409,6 +430,10 @@ export function startWorld(style) {
     style.onMap?.(map);
     for (let y = 0; y < G.H; y++) for (let x = 0; x < G.W; x++) paintMini(x, y);
     buildObjects();
+    groundTiles.use(painter.layer);
+    objTiles.use(objects);
+    buildBases();
+    clearTankTextures();
     buildLegend();
   }
 
@@ -532,10 +557,128 @@ export function startWorld(style) {
   if ($('net')) showBandwidth(game, $('net'));
   touchControls($('panel'), game);
 
-  // ---------- Tekenen ----------
-  fitCanvas(canvas, $('panel'));
-  let lastFrame = performance.now();
+  // ---------- Tekenen (PixiJS) ----------
+  // De lagen staan bovenaan (L). Hier de onderdelen per laag; drawWorld zet ze elk frame klaar
+  // vanuit de gamestate, daarna tekent Pixi alles in één keer.
+  const groundTiles = createTileSprites(L.ground, R, TILE);
+  const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
+  const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE);
+  const marks = L.marks.addChild(new Graphics());
+  const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
+  const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
+  const ghosts = spritePool(L.tanks.addChild(new Container()), TEX.soft);
+  const buried = L.tanks.addChild(new Graphics());
+  const effects = L.effects.addChild(new Graphics());
+  L.effects.addChild(particles.layer);
+  const smokes = spritePool(L.effects.addChild(new Container()), TEX.soft);
+  const sightSprite = L.fog.addChild(new Sprite());
+  const visionCanvas = document.createElement('canvas');
+  visionCanvas.width = visionCanvas.height = 512;
+  const visionSprite = L.fog.addChild(new Sprite(textureOf(visionCanvas)));
+  visionSprite.anchor.set(0.5);
+  const mirageSprites = spritePool(L.fog.addChild(new Container()), TEX.soft);
+  const lights = L.fog.addChild(new Graphics());
+  const overlaySprite = L.ui.addChild(new Sprite());
+  const eraserG = L.ui.addChild(new Graphics()), eraserLabel = createLabel(L.ui);
+  const hintSprites = spritePool(L.ui.addChild(new Container()), TEX.fadeX, (s) => s.anchor.set(0));
+  const hintCorners = spritePool(L.ui.addChild(new Container()), TEX.soft);
+  const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
+  // Schaduwen: dezelfde vorm in het zwart, iets verschoven (licht van linksboven)
+  const SHADOW = { dx: 0.45, dy: 0.6, color: 0x000000, alpha: 0.36, ...style.shadow };
+
+  // Tanks: per ploeg één keer getekend (neus naar rechts) als texture, daarna alleen gedraaid.
+  // Een stijl met een bewegend onderdeel (wimpel) heeft tankFrames plaatjes over tankPeriod ms.
+  const TANK_PX = 16, TANK_CELLS = 14;
+  const tankTex = new Map(); // `${ploeg}|${plaatje}` -> texture
+  function tankTexture(id, now) {
+    const frames = style.tankFrames || 1, period = style.tankPeriod || 1000;
+    const f = frames > 1 ? Math.floor((now / period) * frames) % frames : 0, key = `${id}|${f}`;
+    let tex = tankTex.get(key);
+    if (!tex) {
+      tex = drawnTexture(TANK_CELLS * TANK_PX, TANK_CELLS * TANK_PX, (g) => {
+        g.scale(TANK_PX, TANK_PX);
+        style.drawTank(g, style.teams[id], TANK_CELLS / 2, TANK_CELLS / 2, 0, (f / frames) * period);
+      });
+      tankTex.set(key, tex);
+    }
+    return tex;
+  }
+  function clearTankTextures() {
+    for (const t of tankTex.values()) t.destroy(true);
+    tankTex.clear();
+  }
+  const tankSprites = new Map(); // id -> {body, shadow}
+  function tankSprite(id) {
+    let s = tankSprites.get(id);
+    if (!s) {
+      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()) };
+      for (const k of [s.body, s.shadow]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
+      s.shadow.tint = SHADOW.color; s.shadow.alpha = SHADOW.alpha;
+      tankSprites.set(id, s);
+    }
+    return s;
+  }
+
+  // Bases: per kaart één keer getekend (de stijl tekent ze in celmaten), met schaduw
+  const BASE_PX = 12, BASE_PAD = 5;
+  function buildBases() {
+    for (const s of baseShadows.removeChildren()) s.destroy();
+    for (const s of baseLayer.removeChildren()) s.destroy(true);
+    for (const b of bases) {
+      if (!b) continue;
+      const x0 = b.x0 - BASE_PAD, y0 = b.y0 - BASE_PAD, w = b.x1 - b.x0 + 1 + 2 * BASE_PAD, h = b.y1 - b.y0 + 1 + 2 * BASE_PAD;
+      const tex = drawnTexture(w * BASE_PX, h * BASE_PX, (g) => { g.scale(BASE_PX, BASE_PX); g.translate(-x0, -y0); style.drawBase(g, b); });
+      const body = baseLayer.addChild(new Sprite(tex)), shadow = baseShadows.addChild(new Sprite(tex));
+      body.scale.set(1 / BASE_PX); shadow.scale.set(1 / BASE_PX);
+      body.position.set(x0, y0);
+      shadow.position.set(x0 + SHADOW.dx * 0.6, y0 + SHADOW.dy * 0.6); // laag: kortere schaduw
+      shadow.tint = SHADOW.color; shadow.alpha = SHADOW.alpha * 0.7;
+    }
+  }
+  // de letters op de bases hebben een webfont: opnieuw tekenen zodra dat geladen is
+  document.fonts?.ready.then(() => { if (game.map) buildBases(); });
+
+  // Kogel als lichtspoor met een felle kop
   const [tracerTail, tracerHead] = style.tracer || ['rgba(255, 170, 60, 0)', 'rgba(255, 220, 130, 1)'];
+  const tracerTex = drawnTexture(64, 4, (g) => {
+    const l = g.createLinearGradient(0, 0, 64, 0);
+    l.addColorStop(0, tracerTail); l.addColorStop(1, tracerHead);
+    g.fillStyle = l; g.fillRect(0, 0, 64, 4);
+  });
+  const tracers = spritePool(bulletLayer, tracerTex, (s) => s.anchor.set(1, 0.5)), heads = spritePool(bulletLayer, TEX.disc);
+  function drawBullets() {
+    tracers.begin(); heads.begin();
+    for (const b of game.bullets.values()) {
+      const [dx, dy] = G.DIRS[b.d], hx = b.rx + 0.5, hy = b.ry + 0.5;
+      const t = tracers.next();
+      t.position.set(hx, hy); t.rotation = Math.atan2(dy, dx);
+      t.scale.set((b.trail * Math.hypot(dx, dy)) / 64, 0.45 / 4);
+      const h = heads.next();
+      h.tint = 0xfff4cc; h.position.set(hx, hy); h.width = h.height = 0.66;
+    }
+    tracers.end(); heads.end();
+  }
+
+  // Tanks: de eigen altijd, tegenstanders scherp, als schim of helemaal niet (§9)
+  function drawTanks(now, cam) {
+    const me = eye();
+    ghosts.begin();
+    buried.clear();
+    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = false;
+    for (const [id, t] of game.tanks) {
+      if (!t.a || t.rx === undefined || t.ang === undefined) continue;
+      const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x: Math.round(t.rx), y: Math.round(t.ry), buried: t.b }, visionRadius(), cam, game.smokes);
+      t.seen = seen;
+      if (id === game.me && t.b) drawBuried(t);
+      else if (seen === 'sharp') {
+        const s = tankSprite(id), tex = tankTexture(id, now);
+        for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; }
+        s.body.position.set(t.rx + 0.5, t.ry + 0.5);
+        s.shadow.position.set(t.rx + 0.5 + SHADOW.dx, t.ry + 0.5 + SHADOW.dy);
+      } else if (seen === 'ghost') drawGhost(ghosts, t.rx + 0.5, t.ry + 0.5);
+    }
+    ghosts.end();
+  }
 
   function drawWorld(now, dt) {
     updateRenderPositions(game, now + clockOffset); // eigen tank voorspeld, de rest vloeiend uit de buffer
@@ -543,44 +686,73 @@ export function startWorld(style) {
     if (shake > 0) shake -= dt;
     const cam = view.cam = camera(game, canvas, style.viewCells, shake);
     painter.flush(cam);
+    world.scale.set(cam.Z);
+    world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
+    groundTiles.sync(cam);
+    objTiles.sync(cam);
 
-    ctx.setTransform(cam.Z, 0, 0, cam.Z, -cam.drawX * cam.Z, -cam.drawY * cam.Z);
-    ctx.imageSmoothingEnabled = true;
-    const { sx, sy, sw, sh } = visibleCells(cam);
-    painter.layer.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
-    if (objects && !style.objects.over) objects.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
-    style.drawUnder?.(ctx, cam, now);
+    marks.clear();
+    style.drawUnder?.(marks, cam, now);
     drawLandmarks();
     drawDepots();
     drawObjectsOfHazards(now);
+    drawBullets();
+    drawTanks(now, cam);
 
-    for (const b of bases) {
-      if (b && b.x1 + 3 >= cam.x && b.x0 - 3 <= cam.x + cam.w && b.y1 + 3 >= cam.y && b.y0 - 3 <= cam.y + cam.h) style.drawBase(ctx, b);
-    }
-    for (const b of game.bullets.values()) drawTracer(ctx, b, tracerTail, tracerHead);
-    // tanks: de eigen altijd, tegenstanders scherp, als schim of helemaal niet (§9)
-    const me = eye();
-    for (const [id, t] of game.tanks) {
-      if (!t.a || t.rx === undefined || t.ang === undefined) continue;
-      const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x: Math.round(t.rx), y: Math.round(t.ry), buried: t.b }, visionRadius(), cam, game.smokes);
-      t.seen = seen;
-      if (id === game.me && t.b) drawBuried(t);
-      else if (seen === 'sharp') style.drawTank(ctx, style.teams[id], t.rx + 0.5, t.ry + 0.5, t.ang, now);
-      else if (seen === 'ghost') drawGhost(t.rx + 0.5, t.ry + 0.5);
-    }
-    // objecten boven de tanks: takken hangen over tunnels en tanks heen
-    if (objects && style.objects.over) objects.drawRegion(ctx, sx, sy, sw, sh, sx, sy, sw, sh);
-
+    effects.clear();
     drawBarrage(now);
     drawFires(now);
     drawDust(now);
-    particles.draw(ctx, dt);
+    particles.update(dt);
     drawSmokes(now);
-    if (!DEBUG && me) { drawShadows(me, cam); drawFog(me, cam); drawMirages(me, cam, now); }
+    const me = eye(), fogOn = !DEBUG && !!me;
+    sightSprite.visible = visionSprite.visible = fogOn;
+    mirageSprites.begin();
+    if (fogOn) { drawShadows(me, cam); drawFog(me, cam); drawMirages(me, cam, now); }
+    mirageSprites.end();
     drawSearchlights(cam);
-    style.drawOver?.(ctx, cam, now);
-    if (style.eraser) drawEraser(ctx, canvas, eraserInfo(game), now, style.eraser);
+    drawStyleOverlay(cam, now);
+    drawEraser(now);
     drawHints(now);
+  }
+
+  // Een eigen stijllaag over het beeld (witte mist): de stijl geeft een canvas terug dat over
+  // het hele speelveld wordt uitgerekt, of niets
+  let overlayCanvas = null;
+  function drawStyleOverlay(cam, now) {
+    const c = style.overlay?.(cam, now);
+    overlaySprite.visible = !!c;
+    if (!c) return;
+    if (c !== overlayCanvas || overlaySprite.texture.width !== c.width || overlaySprite.texture.height !== c.height) {
+      if (overlayCanvas) overlaySprite.texture.destroy(true);
+      overlayCanvas = c;
+      overlaySprite.texture = textureOf(c);
+    } else overlaySprite.texture.source.update();
+    overlaySprite.width = canvas.width; overlaySprite.height = canvas.height;
+  }
+
+  // Sporenwisser (storm): waas en waaiende strepen over het hele beeld zolang hij woedt, en een
+  // melding bovenin (waarschuwing vooraf, aftellen tijdens). style.eraser: {name, haze, hazeAlpha, streak, banner}
+  function drawEraser(now) {
+    eraserG.clear();
+    const st = style.eraser, info = st && eraserInfo(game);
+    if (!info || (!info.active && !info.warn)) { eraserLabel.hide(); return; }
+    const W = canvas.width, H = canvas.height, s = devicePixelRatio || 1;
+    if (info.active) {
+      eraserG.rect(0, 0, W, H).fill({ color: tintOf(st.haze), alpha: st.hazeAlpha });
+      for (let i = 0; i < 140; i++) {
+        const speed = 0.35 + (i % 7) * 0.08, len = (18 + (i % 5) * 14) * s;
+        const x = ((i * 137.3 + now * speed * s) % (W + 200 * s)) - 100 * s;
+        const y = ((i * 71.9) % 100) / 100 * H + Math.sin(now / 900 + i) * 12 * s;
+        eraserG.moveTo(x, y).lineTo(x + len, y + len * 0.18).stroke({ color: tintOf(st.streak), alpha: 0.45, width: (1 + (i % 3)) * s, cap: 'round' });
+      }
+    }
+    const blink = !info.active && Math.floor(now / 400) % 2; // knipperen tijdens de waarschuwing
+    if (st.banner === false || blink) { eraserLabel.hide(); return; }
+    const name = st.name || info.label.toUpperCase();
+    const txt = info.active ? `${name} — NOG ${info.secs} S` : `${name} OVER ${info.secs} S`;
+    eraserLabel.set(txt, { size: 14 * s, pad: 10 * s, h: 26 * s, color: info.active ? 0xffd27a : 0xff8a5a, bg: 0x140e0a, alpha: 0.78 });
+    eraserLabel.at((W - eraserLabel.width) / 2, 12 * s);
   }
 
   // ---------- Zicht (§9) ----------
@@ -601,31 +773,40 @@ export function startWorld(style) {
     return null;
   }
   // Schim: een vage donkere vlek zonder details en zonder richting van de loop
-  function drawGhost(x, y) {
-    const g = ctx.createRadialGradient(x, y, 0.5, x, y, 4.5);
-    g.addColorStop(0, `rgba(12, 12, 14, ${FOG.ghostAlpha})`);
-    g.addColorStop(1, 'rgba(12, 12, 14, 0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+  function drawGhost(pool, x, y) {
+    const s = pool.next();
+    s.tint = 0x0c0c0e; s.alpha = FOG.ghostAlpha;
+    s.position.set(x, y); s.width = s.height = 9;
   }
   // Eigen bedekte tank: een hoopje sneeuw of zand met een vage omtrek
+  const burial = rgba(style.burialColor || 'rgba(236, 232, 220, 0.9)');
   function drawBuried(t) {
     const x = t.rx + 0.5, y = t.ry + 0.5;
-    ctx.fillStyle = style.burialColor || 'rgba(236, 232, 220, 0.9)';
-    ctx.beginPath(); ctx.ellipse(x, y, 4, 3.2, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(40, 40, 40, 0.35)'; ctx.lineWidth = 0.25;
-    ctx.beginPath(); ctx.ellipse(x, y, 3.4, 2.4, t.ang || 0, 0, Math.PI * 2); ctx.stroke();
+    buried.ellipse(x, y, 4, 3.2).fill(burial);
+    buried.save(); buried.translateTransform(x, y); buried.rotateTransform(t.ang || 0);
+    buried.ellipse(0, 0, 3.4, 2.4).stroke({ color: 0x282828, alpha: 0.35, width: 0.25 });
+    buried.restore();
   }
-  // Buiten de zichtstraal steeds vager en donkerder naar de rand van het venster
+  // Buiten de zichtstraal steeds vager en donkerder naar de rand van het venster. Het verloop
+  // staat op een canvas dat alleen opnieuw getekend wordt als de verhouding verandert.
+  let visionKey = '';
   function drawFog(me, cam) {
-    const r = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2 + Math.hypot(me.x + 0.5 - (cam.x + cam.w / 2), me.y + 0.5 - (cam.y + cam.h / 2));
-    const g = ctx.createRadialGradient(me.x + 0.5, me.y + 0.5, r, me.x + 0.5, me.y + 0.5, Math.max(r + 1, far));
+    const r = visionRadius(), far = Math.max(r + 1, Math.hypot(cam.w, cam.h) / 2 + Math.hypot(me.x + 0.5 - (cam.x + cam.w / 2), me.y + 0.5 - (cam.y + cam.h / 2)));
     const fade = game.weather?.flags.night ? 0.92 : FOG.fade; // 's nachts veel donkerder
-    g.addColorStop(0, 'rgba(8, 8, 10, 0)');
-    g.addColorStop(0.55, `rgba(8, 8, 10, ${fade * 0.6})`);
-    g.addColorStop(1, `rgba(8, 8, 10, ${fade})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(cam.x - 2, cam.y - 2, cam.w + 4, cam.h + 4);
+    const ratio = Math.round((r / far) * 400) / 400, key = `${ratio},${fade}`;
+    if (key !== visionKey) {
+      visionKey = key;
+      const g = visionCanvas.getContext('2d'), c = visionCanvas.width / 2;
+      const grad = g.createRadialGradient(c, c, c * ratio, c, c, c);
+      grad.addColorStop(0, 'rgba(8, 8, 10, 0)');
+      grad.addColorStop(0.55, `rgba(8, 8, 10, ${fade * 0.6})`);
+      grad.addColorStop(1, `rgba(8, 8, 10, ${fade})`);
+      g.clearRect(0, 0, 2 * c, 2 * c);
+      g.fillStyle = grad; g.fillRect(0, 0, 2 * c, 2 * c);
+      visionSprite.texture.source.update();
+    }
+    visionSprite.position.set(me.x + 0.5, me.y + 0.5);
+    visionSprite.width = visionSprite.height = 2 * far;
   }
   // Achter gebouwen en begroeiing wordt het terrein donkerder: per 2 cellen een straal vanaf
   // je tank; opnieuw uitgerekend als je verplaatst of de kaart verandert
@@ -638,7 +819,8 @@ export function startWorld(style) {
     const now = performance.now();
     if (key !== shadowKey && now - shadowAt > 80) {
       shadowKey = key; shadowAt = now;
-      if (shadowCanvas.width !== gw || shadowCanvas.height !== gh) { shadowCanvas.width = gw; shadowCanvas.height = gh; }
+      const resized = shadowCanvas.width !== gw || shadowCanvas.height !== gh;
+      if (resized) { shadowCanvas.width = gw; shadowCanvas.height = gh; }
       const img = shctx.createImageData(gw, gh), a = Math.round(FOG.shadow * 255);
       for (let j = 0; j < gh; j++) {
         for (let i = 0; i < gw; i++) {
@@ -651,23 +833,26 @@ export function startWorld(style) {
         }
       }
       shctx.putImageData(img, 0, 0);
-      shadowCanvas.x0 = x0; shadowCanvas.y0 = y0;
+      if (resized || !sightSprite.texture.source.resource) {
+        if (sightSprite.texture.source.resource) sightSprite.texture.destroy(true);
+        sightSprite.texture = textureOf(shadowCanvas);
+      } else sightSprite.texture.source.update();
+      sightSprite.position.set(x0 - SH / 2, y0 - SH / 2);
+      sightSprite.width = gw * SH; sightSprite.height = gh * SH;
     }
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(shadowCanvas, shadowCanvas.x0 - SH / 2, shadowCanvas.y0 - SH / 2, shadowCanvas.width * SH, shadowCanvas.height * SH);
   }
   // Rook: blokkeert het zicht zolang hij hangt (game.smokes, van de server)
   function drawSmokes(now) {
+    smokes.begin();
     for (const s of game.smokes) {
       for (let k = 0; k < 5; k++) {
         const a = k * 1.3 + now / 3000, x = s.x + Math.cos(a) * s.r * 0.4, y = s.y + Math.sin(a * 1.3) * s.r * 0.35;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, s.r * 0.75);
-        g.addColorStop(0, 'rgba(70, 68, 64, 0.55)');
-        g.addColorStop(1, 'rgba(70, 68, 64, 0)');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(x, y, s.r * 0.75, 0, Math.PI * 2); ctx.fill();
+        const p = smokes.next();
+        p.tint = 0x464440; p.alpha = 0.55;
+        p.position.set(x, y); p.width = p.height = s.r * 1.5;
       }
     }
+    smokes.end();
   }
 
   // ---------- Richtingshints (§8): gloed aan de rand in één van 8 richtingen ----------
@@ -677,29 +862,27 @@ export function startWorld(style) {
     if (!me) return;
     hints.push({ dir: hintDirection(x - me.x, y - me.y), t0: performance.now() });
   }
+  // zijde: [positie, draaiing, lengte] van het verloop (vol aan de rand, naar binnen weg)
+  const HINT_SIDES = (W, H) => [[W, 0, Math.PI / 2, W], [W, H, Math.PI, H], [0, H, -Math.PI / 2, W], [0, 0, 0, H]];
   function drawHints(now) {
     const W = canvas.width, H = canvas.height, d = Math.min(W, H) * 0.16;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    hintSprites.begin(); hintCorners.begin();
     for (let k = hints.length - 1; k >= 0; k--) {
       const age = (now - hints[k].t0) / 1000;
       if (age > HINTS.glowSeconds) { hints.splice(k, 1); continue; }
       const alpha = 0.75 * (age < 0.25 ? age / 0.25 : 1 - (age - 0.25) / (HINTS.glowSeconds - 0.25)); // oplichten en doven
-      const dir = hints[k].dir, col = (a) => `rgba(255, 70, 40, ${a})`;
-      let g;
+      const dir = hints[k].dir;
       if (dir % 2 === 0) { // een zijde
-        const [x0, y0, x1, y1] = [[0, 0, 0, d], [W, 0, W - d, 0], [0, H, 0, H - d], [0, 0, d, 0]][dir / 2];
-        g = ctx.createLinearGradient(x0, y0, x1, y1);
-        g.addColorStop(0, col(alpha)); g.addColorStop(1, col(0));
-        ctx.fillStyle = g;
-        if (dir === 0) ctx.fillRect(0, 0, W, d); else if (dir === 2) ctx.fillRect(W - d, 0, d, H); else if (dir === 4) ctx.fillRect(0, H - d, W, d); else ctx.fillRect(0, 0, d, H);
+        const [x, y, rot, len] = HINT_SIDES(W, H)[dir / 2], s = hintSprites.next();
+        s.position.set(x, y); s.rotation = rot; s.scale.set(d / 64, len / 4);
+        s.tint = 0xff4628; s.alpha = alpha;
       } else { // een hoek
-        const [cx, cy] = [[W, 0], [W, H], [0, H], [0, 0]][(dir - 1) / 2];
-        g = ctx.createRadialGradient(cx, cy, 0, cx, cy, d * 2.2);
-        g.addColorStop(0, col(alpha)); g.addColorStop(1, col(0));
-        ctx.fillStyle = g;
-        ctx.fillRect(cx ? W - d * 2.2 : 0, cy ? H - d * 2.2 : 0, d * 2.2, d * 2.2);
+        const [cx, cy] = [[W, 0], [W, H], [0, H], [0, 0]][(dir - 1) / 2], s = hintCorners.next();
+        s.position.set(cx, cy); s.width = s.height = d * 4.4;
+        s.tint = 0xff4628; s.alpha = alpha;
       }
     }
+    hintSprites.end(); hintCorners.end();
   }
   // Welke gebeurtenissen geven een hint? Geluiden van een tegenstander binnen gehoorafstand,
   // grote gebeurtenissen (e.t === 'hint') overal.
@@ -714,16 +897,27 @@ export function startWorld(style) {
     } else if (e.t === 'hint' && e.i !== game.me) addHint(e.x, e.y); // groot: overal te zien
   }
 
+  // ---------- Renderer en beeldlus ----------
+  // Pixi tekent op het canvas #game, in schermpixels (devicePixelRatio zit in de maat zelf).
+  let renderer = null, lastFrame = performance.now();
+  const panel = $('panel');
+  const panelSize = () => [Math.max(1, Math.round(panel.clientWidth * (devicePixelRatio || 1))), Math.max(1, Math.round(panel.clientHeight * (devicePixelRatio || 1)))];
+  autoDetectRenderer({ canvas, preference: 'webgl', width: panelSize()[0], height: panelSize()[1], resolution: 1, antialias: true, background: style.background })
+    .then((r) => {
+      renderer = r;
+      new ResizeObserver(() => renderer.resize(...panelSize())).observe(panel);
+      requestAnimationFrame(frame);
+    });
+
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = style.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    world.visible = L.ui.visible = !!game.map;
     if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawMinimap(); }
     style.hud?.(now);
     if (game.status === 'playing') gameOverlay();
+    renderer.render(stage);
   }
 
   // Brandstofdepot: een stapel jerrycans; leeg = grijs en omgevallen
@@ -731,11 +925,11 @@ export function startWorld(style) {
     for (const [x, y, full] of game.depots) {
       for (let k = 0; k < 4; k++) {
         const cx = x - 1.6 + (k % 2) * 1.9, cy = y - 1.4 + Math.floor(k / 2) * 2.1;
-        ctx.fillStyle = full ? '#4e6b2a' : '#6a6a64';
-        ctx.save(); ctx.translate(cx, cy); if (!full) ctx.rotate(0.6 * (k - 1.5));
-        ctx.fillRect(-0.8, -1, 1.6, 2);
-        ctx.fillStyle = full ? '#c9b26a' : '#9a9a92'; ctx.fillRect(-0.3, -1.3, 0.6, 0.35);
-        ctx.restore();
+        marks.save(); marks.translateTransform(cx, cy);
+        if (!full) marks.rotateTransform(0.6 * (k - 1.5));
+        marks.rect(-0.8, -1, 1.6, 2).fill(full ? 0x4e6b2a : 0x6a6a64);
+        marks.rect(-0.3, -1.3, 0.6, 0.35).fill(full ? 0xc9b26a : 0x9a9a92);
+        marks.restore();
       }
     }
   }
@@ -745,54 +939,52 @@ export function startWorld(style) {
     if (!b) return;
     const [x0, y0, x1, y1] = b.box, p = 0.5 + 0.5 * Math.sin(now / 70);
     if (b.kind === 'art') { // §10.9: het vak licht op
-      ctx.fillStyle = `rgba(255, 240, 180, ${0.12 + 0.18 * p})`;
-      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xfff0b4, alpha: 0.12 + 0.18 * p });
       return;
     }
-    ctx.fillStyle = `rgba(255, 120, 40, ${0.08 + 0.12 * p})`;
-    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    ctx.strokeStyle = `rgba(255, 90, 30, ${0.5 + 0.4 * p})`; ctx.lineWidth = 0.5;
-    ctx.setLineDash([1.5, 1]); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); ctx.setLineDash([]);
+    effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xff7828, alpha: 0.08 + 0.12 * p });
+    // gestippelde rand: streepjes van 1,5 met gaten van 1
+    for (const [ax, ay, bx, by] of [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]]) {
+      const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
+      for (let t = 0; t < len; t += 2.5) effects.moveTo(ax + ux * t, ay + uy * t).lineTo(ax + ux * Math.min(len, t + 1.5), ay + uy * Math.min(len, t + 1.5));
+    }
+    effects.stroke({ color: 0xff5a1e, alpha: 0.5 + 0.4 * p, width: 0.5 });
     for (let k = 0; k < 10; k++) { // trillende boomtoppen
       const x = x0 + ((k * 7.3) % (x1 - x0)), y = y0 + ((k * 4.1) % (y1 - y0));
       if (at(Math.round(x), Math.round(y)) !== G.VEG) continue;
-      ctx.fillStyle = 'rgba(30, 50, 30, 0.5)';
-      ctx.beginPath(); ctx.arc(x + Math.sin(now / 40 + k) * 0.6, y, 1.4, 0, Math.PI * 2); ctx.fill();
+      effects.circle(x + Math.sin(now / 40 + k) * 0.6, y, 1.4).fill({ color: 0x1e321e, alpha: 0.5 });
     }
   }
 
   // Gevaren en schaarse middelen die als ding op de kaart staan
-  function drawObjectsOfHazards(now) {
+  function drawObjectsOfHazards() {
     if (game.ammoDepot) { // munitiekisten (Grebbeberg)
       const [x, y] = game.ammoDepot;
       for (let k = 0; k < 3; k++) {
-        ctx.fillStyle = '#6a5a2a'; ctx.fillRect(x - 3 + k * 2.2, y - 1, 1.8, 1.4);
-        ctx.fillStyle = '#c9a43a'; ctx.fillRect(x - 3 + k * 2.2, y - 1, 1.8, 0.35);
+        marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 1.4).fill(0x6a5a2a);
+        marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 0.35).fill(0xc9a43a);
       }
     }
     for (const c of game.crates) { // krat aan een parachute (Market Garden)
       if (!c) continue;
       const [x, y, kind, full] = c;
       if (full) {
-        ctx.strokeStyle = 'rgba(240, 240, 230, 0.8)'; ctx.lineWidth = 0.2;
-        ctx.beginPath(); ctx.arc(x, y - 2.5, 2.2, Math.PI, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x - 2.2, y - 2.5); ctx.lineTo(x, y); ctx.lineTo(x + 2.2, y - 2.5); ctx.stroke();
+        marks.arc(x, y - 2.5, 2.2, Math.PI, 0).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
+        marks.moveTo(x - 2.2, y - 2.5).lineTo(x, y).lineTo(x + 2.2, y - 2.5).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
       }
-      ctx.fillStyle = full ? (kind === 'fuel' ? '#4e6b2a' : '#8a6a2a') : '#6a6a64';
-      ctx.fillRect(x - 1.2, y - 1, 2.4, 2);
+      marks.rect(x - 1.2, y - 1, 2.4, 2).fill(full ? (kind === 'fuel' ? 0x4e6b2a : 0x8a6a2a) : 0x6a6a64);
     }
     for (const g of game.guns) { // antitankgeschut (Carentan), zichtbaar na het eerste schot
-      ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.ang);
-      ctx.fillStyle = g.hp > 0 ? '#4a4a3a' : '#2a2a26';
-      ctx.fillRect(-1.5, -1.2, 3, 2.4);
-      ctx.fillRect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5);
-      ctx.restore();
+      const col = g.hp > 0 ? 0x4a4a3a : 0x2a2a26;
+      marks.save(); marks.translateTransform(g.x, g.y); marks.rotateTransform(g.ang);
+      marks.rect(-1.5, -1.2, 3, 2.4).fill(col);
+      marks.rect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5).fill(col);
+      marks.restore();
     }
     const br = game.bridge;
     if (br?.blown) { // wrak van de brug
       const [x0, y0, x1, y1] = br.box;
-      ctx.fillStyle = 'rgba(60, 50, 40, 0.8)';
-      for (let k = 0; k < 6; k++) ctx.fillRect(x0 + ((x1 - x0) * k) / 6, (y0 + y1) / 2 - 1 + ((k % 2) * 2 - 1), (x1 - x0) / 8, 1.2);
+      for (let k = 0; k < 6; k++) marks.rect(x0 + ((x1 - x0) * k) / 6, (y0 + y1) / 2 - 1 + ((k % 2) * 2 - 1), (x1 - x0) / 8, 1.2).fill({ color: 0x3c3228, alpha: 0.8 });
     }
   }
   // Brandend graan (Koersk): vlammen op de brandende vakken
@@ -803,13 +995,12 @@ export function startWorld(style) {
       const x = (tile % tw) * G.T, y = ((tile / tw) | 0) * G.T;
       for (let k = 0; k < 4; k++) {
         const fx = x + 1 + ((k * 1.7) % 3.5), fy = y + 1 + ((k * 2.3) % 3.5), f = 0.6 + 0.4 * Math.sin(now / 90 + k * 1.9 + tile);
-        ctx.fillStyle = `rgba(255, ${120 + 80 * f}, 40, 0.85)`;
-        ctx.beginPath(); ctx.arc(fx, fy, 0.8 + 0.5 * f, 0, Math.PI * 2); ctx.fill();
+        effects.circle(fx, fy, 0.8 + 0.5 * f).fill({ color: (255 << 16) | (Math.round(120 + 80 * f) << 8) | 40, alpha: 0.85 });
       }
     }
   }
   // Stofwolk achter tanks die over harde grond rijden (Barbarossa, zomer)
-  function drawDust(now) {
+  function drawDust() {
     if (!game.weather?.flags.dust) return;
     for (const [id, t] of game.tanks) {
       if (!t.a || t.rx === undefined || (id !== game.me && t.seen !== 'sharp')) continue;
@@ -820,19 +1011,19 @@ export function startWorld(style) {
     }
   }
   // Zoeklichten (Oder-front): bundels vanaf de rechterrand; daarin is alles licht
-  function drawSearchlights(cam) {
+  function drawSearchlights() {
+    lights.clear();
     const cfg = game.weather?.flags.searchlights;
     if (!cfg) return;
     const half = (cfg.widthT * G.T) / 2;
     for (const b of searchlightBeams(cfg, game.tick - game.mapTick)) {
-      const L = G.W * 1.3, c = Math.cos(b.ang), s = Math.sin(b.ang);
-      ctx.fillStyle = 'rgba(255, 250, 210, 0.16)';
-      ctx.beginPath();
-      ctx.moveTo(b.x0 - s * half, b.y0 + c * half);
-      ctx.lineTo(b.x0 + c * L - s * half * 1.6, b.y0 + s * L + c * half * 1.6);
-      ctx.lineTo(b.x0 + c * L + s * half * 1.6, b.y0 + s * L - c * half * 1.6);
-      ctx.lineTo(b.x0 + s * half, b.y0 - c * half);
-      ctx.fill();
+      const Lb = G.W * 1.3, c = Math.cos(b.ang), s = Math.sin(b.ang);
+      lights.poly([
+        b.x0 - s * half, b.y0 + c * half,
+        b.x0 + c * Lb - s * half * 1.6, b.y0 + s * Lb + c * half * 1.6,
+        b.x0 + c * Lb + s * half * 1.6, b.y0 + s * Lb - c * half * 1.6,
+        b.x0 + s * half, b.y0 - c * half,
+      ]).fill({ color: 0xfffad2, alpha: 0.16 });
     }
   }
   // Woestijnhallucinaties (El Alamein): buiten je zichtstraal soms een valse schim; per speler
@@ -849,7 +1040,7 @@ export function startWorld(style) {
     }
     for (let k = mirages.length - 1; k >= 0; k--) {
       if (now > mirages[k].until) { mirages.splice(k, 1); continue; }
-      drawGhost(mirages[k].x, mirages[k].y);
+      drawGhost(mirageSprites, mirages[k].x, mirages[k].y);
     }
   }
 
@@ -857,9 +1048,7 @@ export function startWorld(style) {
   function drawLandmarks() {
     for (const l of game.landmarks) {
       if (at(Math.round(l.x), Math.round(l.y)) !== G.BUILDING) continue;
-      ctx.fillStyle = 'rgba(40, 36, 30, 0.85)';
-      ctx.fillRect(l.x - 0.6, l.y - 3.5, 1.2, 7);
-      ctx.fillRect(l.x - 2.2, l.y - 1.8, 4.4, 1.2);
+      marks.rect(l.x - 0.6, l.y - 3.5, 1.2, 7).rect(l.x - 2.2, l.y - 1.8, 4.4, 1.2).fill({ color: 0x28241e, alpha: 0.85 });
     }
   }
 
@@ -878,39 +1067,28 @@ export function startWorld(style) {
   }
   // Meter van de kaart (zand, motorwarmte, temperatuur) boven het rondelabel
   function drawGauge() {
+    gaugeG.clear();
     const m = game.rules.meter, self = game.tanks.get(game.me);
-    if (!m || !self) return;
+    if (!m || !self) { gaugeLabel.hide(); return; }
     const s = devicePixelRatio || 1, x = 8 * s, y = canvas.height - 58 * s, w = 180 * s, h = 22 * s, v = (self.g ?? 0) / 100;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = 'rgba(16, 12, 8, 0.7)'; ctx.fillRect(x, y, w, h);
     const warn = m.danger !== undefined && (m.low ? self.g <= m.danger : self.g >= m.danger);
-    ctx.fillStyle = warn ? '#e0533a' : m.color || '#e0b040';
-    ctx.fillRect(x + 4 * s, y + 4 * s, (w - 8 * s) * v, h - 8 * s);
-    ctx.fillStyle = '#f0e6c8'; ctx.font = `bold ${11 * s}px monospace`; ctx.textBaseline = 'middle';
-    ctx.fillText(`${m.label.toUpperCase()} ${self.g ?? 0}`, x + 8 * s, y + h / 2);
-    ctx.textBaseline = 'alphabetic';
+    gaugeG.rect(x, y, w, h).fill({ color: 0x100c08, alpha: 0.7 });
+    gaugeG.rect(x + 4 * s, y + 4 * s, (w - 8 * s) * v, h - 8 * s).fill(warn ? 0xe0533a : m.color || 0xe0b040);
+    gaugeLabel.set(`${m.label.toUpperCase()} ${self.g ?? 0}`, { size: 11 * s, pad: 8 * s, h });
+    gaugeLabel.at(x, y);
   }
 
   // Rondenummer en hoe je wint, linksonder in beeld
   function drawRoundLabel() {
-    const players = game.tanks.size;
-    const goal = G.scoreMode(players) === 'rounds' ? `${G.GAME.roundsToWin} RONDES WINT` : `${G.GAME.killsToWin} KILLS WINT`;
-    const txt = `RONDE ${game.game.round} · ${goal}`, s = devicePixelRatio || 1;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.font = `bold ${12 * s}px monospace`;
-    const w = ctx.measureText(txt).width + 16 * s;
-    ctx.fillStyle = 'rgba(16, 12, 8, 0.7)';
-    ctx.fillRect(8 * s, canvas.height - 30 * s, w, 22 * s);
-    ctx.fillStyle = '#f0e6c8';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(txt, 16 * s, canvas.height - 19 * s);
-    ctx.textBaseline = 'alphabetic';
+    const goal = G.scoreMode(game.tanks.size) === 'rounds' ? `${G.GAME.roundsToWin} RONDES WINT` : `${G.GAME.killsToWin} KILLS WINT`;
+    const s = devicePixelRatio || 1;
+    roundLabel.set(`RONDE ${game.game.round} · ${goal}`, { size: 12 * s, pad: 8 * s, h: 22 * s });
+    roundLabel.at(8 * s, canvas.height - 30 * s);
   }
-  requestAnimationFrame(frame);
 
   // Wat een stijl nodig heeft voor zijn zijbalk en effecten
   const view = {
-    game, canvas, ctx,
+    game, canvas,
     cam: { x: 0, y: 0, w: 0, h: 0, Z: 1, drawX: 0, drawY: 0 },
     at,
     get bases() { return bases; },
