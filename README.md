@@ -118,7 +118,8 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
 
 ## Testen
 ```
-npm test            # alle tests (testserver met vaste kaart, snelle weerklok, 2 rondes om te winnen)
+npm test            # alle tests (testserver met vaste kaart, snelle weerklok, 2 rondes om te winnen;
+                    # tests zonder server lopen tegelijk in worker-threads, ~1,5 minuut)
 npm test -- ijs     # alleen tests met 'ijs' in de naam
 npm run test:gen    # de grote generatietest: elke map 100 keer, 4 groottes, 2/3/4 spelers
 npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
@@ -178,7 +179,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `hazards.js` | Gevaren, schaarse middelen en meters (alleen server; die gooit de dobbelsteen). |
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
-| `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, weer, `look`, minikaart, legenda en tankkaart. |
+| `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
+| `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld). |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
 | `public/render-common.js` | Kaartschilder (tegelcanvassen), camera, kleuren en ruis, gedeelde tekeningen. |
 | `public/styles/` | De stijlen: `zomer.js`, `winter.js`, `woestijn.js` (tekenen) met hun thema `.css`, en `view.css` (opbouw van speelveld en zijpaneel). |

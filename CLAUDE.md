@@ -43,7 +43,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   Bij een kaart met een andere stijl ruimt `shell.js` de weergave op (`view.destroy()`: beeldlus,
   renderer, WebGL-context) en start hij de nieuwe op een nieuw canvas. Geen iframe meer.
 - **Weergave**: `public/world-view.js` doet alles wat de stijlen gemeen hebben: kaartschilder per
-  tegel, zicht en mist, hints, objecten, de minikaart en de legenda. Tekenen gaat met **PixiJS** in
+  tegel, zicht en mist, hints, objecten en tanks; het zijpaneel (minikaart, legenda, tankkaart) staat
+  in `public/view/side-panel.js`, gevaren en laadplekken in beeld in `public/view/hazards-view.js`. Tekenen gaat met **PixiJS** in
   lagen (`L` in `startWorld`); de gamestate is de enige bron, de weergave leest hem elk frame uit.
   Kaart- en objecttegels, bases en tanks worden met Canvas 2D één keer getekend en als texture
   gebruikt. Een stijl levert alleen kleuren per pixel, tanks (zonder schaduw), bases, effecten en
@@ -103,7 +104,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - `npm start` draait op poort 3000; dat gebruikt de eigenaar zelf. Previews in Claude Code draaien op
   **poort 3100** (`.claude/launch.json`, die staat niet in git: zie hieronder). Gebruik nooit poort
   3000 voor je eigen server.
-- `npm test` draait alle tests met een eigen testserver (vaste seed, snelle weerklok). Draai je twee
+- `npm test` draait alle tests met een eigen testserver (vaste seed, snelle weerklok); tests zonder
+  server (`run()` zonder poort) lopen tegelijk in worker-threads. Draai je twee
   runs tegelijk, zet dan `TEST_PORT=39xx`. `npm test -- woord` draait alleen tests met dat woord in de naam.
 - `npm run test:gen -- <map> <aantal>` is de grote generatietest (duurt lang; draai die op de achtergrond).
 - Na een wijziging aan de kaartmaker: draai minstens `npm run test:gen -- "" 10` (alle maps, 10 seeds).
