@@ -145,6 +145,7 @@ export function createFieldSampler(R) {
 // Een kaartlaag in losse canvassen van TILE x TILE cellen (TP pixels per zijde). Eén groot
 // canvas kan op een grote kaart niet als textuur naar de videokaart (te groot), en zo hoeft
 // bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
+export const R = 6; // pixels per cel in de kaarttextuur
 export const TILE = 32;
 export function createTileCanvases(R) {
   const TP = TILE * R, TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
@@ -338,6 +339,18 @@ export function createOverlay(el) {
     key = k;
     el.innerHTML = big ? `<div class="big">${big}</div><div class="small">${small}</div>` : '';
   };
+}
+
+// Brandstof (B) en munitie (M) halen: badge op de kaart, vakje op de minikaart en in de legenda
+export const REFILL_COLORS = { fuel: '#e0b02a', ammo: '#d8572e' };
+// Het B- of M-vakje (legenda, en de badge boven een laadplek op de kaart)
+export function paintRefillIcon(canvas, kind) {
+  const g = canvas.getContext('2d'), n = canvas.width;
+  g.fillStyle = '#000'; g.fillRect(0, 0, n, n);
+  g.fillStyle = REFILL_COLORS[kind]; g.fillRect(2, 2, n - 4, n - 4);
+  g.fillStyle = 'rgba(0, 0, 0, 0.85)'; g.font = `bold ${Math.round(n * 0.6)}px sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(kind === 'fuel' ? 'B' : 'M', n / 2, n / 2 + 1);
 }
 
 // Vuur en vonken bij explosies: in elke stijl dezelfde kleuren
