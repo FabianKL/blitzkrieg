@@ -13,6 +13,15 @@ wordt. Is poort 3000 bezet, start dan op een andere: `PORT=3001 npm start` (Powe
 Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging. Terug in je eigen basis
 tank, repareer en herlaad je.
 
+Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de knoppen verschijnen bij
+de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
+richtingen), rechterhelft = vuren, het K-rondje bovenin 1 s vasthouden = zelfvernietiging. Staand
+krijg je "draai je scherm". Op een telefoon (liggend, lager dan 500 px) is het zijpaneel een kleine
+HUD rechtsboven: je tankkaart en de minikaart, zonder legenda. Volledig scherm: de knop ⛶ in de
+balk (Android zet het scherm dan ook liggend vast), of "Zet op beginscherm" / "Toevoegen aan
+startscherm" in de browser: dan opent het spel zonder browserbalken. `/retro` heeft geen
+touchbesturing.
+
 Rechts staat op elke map hetzelfde: je tank (zeges en meters), de minikaart (terrein, je eigen basis,
 je eigen tank en waar je brandstof (B) of munitie (M) haalt; geen tunnels, andere bases of tanks) en
 de legenda van de map.
@@ -105,6 +114,8 @@ Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwi
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, en de weergave in een iframe. |
 | `public/world-view.js` | Gedeelde wereldweergave: kaart, zicht, hints, objecten, weer. |
 | `public/1944.js`, `1943.js`, `1942.js` + `.html` | Stijlen zomer, winter en woestijn. |
+| `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van de stijlpagina's. |
+| `public/manifest.webmanifest`, `icon.svg` | Op het beginscherm zetten: volledig scherm, liggend. |
 | `public/retro.html`, `client.js` | Het originele Tunneler. |
 | `tests/` | `run.mjs`, `tests.mjs`, `maps.mjs`, `acceptance.mjs`, `gen.mjs`, `gen-checks.mjs`, `helpers.mjs`. |
 

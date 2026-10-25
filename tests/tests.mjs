@@ -121,6 +121,29 @@ function fakeRoom(id, size = 'middel') {
 export const tests = [
   ...mapTests,
   {
+    name: 'touch: joystick geeft 8 richtingen, dode zone in het midden',
+    async run() {
+      const dz = G.TOUCH.deadZone;
+      const eq = (a, b) => a[0] === b[0] && a[1] === b[1];
+      check(eq(G.stickDirection(0, 0), [0, 0]), 'stilstaande duim rijdt');
+      check(eq(G.stickDirection(dz * 0.9, 0), [0, 0]), 'binnen de dode zone rijdt de tank');
+      check(eq(G.stickDirection(dz * 1.1, 0), [1, 0]), 'net buiten de dode zone rijdt de tank niet');
+      // elke richting van DIRS, ook op ±20° ernaast (binnen de 45° van die richting)
+      for (const [dx, dy] of G.DIRS) {
+        const a = Math.atan2(dy, dx);
+        for (const off of [0, 0.35, -0.35]) {
+          const got = G.stickDirection(Math.cos(a + off), Math.sin(a + off));
+          check(eq(got, [dx, dy]), `hoek naar (${dx}, ${dy}) ${off ? 'met afwijking ' : ''}gaf (${got})`);
+        }
+      }
+      // grens tussen noord en noordoost ligt op 22,5°
+      const b = Math.PI / 8;
+      check(eq(G.stickDirection(Math.sin(b - 0.02), -Math.cos(b - 0.02)), [0, -1]), 'net voor 22,5° is niet noord');
+      check(eq(G.stickDirection(Math.sin(b + 0.02), -Math.cos(b + 0.02)), [1, -1]), 'net na 22,5° is niet noordoost');
+      return '8 richtingen, dode zone en sectorgrenzen kloppen';
+    },
+  },
+  {
     name: 'draaien naast een boom of rots: de tank schuift op en zit nooit klem',
     async run() {
       const out = [];

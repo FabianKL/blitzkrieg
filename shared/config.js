@@ -41,6 +41,12 @@ export const FOG = { fade: 0.62, shadow: 0.35, ghostAlpha: 0.45 };
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
 
+// Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)
+// moet je duim schuiven voor de tank rijdt, zodat een rustende duim niet kruipt. stickRadius in
+// CSS-pixels: verder slepen telt niet meer (de voet schuift mee). selfDestructMs: zo lang
+// vasthouden voor zelfvernietiging, zodat je hem niet per ongeluk raakt.
+export const TOUCH = { deadZone: 0.3, stickRadius: 60, selfDestructMs: 1000 };
+
 // Kogels (§5.8): dig = kogels graven een krater in de grond en stoppen daar (zoals het originele
 // Tunneler). Standaard niet: ze vliegen over grond en water tot een tank, begroeiing, gebouw,
 // rots of muur. Een kaart kan dit overschrijven met bulletsDig. De krater van een

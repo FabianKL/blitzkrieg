@@ -2,7 +2,13 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Op het beginscherm zetten (iPad, Android): zonder browserbalken, liggend -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>BLITZKRIEG</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,6 +38,24 @@
     a { color: var(--dim); font-size: 12px; }
     iframe { flex: 1; width: 100%; border: 0; display: block; background: var(--bg); }
     @media (max-width: 900px) { h1 .rest { display: none; } }
+    html, body { overscroll-behavior: none; }
+    #full { padding: 4px 10px; }
+    /* staand op tablet of telefoon: eerst draaien */
+    .rotate {
+      display: none; position: fixed; inset: 0; z-index: 10; background: var(--bg);
+      flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+    }
+    .rotate b { font: 400 28px/1.2 "Black Ops One", Impact, sans-serif; letter-spacing: 3px; color: var(--red); }
+    @media (orientation: portrait) and (pointer: coarse) { .rotate { display: flex; } }
+    /* telefoon liggend: zo weinig mogelijk balk, de rest is speelveld */
+    @media (pointer: coarse) and (max-height: 500px) {
+      .bar { padding: 3px 8px; gap: 8px; flex-wrap: nowrap; }
+      h1 { font-size: 16px; letter-spacing: 2px; }
+      h1 .rest, .bar a { display: none; }
+      label { font-size: 10px; }
+      select, button { font-size: 11px; padding: 2px 4px; }
+      .info { font-size: 10px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+    }
   </style>
 </head>
 <body>
@@ -42,9 +66,11 @@
     <label>KAART <select id="size"></select></label>
     <button id="start" hidden>START</button>
     <span class="info" id="info">verbinden…</span>
+    <button id="full" hidden title="volledig scherm">⛶</button>
     <a href="/retro">retro</a>
   </div>
   <iframe id="view" title="Speelveld"></iframe>
+  <div class="rotate"><b>DRAAI JE SCHERM</b>BLITZKRIEG speel je liggend.</div>
   <script type="module" src="/shell.js"></script>
 </body>
 </html>

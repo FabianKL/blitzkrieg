@@ -62,7 +62,12 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   tank, je eigen basis, het terrein en brandstof/munitie op: geen tunnels, sporen, andere bases of
   andere tanks.
 - **Zijpaneel is op elke map hetzelfde:** je tankkaart (zonder "jij"), dan de minikaart, dan de
-  legenda. Verder niets.
+  legenda. Verder niets. Uitzondering: op een liggende telefoon (`pointer: coarse` en hoogte ≤ 500 px)
+  wordt het een kleine HUD rechtsboven (tankkaart + minikaart, geen legenda), via `touch.css`.
+- **Touchbesturing** (iPad en Android, `public/touch.js`): zwevende joystick op de linkerhelft,
+  vuren op de rechterhelft, K = vasthouden. Alleen liggend (staand: "draai je scherm"). Alleen op de
+  spelpagina, niet op `/retro`. Touch is een tweede invoerbron in `net.js` (`game.touch`), de server
+  merkt er niets van. Getallen in `TOUCH` (config.js).
 
 ## Werken en testen
 - `npm start` draait op poort 3000; dat gebruikt de eigenaar zelf. Previews in Claude Code draaien op
