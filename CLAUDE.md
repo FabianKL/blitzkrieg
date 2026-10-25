@@ -4,6 +4,19 @@ Tankspel voor 2–4 spelers in het lokale netwerk, gebaseerd op het oude Tunnele
 De eigenaar speelt het met vrienden (die niet cheaten). **Lees eerst `README.md`**: spelregels,
 maps, starten, testen, bestandsoverzicht en de bewuste afwijkingen van de spec staan daar.
 
+**De oorspronkelijke specificatie staat in `docs/SPEC-blitzkrieg.md`** (hoofdstukken §0–§15; de
+code en tests verwijzen ernaar, bv. "§6.2"). Waar het spel ervan afwijkt, gelden in deze volgorde:
+1. de keuzes hieronder;
+2. de afwijkingen in `README.md`;
+3. de spec.
+
+Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beantwoord (zie de keuzes):
+- tunnels blijven liggen;
+- max. 4 spelers, klein = 2;
+- alleen de host kiest;
+- gehoord blijft 20 T;
+- tank C/D zijn varianten van A/B.
+
 ## Taal en stijl
 - Alles in het **Nederlands**: commentaar, teksten in het spel, testnamen, commitberichten, en je
   antwoorden aan de eigenaar.
