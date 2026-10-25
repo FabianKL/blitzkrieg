@@ -55,6 +55,7 @@ export const DISPLAY = { minimap: true };
 //   vignette    donkere hoeken van het speelveld (0..1); fogSoft: zo'n deel van de zichtstraal
 //               loopt de mist al zacht in (0 = harde rand)
 //   iceShine    glinstering op ijs (0..1); shakeOnHit: schudden als je eigen tank geraakt wordt
+//   haze        hittewaas in pixels zolang het weer heatHaze heeft (0 = uit)
 export const LOOK = {
   light: { dx: 0.45, dy: 0.6, alpha: 0.36 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
@@ -63,6 +64,7 @@ export const LOOK = {
   weather: null, amount: 0, stormFactor: 4,
   vignette: 0.2, fogSoft: 0.15,
   iceShine: 0, shakeOnHit: 0.25,
+  haze: 5, // hittewaas (als het weer heatHaze heeft): hoeveel pixels het beeld trilt
 };
 
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)

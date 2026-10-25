@@ -41,7 +41,7 @@ import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/conf
 import { sightOf, lineOfSight, blocksSight, hintDirection, canHear, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter, DisplacementFilter } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
@@ -668,6 +668,41 @@ export function startWorld(style) {
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
   const gradeFilter = new ColorMatrixFilter();
+  // Hittewaas (weer heatHaze): het beeld trilt licht via een verschuivingskaart van ruis die
+  // langzaam meedrijft. Alleen aan als het weer het zegt; anders kost hij niets.
+  const hazeTex = drawnTexture(256, 256, (g) => {
+    const n = createNoise2D(G.mulberry32(7)), img = g.createImageData(256, 256);
+    // naadloos: de ruis krijgt alleen sinussen en cosinussen van x en y, dus de randen sluiten aan
+    for (let y = 0; y < 256; y++) {
+      for (let x = 0; x < 256; x++) {
+        const a = (x / 256) * Math.PI * 2, b = (y / 256) * Math.PI * 2, i = (y * 256 + x) * 4;
+        img.data[i] = 128 + 127 * n(Math.cos(a) * 1.5 + Math.sin(b), Math.sin(a) * 1.5 + 7);
+        img.data[i + 1] = 128 + 127 * n(Math.cos(b) * 1.5 + 13, Math.sin(b) * 1.5 + Math.cos(a));
+        img.data[i + 2] = 128; img.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  });
+  hazeTex.source.style.addressMode = 'repeat';
+  const hazeSprite = stage.addChild(new Sprite(hazeTex));
+  hazeSprite.renderable = false;
+  const hazeFilter = new DisplacementFilter({ sprite: hazeSprite, scale: 0 });
+  let filterKey = '';
+  // Filters op de wereld: kleurfilter (look.grade) en hittewaas (weer), alleen als ze iets doen
+  function updateFilters(now) {
+    const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
+    const key = `${isNeutral(look.grade)},${haze}`;
+    if (key !== filterKey) {
+      filterKey = key;
+      world.filters = [...(isNeutral(look.grade) ? [] : [gradeFilter]), ...(haze ? [hazeFilter] : [])];
+    }
+    if (haze) {
+      const s = devicePixelRatio || 1;
+      hazeFilter.scale.set(look.haze * s, look.haze * s * 0.6);
+      hazeSprite.scale.set(3 * s);
+      hazeSprite.position.set((now * 0.012 * s) % (256 * 3 * s), (now * 0.03 * s) % (256 * 3 * s)); // drijft omhoog en opzij
+    }
+  }
   const vignette = L.ui.addChild(new Sprite(drawnTexture(256, 256, (g) => {
     const r = g.createRadialGradient(128, 128, 60, 128, 128, 182);
     r.addColorStop(0, 'rgba(0,0,0,0)'); r.addColorStop(1, 'rgba(0,0,0,1)');
@@ -680,8 +715,8 @@ export function startWorld(style) {
     Object.assign(SHADOW, { dx: look.light.dx, dy: look.light.dy, alpha: look.light.alpha });
     objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
     for (const s of tankSprites.values()) s.shadow.alpha = SHADOW.alpha;
-    if (isNeutral(look.grade)) world.filters = [];
-    else { gradeFilter.matrix = gradeMatrix(look.grade); world.filters = [gradeFilter]; }
+    gradeFilter.matrix = gradeMatrix(look.grade);
+    filterKey = '';
     vignette.alpha = look.vignette;
     visionKey = '';
   }
@@ -819,6 +854,7 @@ export function startWorld(style) {
     mirageSprites.end();
     drawSearchlights(cam);
     drawStyleOverlay(cam, now);
+    updateFilters(now);
     vignette.width = canvas.width; vignette.height = canvas.height;
     drawEraser(now);
     drawHints(now);
@@ -1102,8 +1138,40 @@ export function startWorld(style) {
       requestAnimationFrame(frame);
     });
 
-  function frame(now) {
-    requestAnimationFrame(frame);
+  // ?fps=1 (alleen localhost): beelden per seconde en rekentijd per beeld linksboven
+  const FPS = DEBUG_HOST && debugParam('fps'), fpsLabel = FPS ? createLabel(L.ui) : null;
+  const fpsStat = { frames: 0, cpu: 0, worst: 0, t0: performance.now(), text: '' };
+  function countFrame(now, cpu) {
+    fpsStat.frames++; fpsStat.cpu += cpu; fpsStat.worst = Math.max(fpsStat.worst, cpu);
+    if (now - fpsStat.t0 >= 1000) {
+      const fps = (fpsStat.frames * 1000) / (now - fpsStat.t0);
+      fpsStat.text = `${fps.toFixed(0)} FPS · ${(fpsStat.cpu / fpsStat.frames).toFixed(1)} ms (max ${fpsStat.worst.toFixed(1)})`;
+      Object.assign(fpsStat, { frames: 0, cpu: 0, worst: 0, t0: now });
+      view.fps = fpsStat.text;
+    }
+    const s = devicePixelRatio || 1;
+    fpsLabel.set(fpsStat.text || '…', { size: 12 * s, pad: 8 * s, h: 22 * s });
+    fpsLabel.at(8 * s, 8 * s);
+  }
+
+  // Meten zonder zichtbaar venster (alleen localhost, blitzView.bench() in de console van de
+  // weergave): n beelden direct na elkaar tekenen en telkens wachten tot de videokaart klaar is
+  function bench(n = 120) {
+    const gl = renderer.gl, px = new Uint8Array(4), times = [];
+    for (let k = 0; k < n; k++) {
+      const t0 = performance.now();
+      frame(t0, true);
+      gl?.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      times.push(performance.now() - t0);
+    }
+    times.sort((a, b) => a - b);
+    const avg = times.reduce((a, b) => a + b, 0) / n;
+    return { avg: +avg.toFixed(2), p95: +times[Math.floor(n * 0.95)].toFixed(2), max: +times[n - 1].toFixed(2), tiles: painter?.layer.list.filter(Boolean).length };
+  }
+
+  function frame(now, once = false) {
+    if (!once) requestAnimationFrame(frame);
+    const t0 = performance.now();
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
@@ -1111,6 +1179,7 @@ export function startWorld(style) {
     style.hud?.(now);
     if (game.status === 'playing') gameOverlay();
     renderer.render(stage);
+    if (FPS) countFrame(now, performance.now() - t0);
   }
 
   // Brandstofdepot: een stapel jerrycans; leeg = grijs en omgevallen
@@ -1289,9 +1358,11 @@ export function startWorld(style) {
     shake(s) { shake = Math.max(shake, s); },
     drawMinimap,
     eraserInfo: () => eraserInfo(game),
+    bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
   };
   // ingebed: de kaart kan er al zijn voordat deze weergave geladen was. Pas na deze functie,
   // want de stijl heeft zijn view dan nog niet (const view = startWorld(...)).
   if (shell && game.map) queueMicrotask(() => { loadMap(game.map); hooks.onStatus(game.status); });
+  if (DEBUG_HOST) window.blitzView = view; // voor bench() in de console
   return view;
 }
