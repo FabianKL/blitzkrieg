@@ -6,6 +6,7 @@ import * as Wx from '../shared/weather.js';
 import * as Hz from '../hazards.js';
 import { mapTests } from './maps.mjs';
 import { acceptanceTest } from './acceptance.mjs';
+import { fingerprints, expectedFingerprints } from './fingerprint.mjs';
 
 const MAP_IDS = Object.keys(G.MAPS);
 const countEmpty = (map) => map.reduce((n, v) => n + (v === G.EMPTY ? 1 : 0), 0);
@@ -1076,6 +1077,15 @@ export const tests = [
       const dead = await connectBot(port, 'carentan', { autoPong: false });
       check(await waitFor(() => dead.closed, 12000, 200), 'dode verbinding werd niet afgesloten');
       return 'groot bericht geweigerd, flood begrensd, dode verbinding opgeruimd';
+    },
+  },
+  {
+    name: 'kaart-vingerafdruk: zelfde seed geeft dezelfde kaart als in tests/fingerprint.json',
+    run: async () => {
+      const got = fingerprints(), want = expectedFingerprints();
+      const diff = Object.keys(want).filter((k) => got[k] !== want[k]);
+      check(!diff.length, `andere kaart bij ${diff.slice(0, 5).join(', ')}${diff.length > 5 ? ' …' : ''} (bewust? node tests/fingerprint.mjs --write)`);
+      return `${Object.keys(want).length} kaarten gelijk`;
     },
   },
 ];
