@@ -41,7 +41,7 @@ import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/conf
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
 import { connect, updateRenderPositions } from '/net.js';
 import { touchControls } from '/touch.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
@@ -139,13 +139,16 @@ export function startWorld(style) {
   // schuift hem); de UI-laag staat in schermpixels.
   const stage = new Container(), world = stage.addChild(new Container());
   const L = {};
-  for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
+  // clean: de kaart zonder tunnels en sporen, over de grond waar je geen zicht hebt (zie drawSight)
+  for (const name of ['ground', 'clean', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
   let game = null;
   let bases = [], rockField = null, fields = null;
   const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
   const at = (x, y) => cellAt(game.map, x, y);
   const seen = (x, y) => seenCell(game, x, y);
+  // Zo ziet de schone kaart een cel: een tunnel of krater is gewoon grond
+  const cleanAt = (x, y) => { const c = at(x, y); return c === G.EMPTY ? G.DIRT : c; };
 
   // ---------- Kaarttextuur ----------
   // Per pixel bepaalt de weergave wát er ligt (met ronde randen en vage sporen); de stijl
@@ -164,10 +167,10 @@ export function startWorld(style) {
     get bases() { return bases; },
     set(r, g, b) { p.r = r; p.g = g; p.b = b; },
     packed(c) { p.r = (c >> 16) & 255; p.g = (c >> 8) & 255; p.b = c & 255; },
-    cached(slot, fn) { p.packed(painter.cache(slot, p.X, p.Y, fn)); },
-    cachedValue: (slot, fn) => painter.cache(slot, p.X, p.Y, fn),
+    cached(slot, fn) { p.packed(painting.cache(slot, p.X, p.Y, fn)); },
+    cachedValue: (slot, fn) => painting.cache(slot, p.X, p.Y, fn),
     shade(k) { p.r *= k; p.g *= k; p.b *= k; },
-    ground() { p.packed(painter.cache(GROUND_SLOT, p.X, p.Y, groundColor)); },
+    ground() { p.packed(painting.cache(GROUND_SLOT, p.X, p.Y, groundColor)); },
     tunnelBase() { p.set(...pal.tunnel); },
     waterBase() { p.set(...pal.water); },
     rockBase() { p.set(...pal.rock); },
@@ -249,10 +252,12 @@ export function startWorld(style) {
   colorOf[G.DIRT] = style.ground; colorOf[G.EMPTY] = style.tunnel; colorOf[G.ROCK] = style.rock;
   colorOf[G.WATER] = style.water; colorOf[G.VEG] = style.veg; colorOf[G.BUILDING] = style.building || paintBuilding;
 
-  function paintCell(x, y, setPx) {
-    const own = at(x, y), idx = y * G.W + x;
+  // clean = schone kaart: tunnels, kraters en sporen worden gewoon grond (zie L.clean)
+  const cellPainter = (clean) => function paintCell(x, y, setPx) {
+    const cell = clean ? cleanAt : at, nb = clean ? cleanAt : seen;
+    const own = cell(x, y), idx = y * G.W + x;
     p.x = x; p.y = y; p.idx = idx; p.own = own; p.cls = game.terrain[idx];
-    p.nT = seen(x, y - 1); p.nB = seen(x, y + 1); p.nL = seen(x - 1, y); p.nR = seen(x + 1, y);
+    p.nT = nb(x, y - 1); p.nB = nb(x, y + 1); p.nL = nb(x - 1, y); p.nR = nb(x + 1, y);
     p.base = own >= G.BASE ? own - G.BASE : own >= G.WALL && own < G.BASE ? own - G.WALL : -1;
     rocks.load(rockField, x, y);
     obs.load(fields, x, y, own, p.nT, p.nB, p.nL, p.nR);
@@ -284,11 +289,18 @@ export function startWorld(style) {
         setPx(X, Y, p.r, p.g, p.b);
       }
     }
-  }
+  };
 
   // Kaartschilder, minikaart en objectlaag hebben de maat van de kaart: ze worden bij elke
   // nieuwe kaart opnieuw gemaakt (zie loadMap), want de kaartgrootte kan verschillen.
-  let painter = null;
+  // cleanPainter schildert de schone kaart; painting is de schilder die nu bezig is (voor p.cached).
+  let painter = null, cleanPainter = null, painting = null;
+  let cleanCells = null; // per cel hoe de schone kaart hem zag (cleanValue; zie onDig)
+  const cleanValue = (i) => (game.map[i] === G.EMPTY ? G.DIRT : game.map[i]) | (game.world.scar[i] === G.SCAR_RUBBLE ? 128 : 0);
+  // Schilder bijwerken (en de tegels in view schilderen), met de goede cache voor p.cached
+  function flushPainter(pt, view) { painting = pt; pt.flush(view); }
+  // Een rechthoek opnieuw schilderen, op de gewone en de schone kaart
+  const bothPainters = { markRect: (x0, y0, x1, y1) => { painter.markRect(x0, y0, x1, y1); cleanPainter.markRect(x0, y0, x1, y1); } };
 
   // ---------- Minikaart: 1 pixel per cel, bijgewerkt per veranderde cel ----------
   // Een kaart om te navigeren, op elke map hetzelfde (canvas #mini op de pagina): het terrein in
@@ -427,7 +439,7 @@ export function startWorld(style) {
   let shake = 0;
   function onEvent(e) {
     if (e.t === 'x' && e.fell) { // plant of gebouw weg: alleen daar de randen en objecten opnieuw
-      plantFelled(fields, game.map, painter, e.box);
+      plantFelled(fields, game.map, bothPainters, e.box);
       buildObjects(e.box);
     }
     if (e.t === 'x' && e.building && (style.clouds || { smoke: 1 }).smoke) { // stof en brokken van een gebouw
@@ -442,7 +454,7 @@ export function startWorld(style) {
     if (e.t === 'w' && e.box) { // ijs gebroken: waterrand bijwerken, schotsen en spatwater
       const [x0, y0, x1, y1] = e.box;
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
-      painter.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
       crackGrow.delete(e.b);
       const cx = (e.b % G.ICE_BW) * G.ICE_B + G.ICE_B / 2, cy = ((e.b / G.ICE_BW) | 0) * G.ICE_B + G.ICE_B / 2;
       particles.spawn('chunk', cx, cy, 30, { speed: 14, life: 0.9, cols: ICE_BITS });
@@ -458,15 +470,15 @@ export function startWorld(style) {
     if (e.t === 'bridge') { // brug ontploft of hersteld
       const [x0, y0, x1, y1] = game.bridge?.box || [0, 0, 0, 0];
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
-      painter.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
       if (e.blown) { particles.spawn('flash', e.x, e.y, 1, { life: 0.4, r0: 3, r1: 12 }); shake = Math.max(shake, 0.5); }
     }
-    if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, painter, e.box); buildObjects(e.box); }
-    if (e.t === 'fc') painter.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
+    if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, bothPainters, e.box); buildObjects(e.box); }
+    if (e.t === 'fc') bothPainters.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
     if (e.t === 'gun' && e.tx !== undefined) { particles.spawn('flash', e.x, e.y, 1, { life: 0.2, r0: 1, r1: 3 }); }
     if (e.t === 'zb') { // barrage: inslagen en kapotte boomtoppen
       const [x0, y0, x1, y1] = e.box;
-      painter.markRect(x0, y0, x1, y1);
+      bothPainters.markRect(x0, y0, x1, y1);
       buildObjects(e.box);
       for (let k = 0; k < 8; k++) {
         const x = x0 + Math.random() * (x1 - x0), y = y0 + Math.random() * (y1 - y0);
@@ -496,7 +508,9 @@ export function startWorld(style) {
     pal = makePalette(game.rules);
     applyLook(lookFor(game.rules));
     view.colors = pal.hex;
-    painter = createMapPainter({ R, paintCell, afterTile: style.afterTile, skipRepaint: style.skipRepaint });
+    painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
+    cleanPainter = createMapPainter({ R, paintCell: cellPainter(true), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
+    cleanCells = Uint8Array.from({ length: map.length }, (_, i) => cleanValue(i));
     makeMini();
     miniMe = -1;
     makeObjects();
@@ -510,6 +524,7 @@ export function startWorld(style) {
     for (let y = 0; y < G.H; y++) for (let x = 0; x < G.W; x++) paintMini(x, y);
     buildObjects();
     groundTiles.use(painter.layer);
+    cleanTiles.use(cleanPainter.layer);
     objTiles.use(objects);
     buildBases();
     clearTankTextures();
@@ -607,13 +622,18 @@ export function startWorld(style) {
     }
     if (!spot) return;
     const [sx, sy] = spot;
-    painter.flush({ x: sx, y: sy, w: N, h: N }); // zorgt dat dat stuk kaart geschilderd is
+    flushPainter(painter, { x: sx, y: sy, w: N, h: N }); // zorgt dat dat stuk kaart geschilderd is
     painter.layer.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
     objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
   }
   const hooks = {
     onMap: loadMap,
-    onDig: (x, y) => { painter.markDig(x, y); paintMini(x, y); mapVersion++; },
+    onDig: (x, y) => {
+      painter.markDig(x, y); paintMini(x, y); mapVersion++;
+      // de schone kaart alleen als hij er echt anders uitziet (dus niet bij graven en rijden)
+      const i = y * G.W + x, v = cleanValue(i);
+      if (cleanCells && v !== cleanCells[i]) { cleanCells[i] = v; cleanPainter.markDig(x, y); }
+    },
     onEvent,
     onStatus: statusOverlay(setOverlay, style.fullText || 'alle vier de tanks zijn al bemand'),
   };
@@ -640,6 +660,11 @@ export function startWorld(style) {
   // De lagen staan bovenaan (L). Hier de onderdelen per laag; drawWorld zet ze elk frame klaar
   // vanuit de gamestate, daarna tekent Pixi alles in één keer.
   const groundTiles = createTileSprites(L.ground, R, TILE);
+  // Schone kaart: alleen te zien waar je geen zicht hebt (masker: wit = verborgen, zie drawSight).
+  // Het masker staat naast de tegels, want use() ruimt alle tegels in hun laag op.
+  const cleanTiles = createTileSprites(L.clean.addChild(new Container()), R, TILE);
+  const cleanMask = L.clean.addChild(new Sprite());
+  L.clean.mask = cleanMask;
   const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
   const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE, L.shadows.addChild(new Container()));
   const marks = L.marks.addChild(new Graphics());
@@ -652,7 +677,10 @@ export function startWorld(style) {
   }));
   const badges = spritePool(L.effects.addChild(new Container()), badgeTex.fuel);
   const badgeRings = L.effects.addChild(new Graphics());
-  const crackG = L.marks.addChild(new Graphics());
+  // IJsbarsten verraden waar iemand reed: alleen waar je zicht hebt (omgekeerd masker, drawSight)
+  const crackLayer = L.marks.addChild(new Container()), crackG = crackLayer.addChild(new Graphics());
+  const crackMask = crackLayer.addChild(new Sprite());
+  crackLayer.setMask({ mask: crackMask, inverse: true });
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
@@ -743,10 +771,10 @@ export function startWorld(style) {
   });
   let filterKey = '';
   // Filters op de wereld: kleurfilter (look.grade), hittewaas (weer) en de vervaging buiten je
-  // zichtcirkel (alleen als je zicht hebt), alleen als ze iets doen
+  // zichtcirkel (alleen als je zicht hebt en het zichtveld in beeld staat), alleen als ze iets doen
   function updateFilters(now) {
     const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
-    const blur = !DEBUG && !!eye() && FOG.blur > 0;
+    const blur = !DEBUG && !!eye() && shell?.visionOverlay !== false && FOG.blur > 0;
     const key = `${isNeutral(look.grade)},${haze},${blur}`;
     if (key !== filterKey) {
       filterKey = key;
@@ -893,10 +921,14 @@ export function startWorld(style) {
       lastShield = self.s;
     }
     const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
-    painter.flush(cam);
+    // sightOn: de zichtregel geldt (je leeft, geen debug); overlayOn: het zichtveld staat ook in
+    // beeld (mist, schaduw, vervaging; de knop ZICHT in de bovenste balk)
+    const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && shell?.visionOverlay !== false;
+    flushPainter(painter, cam);
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
     groundTiles.sync(cam);
+    if (sightOn) { flushPainter(cleanPainter, cam); cleanTiles.sync(cam); }
     objTiles.sync(cam);
 
     marks.clear();
@@ -916,10 +948,12 @@ export function startWorld(style) {
     particles.update(dt);
     drawSmokes(now);
     drawWeather(cam, now, dt);
-    const me = eye(), fogOn = !DEBUG && !!me;
-    sightSprite.visible = visionSprite.visible = fogOn;
+    sightSprite.visible = visionSprite.visible = overlayOn;
+    L.clean.visible = sightOn;
+    if (!sightOn) crackMask.texture = Texture.EMPTY; // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
-    if (fogOn) { drawShadows(me, cam); drawFog(me, cam); drawMirages(me, cam, now); }
+    if (sightOn) { drawSight(me, cam); drawMirages(me, cam, now); }
+    if (overlayOn) drawFog(me, cam);
     mirageSprites.end();
     drawSearchlights(cam);
     drawStyleOverlay(cam, now);
@@ -1106,13 +1140,23 @@ export function startWorld(style) {
     visionSprite.position.set(me.x + 0.5, me.y + 0.5);
     visionSprite.width = visionSprite.height = 2 * far;
   }
-  // Buiten je zichtveld wordt het terrein donkerder: in je kijkboog achter gebouwen, begroeiing,
-  // rotsen en rook, en buiten de cirkel naast en achter je. Per 2 cellen precies dezelfde regel
-  // als voor tanks (visibleCell), dus waar het licht is, zie je een tank ook. Opnieuw uitgerekend
-  // als je verplaatst of draait, of als de zichtcirkel, de kaart of de rook verandert.
+  // Waar heb je geen zicht? Achter gebouwen, begroeiing, rotsen en rook, en buiten de cirkel
+  // naast en achter je. Per 2 cellen precies dezelfde regel als voor tanks (visibleCell), dus waar
+  // het licht is, zie je een tank ook. Daaruit twee plaatjes: de schaduw (donkerder, alleen met
+  // het zichtveld in beeld) en het masker (wit = verborgen) voor de schone kaart en de ijsbarsten,
+  // zodat je daar nooit tunnels, sporen of barsten ziet. Opnieuw uitgerekend als je verplaatst of
+  // draait, of als de zichtcirkel, de kaart of de rook verandert.
   const SH = 2, shadowCanvas = document.createElement('canvas'), shctx = shadowCanvas.getContext('2d');
-  let shadowKey = '', shadowAt = 0, mapVersion = 0;
-  function drawShadows(me, cam) {
+  const maskCanvas = document.createElement('canvas'), maskCtx = maskCanvas.getContext('2d');
+  let shadowKey = '', shadowAt = 0, mapVersion = 0, maskTex = null;
+  // canvas naar de texture van een sprite (nieuwe texture als de maat veranderde)
+  function putCanvas(sprite, c, resized) {
+    if (resized || !sprite.texture.source.resource) {
+      if (sprite.texture.source.resource) sprite.texture.destroy(true);
+      sprite.texture = textureOf(c);
+    } else sprite.texture.source.update();
+  }
+  function drawSight(me, cam) {
     const x0 = Math.floor(cam.x / SH) * SH, y0 = Math.floor(cam.y / SH) * SH;
     const gw = Math.ceil(cam.w / SH) + 2, gh = Math.ceil(cam.h / SH) + 2;
     const turn = me.ang === undefined ? '' : Math.round((me.ang * 90) / Math.PI); // per 2 graden
@@ -1122,22 +1166,27 @@ export function startWorld(style) {
     if (key !== shadowKey && now - shadowAt > 80) {
       shadowKey = key; shadowAt = now;
       const resized = shadowCanvas.width !== gw || shadowCanvas.height !== gh;
-      if (resized) { shadowCanvas.width = gw; shadowCanvas.height = gh; }
-      const img = shctx.createImageData(gw, gh), a = Math.round(FOG.shadow * 255);
+      if (resized) { shadowCanvas.width = maskCanvas.width = gw; shadowCanvas.height = maskCanvas.height = gh; }
+      const img = shctx.createImageData(gw, gh), mask = maskCtx.createImageData(gw, gh), a = Math.round(FOG.shadow * 255);
       for (let j = 0; j < gh; j++) {
         for (let i = 0; i < gw; i++) {
           // het midden van dit beeldpunt van de schaduw (de sprite begint SH / 2 eerder)
-          if (!visibleCell(game.map, me, x0 + i * SH, y0 + j * SH, r, game.smokes)) img.data[(j * gw + i) * 4 + 3] = a;
+          if (visibleCell(game.map, me, x0 + i * SH, y0 + j * SH, r, game.smokes)) continue;
+          const k = (j * gw + i) * 4;
+          img.data[k + 3] = a;
+          mask.data[k] = mask.data[k + 1] = mask.data[k + 2] = mask.data[k + 3] = 255;
         }
       }
       shctx.putImageData(img, 0, 0);
-      if (resized || !sightSprite.texture.source.resource) {
-        if (sightSprite.texture.source.resource) sightSprite.texture.destroy(true);
-        sightSprite.texture = textureOf(shadowCanvas);
-      } else sightSprite.texture.source.update();
-      sightSprite.position.set(x0 - SH / 2, y0 - SH / 2);
-      sightSprite.width = gw * SH; sightSprite.height = gh * SH;
+      maskCtx.putImageData(mask, 0, 0);
+      putCanvas(sightSprite, shadowCanvas, resized);
+      putCanvas(cleanMask, maskCanvas, resized);
+      maskTex = cleanMask.texture;
+      // één pixel per SH cellen (schaal in plaats van breedte: het masker van de barsten wisselt
+      // van texture, zie drawWorld)
+      for (const s of [sightSprite, cleanMask, crackMask]) { s.position.set(x0 - SH / 2, y0 - SH / 2); s.scale.set(SH); }
     }
+    if (maskTex) crackMask.texture = maskTex; // zelfde masker, omgekeerd (zie crackLayer)
   }
   // Rook: blokkeert het zicht zolang hij hangt (game.smokes, van de server)
   function drawSmokes(now) {

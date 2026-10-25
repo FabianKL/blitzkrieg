@@ -8,10 +8,11 @@ import { HINTS, VISION, FOG } from './config.js';
 export const blocksSight = (c) => c === G.VEG || c === G.BUILDING || c === G.ROCK;
 
 // Vrije zichtlijn van (x0, y0) naar (x1, y1)? De cellen onder de tanks zelf tellen niet mee
-// (skip cellen aan het begin en eind). smokes = [{x, y, r}]: rookvlekken blokkeren ook.
-export function lineOfSight(map, x0, y0, x1, y1, smokes = [], skip = G.TANK_R + 1) {
+// (skip cellen aan het begin, skipEnd aan het eind; met skipEnd 0 telt de doelcel zelf ook).
+// smokes = [{x, y, r}]: rookvlekken blokkeren ook.
+export function lineOfSight(map, x0, y0, x1, y1, smokes = [], skip = G.TANK_R + 1, skipEnd = skip) {
   const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-  for (let s = skip; s <= n - skip; s++) {
+  for (let s = skip; s <= n - skipEnd; s++) {
     const x = Math.round(x0 + ((x1 - x0) * s) / n), y = Math.round(y0 + ((y1 - y0) * s) / n);
     if (!G.inBounds(x, y) || blocksSight(map[y * G.W + x])) return false;
   }
@@ -33,14 +34,16 @@ export function inCone(me, x, y) {
   return (dx * Math.cos(me.ang) + dy * Math.sin(me.ang)) / d >= coneCos();
 }
 
-// Ligt (x, y) in mijn zichtveld, los van het venster? Binnen de zichtcirkel zie je rondom; alleen
-// in je kijkboog telt de zichtlijn (gebouwen, begroeiing, rotsen en rook ertussen verbergen
-// wat erachter ligt), naast en achter je niet. Buiten de cirkel alleen in de kijkboog, met een
-// vrije zichtlijn. Dezelfde regel voor tanks, kogels en de schaduw in beeld, zodat wat donker is
-// ook echt onzichtbaar is.
+// Ligt (x, y) in mijn zichtveld, los van het venster? Gebouwen, begroeiing, rotsen en rook
+// verbergen overal wat erachter ligt. In je kijkboog kijk je er net langs: de rand van een
+// obstakel zie je, en een tank die half achter een hoek staat ook (de laatste cellen voor het
+// doel tellen niet). Naast en achter je niet: daar telt de zichtlijn tot en met de doelcel, dus
+// ook het obstakel zelf zie je niet. Buiten de zichtcirkel alleen in de kijkboog. Dezelfde regel
+// voor tanks, kogels, sporen en de schaduw in beeld, zodat wat donker is ook echt onzichtbaar is.
 export function visibleCell(map, me, x, y, radius, smokes = []) {
-  if (!inCone(me, x, y)) return Math.hypot(x - me.x, y - me.y) <= radius;
-  return lineOfSight(map, me.x, me.y, x, y, smokes);
+  if (inCone(me, x, y)) return lineOfSight(map, me.x, me.y, x, y, smokes);
+  if (Math.hypot(x - me.x, y - me.y) > radius) return false;
+  return lineOfSight(map, me.x, me.y, x, y, smokes, G.TANK_R + 1, 0);
 }
 
 // Hoe zie ik wat er op (x, y) staat? 'sharp' (scherp: in je zichtveld binnen de zichtcirkel),
