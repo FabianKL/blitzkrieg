@@ -10,7 +10,12 @@ toont (bijv. `http://192.168.1.82:3000`). Sta Node.js toe in de Windows-firewall
 wordt. Is poort 3000 bezet, start dan op een andere: `PORT=3001 npm start` (PowerShell:
 `$env:PORT=3001; npm start`). Het originele Tunneler staat op `/retro`.
 
-Besturing: pijltjes/WASD = rijden, spatie = schieten.
+Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging. Terug in je eigen basis
+tank, repareer en herlaad je.
+
+Rechts staat op elke map hetzelfde: je tank (zeges en meters), de minikaart (terrein, je eigen basis,
+je eigen tank en waar je brandstof (B) of munitie (M) haalt; geen tunnels, andere bases of tanks) en
+de legenda van de map.
 
 ## Een spel
 - Wie als eerste binnenkomt is de **host**. Die kiest bovenin de **map** (10 maps, chronologisch; maps
@@ -103,8 +108,8 @@ Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwi
 | `public/retro.html`, `client.js` | Het originele Tunneler. |
 | `tests/` | `run.mjs`, `tests.mjs`, `maps.mjs`, `acceptance.mjs`, `gen.mjs`, `gen-checks.mjs`, `helpers.mjs`. |
 
-Interne namen die zijn blijven staan: de map-id's, `package.json` (`tunneler`), de stijlbestanden
-`1944/1943/1942` en de potnaam van retro.
+Interne namen die zijn blijven staan: de map-id's, de stijlbestanden `1944/1943/1942`, de
+omgevingsvariabelen `TUNNELER_*` en de potnaam van retro.
 
 ## Waarom het snel en soepel is
 - De kaart gaat **één keer** over de lijn: kaart, terrein, sporen, planten en gaten als binaire RLE,
