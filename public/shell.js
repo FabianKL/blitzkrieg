@@ -7,7 +7,6 @@ import { connect } from '/net.js';
 import { touchControls } from '/touch.js';
 
 const $ = (id) => document.getElementById(id);
-const PHASES = { lobby: 'wachtkamer', play: 'spel bezig', pause: 'tussen twee rondes', over: 'spel uit' };
 
 // Berichten gaan door naar de weergave die er nu staat (view.hooks)
 let view = null;
@@ -114,8 +113,7 @@ function update() {
   if ($('size').value !== game.size) $('size').value = game.size;
   // klein kan niet met te veel spelers
   for (const opt of $('size').options) opt.disabled = G.MAP_SIZES[opt.value].maxPlayers < players && opt.value !== game.size;
-  const host = game.host < 0 ? '—' : game.host === game.me ? 'jij' : `speler ${game.host + 1}`;
   if (game.message && game.tick < game.message.until) { $('info').textContent = game.message.text; return; }
-  $('info').innerHTML = `${PHASES[game.game.phase] || ''} · ronde <b>${game.game.round}</b> · spelers <b>${players}/${G.MAP_SIZES[game.size]?.maxPlayers ?? G.MAX_PLAYERS}</b> · host <b>${host}</b>`;
+  $('info').textContent = '';
 }
 setInterval(update, 500); // spelers die in- en uitstappen
