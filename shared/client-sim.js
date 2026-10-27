@@ -6,10 +6,8 @@ import * as G from './game.js';
 import * as Weather from './weather.js';
 
 const TICK_MS = 1000 / G.TICK_RATE;
-const RENDER_DELAY = 1; // andere tanks zo veel ticks achter de server tekenen (buffer tegen haperingen)
-const HIST_LEN = 12; // posities per tank om tussen te interpoleren
-const MAX_PRED = 120; // nooit meer dan 4 seconden onbevestigde invoer bewaren
-const SMOOTH_MS = 100; // correcties van de voorspelling in ~100 ms wegwerken
+// buffer voor andere tanks, interpolatie, voorspelling en correcties: zie NET in config.js
+const { renderDelay: RENDER_DELAY, histLen: HIST_LEN, maxPred: MAX_PRED, smoothMs: SMOOTH_MS } = G.NET;
 
 export function createState() {
   return {
@@ -122,92 +120,13 @@ export function applyState(state, msg, hooks = {}, now = 0) {
     b.x += dx * G.BULLET_SPEED; b.y += dy * G.BULLET_SPEED;
   }
 
-  // 2. Gebeurtenissen
-  let newRound = false;
+  // 2. Gebeurtenissen (zie ON hieronder)
+  const ctx = { tick, changed, newRound: false };
   for (const e of msg.e || []) {
-    if (e.t === 'x') {
-      bullets.delete(e.id);
-      G.digStar(world, e.x, e.y, e.r, changed);
-      // inslag op een plant of gebouw: één treffer minder (zoals op de server); de weergave
-      // ziet aan e.veg/e.building en e.fell wat er geraakt of omgegaan is, en aan e.box waar
-      const hitCell = G.inBounds(e.x, e.y) ? world.map[e.y * G.W + e.x] : -1;
-      if (hitCell === G.VEG || hitCell === G.BUILDING) {
-        const box = [e.x, e.y, e.x, e.y];
-        if (hitCell === G.VEG) e.veg = true; else e.building = true;
-        e.fell = G.hitObstacle(world, e.x, e.y, (x, y) => {
-          box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y);
-          box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], y);
-          changed(x, y);
-        });
-        if (e.fell) e.box = box;
-      }
-    } else if (e.t === 'k') {
-      G.digStar(world, e.x, e.y, e.r, changed);
-    } else if (e.t === 'm') {
-      state.mines.delete(e.y * G.W + e.x);
-      G.digStar(world, e.x, e.y, e.r, changed);
-    } else if (e.t === 'b') {
-      bullets.set(e.id, { x: e.x, y: e.y, d: e.d, i: e.i, sx: e.x, sy: e.y, sk: tick }); // i: van wie (eigen kogels altijd te zien)
-    } else if (e.t === 'l') {
-      tanks.delete(e.i);
-    } else if (e.t === 'r') { // ronde voorbij: even pauze
-      Object.assign(state.game, { phase: 'pause', rw: e.w, until: tick + e.left });
-      bullets.clear();
-    } else if (e.t === 'g') { // spel gewonnen
-      Object.assign(state.game, { phase: 'over', w: e.w, until: tick + e.left });
-      bullets.clear();
-    } else if (e.t === 'n') { // nieuwe ronde (of start vanuit de wachtkamer): iedereen in zijn basis
-      Object.assign(state.game, { phase: 'play', round: e.n, rw: -1 });
-      if (e.m0 !== undefined) state.mapTick = e.m0; // spel gestart: storm- en weerklok beginnen nu
-      if (e.r0 !== undefined) state.roundTick = e.r0;
-      newRound = true;
-    } else if (e.t === 'hz') { // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
-      applyHz(state, e.hz);
-    } else if (e.t === 'h') { // andere host (de vorige is weg)
-      state.host = e.i;
-    } else if (e.t === 'z') { // (artillerie)barrage aangekondigd
-      state.barrage = { box: e.box, at: e.at, kind: e.kind };
-    } else if (e.t === 'zb') { // inslag: kraters (artillerie) of kapotte boomtoppen (bos)
-      if (e.craters) G.markArtillery(world, e.box, e.craters, changed); else G.markBarrage(world, e.box, changed);
-      state.barrage = null;
-    } else if (e.t === 'fi') { // brand
-      state.fires.add(e.tile);
-    } else if (e.t === 'fo') { // uitgebrand: verbrande grond
-      state.fires.delete(e.tile);
-      G.burnTile(world, e.tile, changed);
-    } else if (e.t === 'gun') { // geschut vuurt (en is nu zichtbaar) of is geraakt
-      const g = state.guns.find((o) => o.k === e.k);
-      if (g) g.hp = e.hp; else state.guns.push({ k: e.k, x: e.x, y: e.y, ang: e.ang, hp: e.hp });
-    } else if (e.t === 'bridge') { // brug ontploft of hersteld
-      if (state.bridge) { G.setBridge(world, state.bridge.cells, e.blown, changed); state.bridge.blown = e.blown; }
-    } else if (e.t === 'drop') { // krat aan een parachute
-      state.crates[e.k] = e.c;
-    } else if (e.t === 'dropu') { // krat opgepakt
-      if (state.crates[e.k]) state.crates[e.k][3] = 0;
-    } else if (e.t === 'fc') { // gevel ingestort: puin
-      G.collapseRubble(world, e.box, changed);
-    } else if (e.t === 'fb') { // gebouw helemaal ingestort
-      const box = [e.x, e.y, e.x, e.y];
-      e.box = box;
-      e.fell = G.destroyObstacleAt(world, e.x, e.y, (x, y) => { box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y); box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], y); changed(x, y); });
-      e.building = true;
-    } else if (e.t === 'dep') { // depots voor deze ronde
-      state.depots = e.list;
-    } else if (e.t === 'depu') { // depot leeg
-      if (state.depots[e.k]) state.depots[e.k][2] = 0;
-    } else if (e.t === 'smoke') { // rookvlek die het zicht blokkeert
-      state.smokes.push({ x: e.x, y: e.y, r: e.r, until: tick + Math.round(e.s * G.TICK_RATE) });
-    } else if (e.t === 'err') { // melding (bv. bases passen niet op deze kaartgrootte)
-      state.message = { text: e.msg, until: tick + 6 * G.TICK_RATE };
-    } else if (e.t === 'c') { // passage over een ijsvak (barsten)
-      world.ice[e.b] = e.n;
-    } else if (e.t === 'w') { // ijs gebroken: wak (de server gooide de dobbelsteen)
-      e.box = G.breakIce(world, e.b, changed);
-    } else if (e.t === 'W') { // het weer verandert het terrein (dooi, modder, ...)
-      G.applyTerrainChange(world, e.change, e.extra, changed);
-    }
+    ON[e.t]?.(state, e, ctx);
     hooks.onEvent?.(e);
   }
+  const newRound = ctx.newRound;
 
   if (state.smokes.length) state.smokes = state.smokes.filter((s) => s.until > tick);
 
@@ -245,6 +164,91 @@ export function applyState(state, msg, hooks = {}, now = 0) {
   else if (meRespawned || !state.pred) resetPrediction(state, now);
   else if (msg.y) reconcile(state, msg.y);
 }
+
+// ---------- Gebeurtenissen van de server ----------
+// Elk tickbericht ('s') kan een lijst gebeurtenissen hebben (e). De codes zijn kort, want ze gaan
+// 30 keer per seconde over de lijn. Per code wat de client met de kaart en de stand doet; de
+// weergave krijgt elke gebeurtenis daarna ook (hooks.onEvent), bv. voor effecten en hints.
+// Codes zonder eigen werk hier: 'hint' (groot geluid: richtingshint, {x, y, i, kind}).
+// c = { tick, changed(x, y): cel ziet er anders uit, newRound: wordt true bij 'n' }
+const ON = {
+  // kogel ingeslagen {id, x, y, r: krater, o: van wie}. Op een plant of gebouw: één treffer
+  // minder (zoals op de server); de weergave ziet aan e.veg/e.building en e.fell wat er
+  // geraakt of omgegaan is, en aan e.box waar
+  x(state, e, c) {
+    state.bullets.delete(e.id);
+    G.digStar(state.world, e.x, e.y, e.r, c.changed);
+    const hitCell = G.inBounds(e.x, e.y) ? state.world.map[e.y * G.W + e.x] : -1;
+    if (hitCell !== G.VEG && hitCell !== G.BUILDING) return;
+    if (hitCell === G.VEG) e.veg = true; else e.building = true;
+    const box = G.growBox(null, e.x, e.y);
+    e.fell = G.hitObstacle(state.world, e.x, e.y, (x, y) => { G.growBox(box, x, y); c.changed(x, y); });
+    if (e.fell) e.box = box;
+  },
+  k(state, e, c) { G.digStar(state.world, e.x, e.y, e.r, c.changed); }, // tank ontploft {i, x, y, r}
+  m(state, e, c) { // mijn ontploft {x, y, r, i}
+    state.mines.delete(e.y * G.W + e.x);
+    G.digStar(state.world, e.x, e.y, e.r, c.changed);
+  },
+  b(state, e, c) { // schot {id, x, y, d, i: van wie (eigen kogels altijd te zien)}
+    state.bullets.set(e.id, { x: e.x, y: e.y, d: e.d, i: e.i, sx: e.x, sy: e.y, sk: c.tick });
+  },
+  l(state, e) { state.tanks.delete(e.i); }, // speler vertrokken
+  r(state, e, c) { // ronde voorbij {n, w: winnaar, left: ticks pauze}
+    Object.assign(state.game, { phase: 'pause', rw: e.w, until: c.tick + e.left });
+    state.bullets.clear();
+  },
+  g(state, e, c) { // spel gewonnen {w, left}
+    Object.assign(state.game, { phase: 'over', w: e.w, until: c.tick + e.left });
+    state.bullets.clear();
+  },
+  n(state, e, c) { // nieuwe ronde (of start vanuit de wachtkamer): iedereen in zijn basis
+    Object.assign(state.game, { phase: 'play', round: e.n, rw: -1 });
+    if (e.m0 !== undefined) state.mapTick = e.m0; // spel gestart: storm- en weerklok beginnen nu
+    if (e.r0 !== undefined) state.roundTick = e.r0;
+    c.newRound = true;
+  },
+  hz(state, e) { applyHz(state, e.hz); }, // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
+  h(state, e) { state.host = e.i; }, // andere host (de vorige is weg)
+  z(state, e) { state.barrage = { box: e.box, at: e.at, kind: e.kind }; }, // (artillerie)barrage aangekondigd
+  zb(state, e, c) { // inslag: kraters (artillerie) of kapotte boomtoppen (bos)
+    if (e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed); else G.markBarrage(state.world, e.box, c.changed);
+    state.barrage = null;
+  },
+  fi(state, e) { state.fires.add(e.tile); }, // brand
+  fo(state, e, c) { // uitgebrand: verbrande grond
+    state.fires.delete(e.tile);
+    G.burnTile(state.world, e.tile, c.changed);
+  },
+  gun(state, e) { // geschut vuurt (en is nu zichtbaar) of is geraakt
+    const g = state.guns.find((o) => o.k === e.k);
+    if (g) g.hp = e.hp; else state.guns.push({ k: e.k, x: e.x, y: e.y, ang: e.ang, hp: e.hp });
+  },
+  bridge(state, e, c) { // brug ontploft of hersteld
+    if (!state.bridge) return;
+    G.setBridge(state.world, state.bridge.cells, e.blown, c.changed);
+    state.bridge.blown = e.blown;
+  },
+  drop(state, e) { state.crates[e.k] = e.c; }, // krat aan een parachute
+  dropu(state, e) { if (state.crates[e.k]) state.crates[e.k][3] = 0; }, // krat opgepakt
+  fc(state, e, c) { G.collapseRubble(state.world, e.box, c.changed); }, // gevel ingestort: puin
+  fb(state, e, c) { // gebouw helemaal ingestort
+    const box = e.box = G.growBox(null, e.x, e.y);
+    e.fell = G.destroyObstacleAt(state.world, e.x, e.y, (x, y) => { G.growBox(box, x, y); c.changed(x, y); });
+    e.building = true;
+  },
+  dep(state, e) { state.depots = e.list; }, // depots voor deze ronde
+  depu(state, e) { if (state.depots[e.k]) state.depots[e.k][2] = 0; }, // depot leeg
+  smoke(state, e, c) { // rookvlek die het zicht blokkeert {x, y, r, s: seconden}
+    state.smokes.push({ x: e.x, y: e.y, r: e.r, until: c.tick + Math.round(e.s * G.TICK_RATE) });
+  },
+  err(state, e, c) { // melding (bv. bases passen niet op deze kaartgrootte)
+    state.message = { text: e.msg, until: c.tick + G.NET.messageSeconds * G.TICK_RATE };
+  },
+  c(state, e) { state.world.ice[e.b] = e.n; }, // passage over een ijsvak (barsten)
+  w(state, e, c) { e.box = G.breakIce(state.world, e.b, c.changed); }, // ijs gebroken: wak (de server gooide de dobbelsteen)
+  W(state, e, c) { G.applyTerrainChange(state.world, e.change, e.extra, c.changed); }, // het weer verandert het terrein
+};
 
 // ---------- Klok: waar staat de server nu, gezien vanaf deze computer ----------
 // We onthouden de snelste aankomst (laagste vertraging); trage pakketjes tellen

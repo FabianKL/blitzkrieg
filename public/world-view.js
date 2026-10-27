@@ -1,7 +1,7 @@
-// Gedeelde wereldweergave voor alle maps (stijlen 1944, 1943, 1942). Hier zit alles wat voor elke
-// stijl hetzelfde is: verbinding, kaartschilder, ronde randen van rots/water/begroeiing, sporen,
-// minikaart, objectlaag, camera, tanks, deeltjes, storm en meldingen. Een stijl levert alleen
-// kleuren, tekeningen en zijn zijbalk.
+// Gedeelde wereldweergave voor alle maps (stijlen zomer, winter, woestijn in styles/). Hier zit
+// alles wat voor elke stijl hetzelfde is: kaartschilder, ronde randen van rots/water/begroeiing,
+// sporen, minikaart, legenda, tankkaart, objectlaag, camera, tanks, deeltjes, storm en meldingen.
+// Een stijl levert alleen kleuren en tekeningen.
 //
 // Tekenen gaat met PixiJS (WebGL) in lagen, zie L in startWorld. De gamestate is de enige bron:
 // de weergave leest hem elk frame uit en zet sprites en Graphics klaar. Wat duur is om te tekenen
@@ -10,17 +10,16 @@
 //
 // De kleuren van terrein, tunnels, rots, water en begroeiing komen uit de kaartconfiguratie
 // (config.js); een stijl legt er zijn eigen textuur overheen (p.ground() en p.shade(), zie onder).
-// Normaal draait een weergave ingebed (iframe) in de spelpagina op /: die heeft de verbinding,
-// de menu's en de titel, en geeft de berichten door (window.parent.blitz). Los geopend (bv.
-// /1944.html?kaart=koersk) maakt hij zelf verbinding: ?kaart=<id>, anders style.room.
+// De spelpagina (shell.js) heeft de verbinding, de menu's en de titel. Hij start een weergave met
+// startWorld(style, game) en geeft de berichten door aan view.hooks; bij een kaart met een andere
+// stijl ruimt hij hem op met view.destroy() en start de volgende op een nieuw canvas #game.
 // Teams: style.teamLook(spec, i) maakt van het tankuiterlijk uit de config (G.teamsFor) de
 // velden die de stijl tekent; style.onTeams() na een wissel (caches leeg).
 //
 // Een stijl is een object met (alles behalve de kleuren is optioneel):
-//   room, viewCells, background, teams, fullText (melding als het potje vol is)
+//   viewCells, background, teams, fullText (melding als het potje vol is)
 //   ground, tunnel, rock, water, veg, base   kleur per pixel: (p) => zet p.r/p.g/p.b (zie hieronder)
 //   ice, wak, building         ijs, wakken en gebouwen (anders de standaard hieronder)
-// Kaartgrootte: ?grootte=klein|middel|groot|extragroot (geldt als het potje nog leeg is).
 // De minikaart staat aan of uit via DISPLAY.minimap in config.js (of minimap per kaart);
 // staat hij uit, dan verdwijnen het canvas en alles met data-minimap op de pagina.
 //   mini(c, x, y)              kleur [r, g, b] van een cel op de minikaart
@@ -35,23 +34,25 @@
 //                              ploeg (tankFrames plaatjes over tankPeriod ms als er iets beweegt)
 //   shadow: {color, alpha, dx, dy}   schaduw van tanks en bases (licht van linksboven)
 //   tracer: [kleur staart, kleur kop]
-//   eraser                     stijl van de storm (zie drawEraser), hud(now) voor de zijbalk
+//   eraser                     stijl van de storm (zie drawEraser)
+//   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, FOG, HINTS, TUNNEL, LOOK } from '/shared/config.js';
-import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightBeams, searchlightAt } from '/shared/vision.js';
-import { connect, updateRenderPositions } from '/net.js';
-import { touchControls } from '/touch.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK } from '/shared/config.js';
+import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
+import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
   hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
   eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, camera,
-  smoothTankAngles, createOverlay, statusOverlay, showBandwidth,
+  smoothTankAngles, createOverlay, statusOverlay, showBandwidth, R, paintRefillIcon,
 } from '/render-common.js';
+import { createSidePanel } from '/view/side-panel.js';
+import { createHazardView } from '/view/hazards-view.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
-export const R = 6; // pixels per cel in de kaarttextuur
+export { R }; // pixels per cel in de kaarttextuur (de stijlen tekenen ermee)
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
 const GROUND_SLOT = 8; // cache-vak voor de terreinkleur (stijlen gebruiken 0..7)
 const ICE_CLS = G.CLASS.ice;
@@ -63,14 +64,14 @@ function makePalette(rules) {
   const hex = {
     tunnel: rules.tunnelColor || FALLBACK.tunnel, water: rules.water?.color || FALLBACK.water,
     rock: rules.rocks?.color || FALLBACK.rock, veg: rules.vegetation?.color || FALLBACK.veg, classes: {},
-    building: rules.buildings?.color || BUILDING_CFG.color,
+    building: rules.buildings?.color || BUILDING_CFG.color, bridge: BRIDGE_CFG.color,
   };
   const named = Object.values(rules.classes || {}).find((c) => c.color)?.color || '#8a7a5a';
   for (const n of G.CLASS_NAMES) hex.classes[n] = rules.classes?.[n]?.color || named;
   return {
     hex,
     cls: G.CLASS_NAMES.map((n) => rgb(hex.classes[n])),
-    tunnel: rgb(hex.tunnel), water: rgb(hex.water), rock: rgb(hex.rock), veg: rgb(hex.veg), building: rgb(hex.building),
+    tunnel: rgb(hex.tunnel), water: rgb(hex.water), rock: rgb(hex.rock), veg: rgb(hex.veg), building: rgb(hex.building), bridge: rgb(hex.bridge),
   };
 }
 
@@ -131,7 +132,7 @@ function crackLines(b) {
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
 const CRACK_MS = 450; // zo lang groeit een nieuwe barst
 
-export function startWorld(style) {
+export function startWorld(style, game) {
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
   // Lagen van onder naar boven: grond, markeringen, schaduwen, objecten, tanks, kruinen (bomen
@@ -142,7 +143,6 @@ export function startWorld(style) {
   // clean: de kaart zonder tunnels en sporen, over de grond waar je geen zicht hebt (zie drawSight)
   for (const name of ['ground', 'clean', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
-  let game = null;
   let bases = [], rockField = null, fields = null;
   const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
   const at = (x, y) => cellAt(game.map, x, y);
@@ -248,6 +248,25 @@ export function startWorld(style) {
     p.shade(0.6 + p.n * 0.55);
   }
 
+  // Brug die kan ontploffen (Market Garden): betonplaten met naden en een donkere rand, in
+  // plaats van de wegkleur. bridgeMask: cellen van die brug (gezet in loadMap).
+  let bridgeMask = null;
+  const onBridge = (x, y) => G.inBounds(x, y) && bridgeMask[y * G.W + x] === 1;
+  // De brug komt mee in het instapbericht, of (vanuit de wachtkamer) pas met 'hz' bij de start
+  function makeBridgeMask() {
+    bridgeMask = null;
+    if (!game.bridge?.cells?.length) return;
+    bridgeMask = new Uint8Array(G.W * G.H);
+    for (const i of game.bridge.cells) bridgeMask[i] = 1;
+  }
+  function paintBridge() {
+    p.set(...pal.bridge);
+    const edge = (p.u === 0 && !onBridge(p.x - 1, p.y)) || (p.u === R - 1 && !onBridge(p.x + 1, p.y)) ||
+      (p.v === 0 && !onBridge(p.x, p.y - 1)) || (p.v === R - 1 && !onBridge(p.x, p.y + 1));
+    if (edge) { p.shade(0.55); return; }
+    p.shade((p.X % 12 === 0 || p.Y % 12 === 0 ? 0.82 : 1) * (0.95 + p.n * 0.1));
+  }
+
   const colorOf = [];
   colorOf[G.DIRT] = style.ground; colorOf[G.EMPTY] = style.tunnel; colorOf[G.ROCK] = style.rock;
   colorOf[G.WATER] = style.water; colorOf[G.VEG] = style.veg; colorOf[G.BUILDING] = style.building || paintBuilding;
@@ -284,6 +303,7 @@ export function startWorld(style) {
         p.c = c;
         if (p.cls === ICE_CLS && c === G.DIRT) (style.ice || paintIce)(p);
         else if (p.cls === ICE_CLS && c === G.WATER) (style.wak || paintWak)(p);
+        else if (bridgeMask?.[idx] && (c === G.DIRT || c === G.EMPTY)) paintBridge();
         else (colorOf[c] || style.base)(p); // muur en vloer van de bases: style.base
         if ((c === G.DIRT || c === G.EMPTY) && game.world.scar[idx] === G.SCAR_RUBBLE) rubble();
         setPx(X, Y, p.r, p.g, p.b);
@@ -302,95 +322,12 @@ export function startWorld(style) {
   // Een rechthoek opnieuw schilderen, op de gewone en de schone kaart
   const bothPainters = { markRect: (x0, y0, x1, y1) => { painter.markRect(x0, y0, x1, y1); cleanPainter.markRect(x0, y0, x1, y1); } };
 
-  // ---------- Minikaart: 1 pixel per cel, bijgewerkt per veranderde cel ----------
-  // Een kaart om te navigeren, op elke map hetzelfde (canvas #mini op de pagina): het terrein in
-  // de kleuren van de kaart (zoals de legenda), je eigen basis, je eigen tank en de plekken waar
-  // je brandstof of munitie haalt. Geen tunnels of sporen (van niemand), geen andere bases en
-  // geen andere tanks: wat gegraven is, toont gewoon het terrein eronder.
-  let miniBase = null, minctx = null, miniImg = null;
-  let miniDirty = false, lastMini = 0;
-  const miniCanvas = $('mini'), miniCtx = miniCanvas?.getContext('2d');
-  function makeMini() {
-    miniBase = document.createElement('canvas');
-    miniBase.width = G.W;
-    miniBase.height = G.H;
-    minctx = miniBase.getContext('2d');
-    miniImg = minctx.createImageData(G.W, G.H);
-  }
-  const lighten = (c, k) => c.map((v) => v + (255 - v) * k);
-  const MINI_TEAM = ['#2fd04a', '#2f7fe8', '#e8352b', '#f2b51c']; // als de stijl geen minikleur heeft
-  const miniColor = (id) => style.teams[id]?.mini || MINI_TEAM[id] || '#ffffff';
-  function paintMini(x, y) {
-    if (!miniCanvas || !G.minimapOn(game.rules)) return;
-    const c = at(x, y), idx = y * G.W + x, i = idx * 4;
-    const own = c === G.BASE + game.me || c === G.WALL + game.me;
-    let col;
-    if (own) col = c === G.WALL + game.me ? rgb(miniColor(game.me)) : [240, 236, 222]; // muur in je ploegkleur
-    else if (c === G.ROCK) col = pal.rock;
-    else if (c === G.WATER) col = pal.water;
-    else if (c === G.VEG) col = (hash(x, y) % 3 ? pal.veg : lighten(pal.veg, 0.12));
-    else if (c === G.BUILDING) col = pal.building;
-    else { // grond (ook tunnels en andermans basis): de terreinklasse, met wat korrel
-      const k = 0.94 + (hash(x, y) % 100) / 1000;
-      col = pal.cls[game.terrain[idx]].map((v) => v * k);
-    }
-    miniImg.data[i] = col[0]; miniImg.data[i + 1] = col[1]; miniImg.data[i + 2] = col[2]; miniImg.data[i + 3] = 255;
-    miniDirty = true;
-  }
-  // Je eigen basis opnieuw kleuren (na het instappen weet je pas welke van jou is)
-  let miniMe = -1;
-  function paintOwnBase() {
-    if (miniMe === game.me) return;
-    miniMe = game.me;
-    for (const b of bases) if (b) for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) paintMini(x, y);
-  }
-  const MINI_ICON = { fuel: '#e0b02a', ammo: '#d8572e' };
-  function drawMinimap() {
-    const now = performance.now();
-    if (!miniCanvas || !game.map || now - lastMini < 100) return;
-    lastMini = now;
-    const on = G.minimapOn(game.rules);
-    if (miniCanvas.hidden === on) {
-      miniCanvas.hidden = !on;
-      for (const el of document.querySelectorAll('[data-minimap]')) el.hidden = !on;
-    }
-    if (!on) return;
-    paintOwnBase();
-    const g = miniCtx, opt = style.minimap || {};
-    if (miniDirty) { minctx.putImageData(miniImg, 0, 0); miniDirty = false; }
-    const sx = g.canvas.width / G.W, sy = g.canvas.height / G.H, px = 1 / sx; // px: één schermpixel in cellen
-    g.setTransform(sx, 0, 0, sy, 0, 0);
-    g.imageSmoothingEnabled = opt.smooth ?? true;
-    g.drawImage(miniBase, 0, 0);
-    opt.overlay?.(g);
-    // brandstof en munitie: depots (Ardennen), munitiedepot (Fall Gelb), droppings (Market Garden)
-    const icon = (x, y, kind) => {
-      const r = 4 * px;
-      g.fillStyle = 'rgba(0, 0, 0, 0.75)'; g.fillRect(x - r - px, y - r - px, 2 * r + 2 * px, 2 * r + 2 * px);
-      g.fillStyle = MINI_ICON[kind]; g.fillRect(x - r, y - r, 2 * r, 2 * r);
-      g.fillStyle = 'rgba(0, 0, 0, 0.8)'; // B of M in het vakje
-      g.font = `bold ${7 * px}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(kind === 'fuel' ? 'B' : 'M', x, y + 0.4 * px);
-    };
-    for (const [x, y, full] of game.depots) if (full) icon(x, y, 'fuel');
-    if (game.ammoDepot) icon(game.ammoDepot[0], game.ammoDepot[1], 'ammo');
-    for (const c of game.crates) if (c && c[3]) icon(c[0], c[1], c[2]);
-    // je eigen basis: een ring eromheen, zodat je hem altijd terugvindt
-    const mine = bases[game.me];
-    if (mine) {
-      g.strokeStyle = '#ffffff'; g.lineWidth = 2 * px;
-      g.strokeRect(mine.x0 - 3 * px, mine.y0 - 3 * px, mine.x1 - mine.x0 + 1 + 6 * px, mine.y1 - mine.y0 + 1 + 6 * px);
-    }
-    // wat je in beeld hebt, en je eigen tank (alleen die van jou)
-    g.strokeStyle = opt.rect || 'rgba(255, 255, 255, 0.8)'; g.lineWidth = 1.5 * px;
-    g.strokeRect(view.cam.x, view.cam.y, view.cam.w, view.cam.h);
-    const self = game.tanks.get(game.me);
-    if (self?.a && self.rx !== undefined) {
-      g.fillStyle = '#000'; g.fillRect(self.rx - 5 * px, self.ry - 5 * px, 10 * px, 10 * px);
-      g.fillStyle = miniColor(game.me); g.fillRect(self.rx - 3.5 * px, self.ry - 3.5 * px, 7 * px, 7 * px);
-    }
-    g.setTransform(1, 0, 0, 1, 0, 0);
-  }
+  // ---------- Zijpaneel: minikaart, legenda en tankkaart (view/side-panel.js) ----------
+  const side = createSidePanel({
+    game, style, at, flushPainter,
+    get pal() { return pal; }, get bases() { return bases; }, get bridgeMask() { return bridgeMask; },
+    get painter() { return painter; }, get objects() { return objects; }, get cam() { return view.cam; },
+  });
 
   // ---------- Objectlaag (bomen, rotsblokken, struikjes) ----------
   // box = [x0, y0, x1, y1] in cellen: alleen dat stuk opnieuw tekenen (na een omgeschoten
@@ -467,6 +404,12 @@ export function startWorld(style) {
       if (t && (e.i === game.me || t.seen === 'sharp')) muzzle(e);
     }
     if (e.t === 'W') loadMap(game.map); // het weer veranderde het terrein: alles opnieuw
+    if (e.t === 'hz' && game.bridge && !bridgeMask) { // spel gestart: nu is bekend waar de brug ligt
+      makeBridgeMask();
+      const [x0, y0, x1, y1] = game.bridge.box;
+      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) side.paintMini(x, y);
+    }
     if (e.t === 'bridge') { // brug ontploft of hersteld
       const [x0, y0, x1, y1] = game.bridge?.box || [0, 0, 0, 0];
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
@@ -506,13 +449,12 @@ export function startWorld(style) {
     clearTankTextures();
     }
     pal = makePalette(game.rules);
+    makeBridgeMask();
     applyLook(lookFor(game.rules));
     view.colors = pal.hex;
     painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
     cleanPainter = createMapPainter({ R, paintCell: cellPainter(true), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
     cleanCells = Uint8Array.from({ length: map.length }, (_, i) => cleanValue(i));
-    makeMini();
-    miniMe = -1;
     makeObjects();
     crackCache.clear();
     crackGrow.clear();
@@ -521,115 +463,20 @@ export function startWorld(style) {
     fields = obstacleFields(map);
     bases = findBases(map);
     style.onMap?.(map);
-    for (let y = 0; y < G.H; y++) for (let x = 0; x < G.W; x++) paintMini(x, y);
+    side.loadMap();
     buildObjects();
     groundTiles.use(painter.layer);
     cleanTiles.use(cleanPainter.layer);
     objTiles.use(objects);
     buildBases();
     clearTankTextures();
-    buildLegend();
+    side.buildLegend();
   }
 
-  // ---------- Legenda (rechts): welke kleur is welk terrein ----------
-  // Per kaart opgebouwd uit wat er echt ligt, met de namen uit de kaartinstellingen. Het
-  // kleurvakje is een uitsnede van de getekende kaart zelf (met objecten), zodat het er precies
-  // zo uitziet als in het spel; ligt iets (nog) niet op de kaart, dan de kleur uit de instellingen.
-  const CLASS_LABEL = { paved: 'Verhard', hard: 'Harde grond', normal: 'Grond', soft: 'Zachte grond', marsh: 'Moeras', ford: 'Doorwaadbare plek', ice: 'IJs', burnt: 'Verbrande grond', retro: 'Zand' };
-  function buildLegend() {
-    const box = $('legend');
-    if (!box) return;
-    const rules = game.rules || {}, map = game.map, terrain = game.world.terrain;
-    const counts = new Map();
-    const kindAt = (i) => {
-      const v = map[i];
-      if (v === G.DIRT) return 'c' + terrain[i];
-      return v === G.ROCK ? 'rock' : v === G.WATER ? 'water' : v === G.VEG ? 'veg' : v === G.BUILDING ? 'building' : null;
-    };
-    for (let i = 0; i < map.length; i++) { const k = kindAt(i); if (k) counts.set(k, (counts.get(k) || 0) + 1); }
-    const pct = (s) => `${Math.round(s * 100)}%`; // rijsnelheid (100% = over een weg)
-    const rows = [];
-    // terreinklassen: eerst in de volgorde van de kaartinstellingen, dan wat er verder ligt
-    const names = [...Object.keys(rules.classes || {}), ...G.CLASS_NAMES].filter((n, i, a) => a.indexOf(n) === i);
-    for (const n of names) {
-      const c = G.CLASS[n], cfg = rules.classes?.[n];
-      if (!counts.get('c' + c) && !cfg?.later) continue;
-      const cls = G.CLASSES[c];
-      rows.push({ kind: 'c' + c, color: pal.hex.classes[n], label: cfg?.label || CLASS_LABEL[n] || n,
-        note: cls.noTunnel ? `${pct(cls.speed / G.SPEED_ONE)} · geen tunnel` : pct(cls.speed / G.SPEED_ONE) });
-    }
-    const extra = [
-      ['veg', pal.hex.veg, rules.vegetation?.label || 'Begroeiing', 'wegschieten'],
-      ['building', pal.hex.building, rules.buildings?.label || 'Gebouwen', 'wegschieten'],
-      ['rock', pal.hex.rock, rules.rocks?.label || 'Rots', 'blokkeert'],
-      ['water', pal.hex.water, rules.water?.label || 'Water', 'geen doorgang'],
-    ];
-    for (const [kind, color, label, note] of extra) if (counts.get(kind)) rows.push({ kind, color, label, note });
-    rows.push({ kind: null, color: pal.hex.tunnel, label: 'Tunnel en spoor', note: pct(TUNNEL.speed) });
-    // brandstof en munitie halen (zo staan ze op de minikaart: B en M)
-    const scarce = rules.scarce?.type;
-    if (scarce === 'fuelDepots' || scarce === 'airDrops') rows.push({ icon: 'fuel', label: scarce === 'airDrops' ? 'Dropping: brandstof' : 'Brandstofdepot', note: 'B op kaart en minikaart' });
-    if (scarce === 'ammoDepot' || scarce === 'airDrops') rows.push({ icon: 'ammo', label: scarce === 'airDrops' ? 'Dropping: munitie' : 'Munitiedepot', note: 'M op kaart en minikaart' });
-    box.replaceChildren(...rows.map((r) => {
-      const row = document.createElement('div');
-      row.className = 'legend-row';
-      const sw = document.createElement('canvas');
-      sw.className = 'legend-swatch';
-      sw.width = sw.height = 4 * R;
-      if (r.icon) paintIcon(sw, r.icon); else paintSwatch(sw, r.kind, r.color, kindAt);
-      const name = document.createElement('span');
-      name.className = 'legend-name';
-      name.textContent = r.label;
-      const note = document.createElement('span');
-      note.className = 'legend-note';
-      note.textContent = r.note;
-      row.append(sw, name, note);
-      return row;
-    }));
-  }
-  // Het B- of M-vakje zoals op de minikaart
-  function paintIcon(sw, kind) {
-    const g = sw.getContext('2d'), n = sw.width;
-    g.fillStyle = '#000'; g.fillRect(0, 0, n, n);
-    g.fillStyle = MINI_ICON[kind]; g.fillRect(2, 2, n - 4, n - 4);
-    g.fillStyle = 'rgba(0, 0, 0, 0.85)'; g.font = `bold ${Math.round(n * 0.6)}px sans-serif`;
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(kind === 'fuel' ? 'B' : 'M', n / 2, n / 2 + 1);
-  }
-  // Uitsnede van 4x4 cellen waar alleen dit soort terrein ligt (of een effen vlak): liefst
-  // midden in een vlak (6x6 gelijk, het middelste stuk), anders 4x4 (heggen, smalle wegen),
-  // anders rond een klein stukje (losse struik); de plek die het dichtst bij het midden ligt
-  function paintSwatch(sw, kind, color, kindAt) {
-    const g = sw.getContext('2d'), N = 4;
-    g.fillStyle = color;
-    g.fillRect(0, 0, sw.width, sw.height);
-    if (!kind) return;
-    const same = (x0, y0, n) => {
-      for (let y = y0; y < y0 + n; y++) for (let x = x0; x < x0 + n; x++) if (kindAt(y * G.W + x) !== kind) return false;
-      return true;
-    };
-    let spot = null;
-    for (const n of [N + 2, N, 2]) {
-      let best = Infinity;
-      for (let y0 = 1; y0 + n < G.H; y0 += 2) {
-        for (let x0 = 1; x0 + n < G.W; x0 += 2) {
-          if (kindAt(y0 * G.W + x0) !== kind) continue;
-          const d = Math.hypot(x0 - G.W / 2, y0 - G.H / 2);
-          if (d < best && x0 + (n - N) / 2 >= 0 && y0 + (n - N) / 2 >= 0 && same(x0, y0, n)) { best = d; spot = [x0 + (n - N) / 2, y0 + (n - N) / 2]; }
-        }
-      }
-      if (spot) break;
-    }
-    if (!spot) return;
-    const [sx, sy] = spot;
-    flushPainter(painter, { x: sx, y: sy, w: N, h: N }); // zorgt dat dat stuk kaart geschilderd is
-    painter.layer.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
-    objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
-  }
   const hooks = {
     onMap: loadMap,
     onDig: (x, y) => {
-      painter.markDig(x, y); paintMini(x, y); mapVersion++;
+      painter.markDig(x, y); side.paintMini(x, y); mapVersion++;
       // de schone kaart alleen als hij er echt anders uitziet (dus niet bij graven en rijden)
       const i = y * G.W + x, v = cleanValue(i);
       if (cleanCells && v !== cleanCells[i]) { cleanCells[i] = v; cleanPainter.markDig(x, y); }
@@ -637,24 +484,7 @@ export function startWorld(style) {
     onEvent,
     onStatus: statusOverlay(setOverlay, style.fullText || 'alle vier de tanks zijn al bemand'),
   };
-  const shell = window.parent !== window ? window.parent.blitz : null;
-  // Ingebed: de verbinding (en de voorspelling) loopt in de buitenpagina, met de klok van die
-  // pagina. performance.now() telt per document vanaf het laden, en dit venster is later geladen
-  // (bij elke kaartwissel opnieuw): zonder dit verschil sprong je tank bij elke toetsaanslag.
-  let clockOffset = 0;
-  if (shell) {
-    clockOffset = performance.timeOrigin - window.parent.performance.timeOrigin;
-    document.body.classList.add('embed');
-    game = shell.game;
-    shell.setHooks(hooks);
-    // toetsen gaan naar het venster met de focus: doorgeven aan de verbinding van de spelpagina
-    for (const type of ['keydown', 'keyup', 'blur']) addEventListener(type, game.key);
-  } else {
-    const query = new URLSearchParams(location.search);
-    game = connect(hooks, { room: query.get('kaart') || style.room, size: query.get('grootte') });
-  }
   if ($('net')) showBandwidth(game, $('net'));
-  touchControls($('panel'), game);
 
   // ---------- Tekenen (PixiJS) ----------
   // De lagen staan bovenaan (L). Hier de onderdelen per laag; drawWorld zet ze elk frame klaar
@@ -672,7 +502,7 @@ export function startWorld(style) {
   const badgeTex = Object.fromEntries(['fuel', 'ammo'].map((kind) => {
     const c = document.createElement('canvas');
     c.width = c.height = 32;
-    paintIcon(c, kind);
+    paintRefillIcon(c, kind);
     return [kind, textureOf(c)];
   }));
   const badges = spritePool(L.effects.addChild(new Container()), badgeTex.fuel);
@@ -774,7 +604,7 @@ export function startWorld(style) {
   // zichtcirkel (alleen als je zicht hebt en het zichtveld in beeld staat), alleen als ze iets doen
   function updateFilters(now) {
     const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
-    const blur = !DEBUG && !!eye() && shell?.visionOverlay !== false && FOG.blur > 0;
+    const blur = !DEBUG && !!eye() && game.visionOverlay !== false && FOG.blur > 0;
     const key = `${isNeutral(look.grade)},${haze},${blur}`;
     if (key !== filterKey) {
       filterKey = key;
@@ -862,7 +692,7 @@ export function startWorld(style) {
     }
   }
   // de letters op de bases hebben een webfont: opnieuw tekenen zodra dat geladen is
-  document.fonts?.ready.then(() => { if (game.map) buildBases(); });
+  document.fonts?.ready.then(() => { if (alive && game.map) buildBases(); });
 
   // Kogel als lichtspoor met een felle kop
   const [tracerTail, tracerHead] = style.tracer || ['rgba(255, 170, 60, 0)', 'rgba(255, 220, 130, 1)'];
@@ -912,7 +742,7 @@ export function startWorld(style) {
   }
 
   function drawWorld(now, dt) {
-    updateRenderPositions(game, now + clockOffset); // eigen tank voorspeld, de rest vloeiend uit de buffer
+    updateRenderPositions(game, now); // eigen tank voorspeld, de rest vloeiend uit de buffer
     smoothTankAngles(game, dt);
     if (shake > 0) shake -= dt;
     const self = game.tanks.get(game.me);
@@ -923,7 +753,7 @@ export function startWorld(style) {
     const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
     // sightOn: de zichtregel geldt (je leeft, geen debug); overlayOn: het zichtveld staat ook in
     // beeld (mist, schaduw, vervaging; de knop ZICHT in de bovenste balk)
-    const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && shell?.visionOverlay !== false;
+    const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     flushPainter(painter, cam);
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
@@ -934,17 +764,17 @@ export function startWorld(style) {
     marks.clear();
     drawIce(cam, now);
     style.drawUnder?.(marks, cam, now);
-    drawLandmarks();
-    drawDepots();
-    drawObjectsOfHazards(now);
-    drawRefillMarkers(now);
+    hz.drawLandmarks();
+    hz.drawDepots();
+    hz.drawObjects();
+    hz.drawRefillMarkers(now);
     drawBullets(cam);
     drawTanks(now, cam);
 
     effects.clear();
-    drawBarrage(now);
-    drawFires(now);
-    drawDust(now);
+    hz.drawBarrage(now);
+    hz.drawFires(now);
+    hz.drawDust();
     particles.update(dt);
     drawSmokes(now);
     drawWeather(cam, now, dt);
@@ -952,10 +782,10 @@ export function startWorld(style) {
     L.clean.visible = sightOn;
     if (!sightOn) crackMask.texture = Texture.EMPTY; // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
-    if (sightOn) { drawSight(me, cam); drawMirages(me, cam, now); }
+    if (sightOn) { drawSight(me, cam); hz.drawMirages(me, cam, now); }
     if (overlayOn) drawFog(me, cam);
     mirageSprites.end();
-    drawSearchlights(cam);
+    hz.drawSearchlights();
     drawStyleOverlay(cam, now);
     updateFilters(now);
     vignette.width = canvas.width; vignette.height = canvas.height;
@@ -1087,7 +917,7 @@ export function startWorld(style) {
   // ---------- Zicht (§9) ----------
   // ?debug=alles: alles zichtbaar (alleen op deze computer, voor het ontwikkelen)
   const DEBUG_HOST = ['localhost', '127.0.0.1'].includes(location.hostname);
-  const debugParam = (k) => [location.search, window.parent !== window ? window.parent.location.search : ''].map((q) => new URLSearchParams(q).get(k)).find((v) => v);
+  const debugParam = (k) => new URLSearchParams(location.search).get(k);
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
   const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
@@ -1246,14 +1076,22 @@ export function startWorld(style) {
   // ---------- Renderer en beeldlus ----------
   // Pixi tekent op het canvas #game, in schermpixels (devicePixelRatio zit in de maat zelf).
   let renderer = null, lastFrame = performance.now(), lastShield = null;
+  let alive = true, resize = null; // alive = false na destroy(): de beeldlus stopt
   const panel = $('panel');
   const panelSize = () => [Math.max(1, Math.round(panel.clientWidth * (devicePixelRatio || 1))), Math.max(1, Math.round(panel.clientHeight * (devicePixelRatio || 1)))];
   autoDetectRenderer({ canvas, preference: 'webgl', width: panelSize()[0], height: panelSize()[1], resolution: 1, antialias: true, background: style.background })
     .then((r) => {
       renderer = r;
-      new ResizeObserver(() => renderer.resize(...panelSize())).observe(panel);
+      if (!alive) { destroyRenderer(); return; } // al opgeruimd voordat de renderer klaar was
+      resize = new ResizeObserver(() => renderer.resize(...panelSize()));
+      resize.observe(panel);
       requestAnimationFrame(frame);
     });
+  // De videokaart meteen vrijgeven (Pixi laat de WebGL-context los) en het canvas weghalen
+  function destroyRenderer() {
+    renderer.destroy({ removeView: true });
+    renderer = null;
+  }
 
   // ?fps=1 (alleen localhost): beelden per seconde en rekentijd per beeld linksboven
   const FPS = DEBUG_HOST && debugParam('fps'), fpsLabel = FPS ? createLabel(L.ui) : null;
@@ -1287,199 +1125,24 @@ export function startWorld(style) {
   }
 
   function frame(now, once = false) {
+    if (!alive) return;
     if (!once) requestAnimationFrame(frame);
     const t0 = performance.now();
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
-    if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawMinimap(); }
-    style.hud?.(now);
+    if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
+    side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
     renderer.render(stage);
     if (FPS) countFrame(now, performance.now() - t0);
   }
 
-  // Waar je brandstof of munitie laadt: een badge met B of M en een zacht pulserende ring.
-  // Alleen volle plekken; de mist erboven verbergt ze buiten je zicht, net als het ding zelf.
-  function drawRefillMarkers(now) {
-    badges.begin();
-    badgeRings.clear();
-    const p = 0.5 + 0.5 * Math.sin(now / 300);
-    const marker = (x, y, kind) => {
-      badgeRings.circle(x, y, 4 + 1.5 * p).stroke({ color: MINI_ICON[kind], alpha: 0.35 + 0.35 * (1 - p), width: 0.5 });
-      const s = badges.next();
-      s.texture = badgeTex[kind];
-      s.width = s.height = 3.2;
-      s.position.set(x, y - 5.5);
-    };
-    for (const [x, y, full] of game.depots) if (full) marker(x, y, 'fuel');
-    if (game.ammoDepot) marker(game.ammoDepot[0], game.ammoDepot[1] + 0.5, 'ammo');
-    for (const c of game.crates) if (c && c[3]) marker(c[0], c[1], c[2]);
-    badges.end();
-  }
-  // Brandstofdepot: een stapel jerrycans; leeg = grijs en omgevallen
-  function drawDepots() {
-    for (const [x, y, full] of game.depots) {
-      for (let k = 0; k < 4; k++) {
-        const cx = x - 1.6 + (k % 2) * 1.9, cy = y - 1.4 + Math.floor(k / 2) * 2.1;
-        marks.save(); marks.translateTransform(cx, cy);
-        if (!full) marks.rotateTransform(0.6 * (k - 1.5));
-        marks.rect(-0.8, -1, 1.6, 2).fill(full ? 0x4e6b2a : 0x6a6a64);
-        marks.rect(-0.3, -1.3, 0.6, 0.35).fill(full ? 0xc9b26a : 0x9a9a92);
-        marks.restore();
-      }
-    }
-  }
-  // Aangekondigde barrage: het vak flitst (artillerie) en de boomtoppen trillen (bos, §10.8)
-  function drawBarrage(now) {
-    const b = game.barrage;
-    if (!b) return;
-    const [x0, y0, x1, y1] = b.box, p = 0.5 + 0.5 * Math.sin(now / 70);
-    if (b.kind === 'art') { // §10.9: het vak licht op
-      effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xfff0b4, alpha: 0.12 + 0.18 * p });
-      return;
-    }
-    effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xff7828, alpha: 0.08 + 0.12 * p });
-    // gestippelde rand: streepjes van 1,5 met gaten van 1
-    for (const [ax, ay, bx, by] of [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]]) {
-      const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
-      for (let t = 0; t < len; t += 2.5) effects.moveTo(ax + ux * t, ay + uy * t).lineTo(ax + ux * Math.min(len, t + 1.5), ay + uy * Math.min(len, t + 1.5));
-    }
-    effects.stroke({ color: 0xff5a1e, alpha: 0.5 + 0.4 * p, width: 0.5 });
-    for (let k = 0; k < 10; k++) { // trillende boomtoppen
-      const x = x0 + ((k * 7.3) % (x1 - x0)), y = y0 + ((k * 4.1) % (y1 - y0));
-      if (at(Math.round(x), Math.round(y)) !== G.VEG) continue;
-      effects.circle(x + Math.sin(now / 40 + k) * 0.6, y, 1.4).fill({ color: 0x1e321e, alpha: 0.5 });
-    }
-  }
-
-  // Gevaren en schaarse middelen die als ding op de kaart staan
-  function drawObjectsOfHazards() {
-    if (game.ammoDepot) { // munitiekisten (Grebbeberg)
-      const [x, y] = game.ammoDepot;
-      for (let k = 0; k < 3; k++) {
-        marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 1.4).fill(0x6a5a2a);
-        marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 0.35).fill(0xc9a43a);
-      }
-    }
-    for (const c of game.crates) { // krat aan een parachute (Market Garden)
-      if (!c) continue;
-      const [x, y, kind, full] = c;
-      if (full) {
-        marks.arc(x, y - 2.5, 2.2, Math.PI, 0).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
-        marks.moveTo(x - 2.2, y - 2.5).lineTo(x, y).lineTo(x + 2.2, y - 2.5).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
-      }
-      marks.rect(x - 1.2, y - 1, 2.4, 2).fill(full ? (kind === 'fuel' ? 0x4e6b2a : 0x8a6a2a) : 0x6a6a64);
-    }
-    for (const g of game.guns) { // antitankgeschut (Carentan), zichtbaar na het eerste schot
-      const col = g.hp > 0 ? 0x4a4a3a : 0x2a2a26;
-      marks.save(); marks.translateTransform(g.x, g.y); marks.rotateTransform(g.ang);
-      marks.rect(-1.5, -1.2, 3, 2.4).fill(col);
-      marks.rect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5).fill(col);
-      marks.restore();
-    }
-    if (game.bridge?.blown) drawBridgeWreck(game.bridge.box);
-  }
-  // Opgeblazen brug: brokken beton en geknakte liggers in het water, met water ertussen.
-  // De vorm volgt uit een hash van de plek, zodat iedereen hetzelfde wrak ziet.
-  function drawBridgeWreck([x0, y0, x1, y1]) {
-    const hash = (x, y, k) => { let h = (x * 374761393 + y * 668265263 + k * 2246822519) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-    const step = 2.6;
-    for (let y = y0; y <= y1; y += step) {
-      for (let x = x0; x <= x1; x += step) {
-        const gx = Math.round(x * 10), gy = Math.round(y * 10);
-        if (hash(gx, gy, 0) < 0.38) continue; // hier alleen water
-        const cx = x + (hash(gx, gy, 1) - 0.5) * 1.2, cy = y + (hash(gx, gy, 2) - 0.5) * 1.2;
-        const r = 0.8 + hash(gx, gy, 3) * 0.9, rot = hash(gx, gy, 4) * Math.PI * 2, n = 5 + Math.floor(hash(gx, gy, 5) * 2);
-        const pts = [];
-        for (let k = 0; k < n; k++) {
-          const a = rot + (k / n) * Math.PI * 2, d = r * (0.6 + 0.4 * hash(gx, gy, 6 + k));
-          pts.push(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
-        }
-        marks.poly(pts.map((v, k) => v + (k % 2 ? 0.35 : 0.25))).fill({ color: 0x14202a, alpha: 0.45 }); // schaduw op het water
-        const shade = 0x6e6a62 + Math.floor(hash(gx, gy, 12) * 3) * 0x0c0c0c;
-        marks.poly(pts).fill(shade).stroke({ color: 0x3a3832, width: 0.2 });
-      }
-    }
-    // een paar liggers die schuin uit het water steken
-    for (let k = 0; k < 3; k++) {
-      const hx = x0 + (x1 - x0) * (0.2 + 0.3 * k + (hash(x0, y0, 20 + k) - 0.5) * 0.15), hy = y0 + (y1 - y0) * hash(x0, y0, 30 + k);
-      marks.save(); marks.translateTransform(hx, hy); marks.rotateTransform((hash(x0, y0, 40 + k) - 0.5) * 1.6);
-      marks.rect(-2.2, -0.35, 4.4, 0.7).fill(0x4a3a2c);
-      marks.restore();
-    }
-  }
-  // Brandend graan (Koersk): vlammen op de brandende vakken
-  function drawFires(now) {
-    if (!game.fires.size) return;
-    const tw = Math.ceil(G.W / G.T);
-    for (const tile of game.fires) {
-      const x = (tile % tw) * G.T, y = ((tile / tw) | 0) * G.T;
-      for (let k = 0; k < 4; k++) {
-        const fx = x + 1 + ((k * 1.7) % 3.5), fy = y + 1 + ((k * 2.3) % 3.5), f = 0.6 + 0.4 * Math.sin(now / 90 + k * 1.9 + tile);
-        effects.circle(fx, fy, 0.8 + 0.5 * f).fill({ color: (255 << 16) | (Math.round(120 + 80 * f) << 8) | 40, alpha: 0.85 });
-      }
-    }
-  }
-  // Stofwolk achter tanks die over harde grond rijden (Barbarossa, zomer)
-  function drawDust() {
-    if (!game.weather?.flags.dust) return;
-    for (const [id, t] of game.tanks) {
-      if (!t.a || t.rx === undefined || (id !== game.me && t.seen !== 'sharp')) continue;
-      const cls = G.CLASSES[game.terrain[Math.round(t.ry) * G.W + Math.round(t.rx)]]?.name;
-      if (cls !== 'hard' || Math.abs(t.rx - (t.dustX ?? t.rx)) + Math.abs(t.ry - (t.dustY ?? t.ry)) < 0.01) { t.dustX = t.rx; t.dustY = t.ry; continue; }
-      t.dustX = t.rx; t.dustY = t.ry;
-      if (Math.random() < 0.4) particles.spawn('smoke', t.rx, t.ry, 1, { speed: 1, life: 2, r0: 1, r1: 3.5 });
-    }
-  }
-  // Zoeklichten (Oder-front): bundels vanaf de rechterrand; daarin is alles licht
-  function drawSearchlights() {
-    lights.clear();
-    const cfg = game.weather?.flags.searchlights;
-    if (!cfg) return;
-    const half = (cfg.widthT * G.T) / 2;
-    for (const b of searchlightBeams(cfg, game.tick - game.mapTick)) {
-      const Lb = G.W * 1.3, c = Math.cos(b.ang), s = Math.sin(b.ang);
-      lights.poly([
-        b.x0 - s * half, b.y0 + c * half,
-        b.x0 + c * Lb - s * half * 1.6, b.y0 + s * Lb + c * half * 1.6,
-        b.x0 + c * Lb + s * half * 1.6, b.y0 + s * Lb - c * half * 1.6,
-        b.x0 + s * half, b.y0 - c * half,
-      ]).fill({ color: 0xfffad2, alpha: 0.16 });
-    }
-  }
-  // Woestijnhallucinaties (El Alamein): buiten je zichtcirkel soms een valse contour, ergens waar
-  // een echte ook zou kunnen staan (in je kijkboog, vrije zichtlijn); per speler anders en niet
-  // gesynchroniseerd (§6.4)
-  const mirages = [];
-  let nextMirage = 0;
-  function drawMirages(me, cam, now) {
-    if (!game.weather?.flags.mirages) return;
-    if (!nextMirage) nextMirage = now + 15000 * Math.random();
-    const r = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
-    if (now > nextMirage) {
-      nextMirage = now + 15000 * (0.5 + Math.random()); // gemiddeld eens per 15 s
-      const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180), a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
-      const d = r + 4 + Math.random() * Math.max(4, far * 0.8 - r - 4);
-      const x = Math.round(me.x + Math.cos(a) * d), y = Math.round(me.y + Math.sin(a) * d);
-      if (G.inBounds(x, y) && sightAt(game.map, me, x, y, { radius: r, view: cam, smokes: game.smokes }) === 'contour') {
-        mirages.push({ x, y, ang: Math.floor(Math.random() * 8) * (Math.PI / 4), until: now + 2000 + Math.random() * 2000 });
-      }
-    }
-    for (let k = mirages.length - 1; k >= 0; k--) {
-      const m = mirages[k];
-      if (now > m.until) { mirages.splice(k, 1); continue; }
-      drawContour(mirageSprites, m.x + 0.5, m.y + 0.5, m.ang, contourAlpha(Math.hypot(m.x - me.x, m.y - me.y), r, far));
-    }
-  }
-
-  // Herkenningspunt van een dorp: een kruis op het dak van de kerk (zolang die nog staat)
-  function drawLandmarks() {
-    for (const l of game.landmarks) {
-      if (at(Math.round(l.x), Math.round(l.y)) !== G.BUILDING) continue;
-      marks.rect(l.x - 0.6, l.y - 3.5, 1.2, 7).rect(l.x - 2.2, l.y - 1.8, 4.4, 1.2).fill({ color: 0x28241e, alpha: 0.85 });
-    }
-  }
+  // ---------- Gevaren en schaarse middelen in beeld (view/hazards-view.js) ----------
+  const hz = createHazardView({
+    game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius,
+    get pal() { return pal; },
+  });
 
   // ---------- Ronde en score (§2) ----------
   const nameOf = (id) => style.teams[id]?.name || `SPELER ${id + 1}`;
@@ -1515,21 +1178,29 @@ export function startWorld(style) {
     roundLabel.at(8 * s, canvas.height - 30 * s);
   }
 
-  // Wat een stijl nodig heeft voor zijn zijbalk en effecten
+  // Wat een stijl nodig heeft voor zijn effecten, en wat de spelpagina gebruikt (hooks, destroy)
   const view = {
-    game, canvas,
+    game, canvas, hooks,
     cam: { x: 0, y: 0, w: 0, h: 0, Z: 1, drawX: 0, drawY: 0 },
     at,
     get bases() { return bases; },
     colors: pal.hex, // kaartkleuren als #rrggbb (rock, veg, water, tunnel, classes[naam])
     shake(s) { shake = Math.max(shake, s); },
-    drawMinimap,
+    drawMinimap: () => side.drawMinimap(),
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
+    // Opruimen bij een kaart met een andere stijl: beeldlus stoppen, videokaart vrijgeven
+    destroy() {
+      alive = false;
+      resize?.disconnect();
+      if (renderer) destroyRenderer();
+      stage.destroy({ children: true });
+      if (window.blitzView === view) delete window.blitzView;
+    },
   };
-  // ingebed: de kaart kan er al zijn voordat deze weergave geladen was. Pas na deze functie,
-  // want de stijl heeft zijn view dan nog niet (const view = startWorld(...)).
-  if (shell && game.map) queueMicrotask(() => { loadMap(game.map); hooks.onStatus(game.status); });
+  // De kaart kan er al zijn (kaartwissel, of de stijl laadde later dan het instapbericht). Pas na
+  // deze functie, want de stijl heeft zijn view dan nog niet (view = startWorld(...)).
+  if (game.map) queueMicrotask(() => { if (alive) { loadMap(game.map); hooks.onStatus(game.status); } });
   if (DEBUG_HOST) window.blitzView = view; // voor bench() in de console
   return view;
 }

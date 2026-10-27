@@ -145,6 +145,7 @@ export function createFieldSampler(R) {
 // Een kaartlaag in losse canvassen van TILE x TILE cellen (TP pixels per zijde). Eén groot
 // canvas kan op een grote kaart niet als textuur naar de videokaart (te groot), en zo hoeft
 // bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
+export const R = 6; // pixels per cel in de kaarttextuur
 export const TILE = 32;
 export function createTileCanvases(R) {
   const TP = TILE * R, TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
@@ -338,6 +339,40 @@ export function createOverlay(el) {
     key = k;
     el.innerHTML = big ? `<div class="big">${big}</div><div class="small">${small}</div>` : '';
   };
+}
+
+// Brandstof (B) en munitie (M) halen: badge op de kaart, vakje op de minikaart en in de legenda
+export const REFILL_COLORS = { fuel: '#e0b02a', ammo: '#d8572e' };
+// Het B- of M-vakje (legenda, en de badge boven een laadplek op de kaart)
+export function paintRefillIcon(canvas, kind) {
+  const g = canvas.getContext('2d'), n = canvas.width;
+  g.fillStyle = '#000'; g.fillRect(0, 0, n, n);
+  g.fillStyle = REFILL_COLORS[kind]; g.fillRect(2, 2, n - 4, n - 4);
+  g.fillStyle = 'rgba(0, 0, 0, 0.85)'; g.font = `bold ${Math.round(n * 0.6)}px sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(kind === 'fuel' ? 'B' : 'M', n / 2, n / 2 + 1);
+}
+
+// Vuur en vonken bij explosies: in elke stijl dezelfde kleuren
+export const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
+
+// Zandzakken rond een basis: een rij van a tot b op hoogte (of x) fixed, 3 cellen dik.
+// look = { bag, top, edge: kleuren, line: dikte van de rand, len: lengte van een zak in cellen }
+export function sandbagRow(ctx, a, b, fixed, horizontal, look) {
+  const len = b - a;
+  if (len <= 0.5) return;
+  const n = Math.max(1, Math.round(len / look.len)), L = len / n;
+  for (let k = 0; k < n; k++) {
+    if (horizontal) sandbag(ctx, a + k * L, fixed, L, 3, look); else sandbag(ctx, fixed, a + k * L, 3, L, look);
+  }
+}
+function sandbag(ctx, x, y, w, h, look) {
+  ctx.fillStyle = look.bag;
+  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.fill();
+  ctx.fillStyle = look.top;
+  ctx.beginPath(); ctx.roundRect(x + 0.4, y + 0.38, w - 0.8, (h - 0.2) * 0.38, 0.35); ctx.fill();
+  ctx.strokeStyle = look.edge; ctx.lineWidth = look.line;
+  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.stroke();
 }
 
 // ---------- Tankuiterlijk per kaart (config: tanks) ----------

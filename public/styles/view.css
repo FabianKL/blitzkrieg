@@ -1,0 +1,55 @@
+/* Speelveld en zijpaneel op de spelpagina: de opbouw, voor alle stijlen gelijk. Kleuren,
+   lettertypes en randen per stijl staan in zomer.css, winter.css en woestijn.css (op
+   body[data-style]); de telefoonstand en de touchknoppen in touch.css. */
+
+.view {
+  flex: 1; min-height: 0; display: flex; gap: 0;
+  --fuel: #4e5a26; --armour: #8a3a24; --ammo: #a2802c; /* kleur van de meters */
+}
+.panel { position: relative; flex: 1; min-width: 0; min-height: 0; }
+.panel canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.panel-label { position: absolute; top: 12px; z-index: 2; pointer-events: none; }
+.panel-label:empty { display: none; }
+
+.overlay {
+  position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  pointer-events: none; text-align: center;
+}
+.overlay:empty { display: none; }
+.overlay .big { transform: rotate(-4deg); }
+.overlay .small { margin-top: 14px; text-shadow: 0 1px 3px #000; }
+
+.caution { flex: none; border: 1px solid #0c0c0a; }
+
+aside { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
+
+/* Je tankkaart: naam, zeges en drie meters (world-view.js vult ze) */
+.card { position: relative; padding: 12px 14px; }
+.card .top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.card .wins { text-align: right; font-size: 11px; letter-spacing: 1px; }
+.card .wins b { display: block; font-weight: 400; line-height: 1; }
+.card .gauge { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; margin-top: 4px; }
+.card .gauge .num { display: none; }
+.card .track { position: relative; height: 9px; }
+.card .fill { height: 100%; width: 0; transition: width .15s linear; }
+.card .fill.fuel { background: var(--fuel); }
+.card .fill.armour { background: var(--armour); }
+.card .fill.ammo { background: var(--ammo); }
+.card .fill.low { animation: blink .5s steps(1) infinite; }
+.card.dead { filter: grayscale(.7) brightness(.8); }
+@keyframes blink { 50% { opacity: .25; } }
+
+#mini { width: 100%; aspect-ratio: 8 / 5; display: block; }
+.legend { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 8px; row-gap: 5px; align-items: center; }
+.legend-row { display: contents; }
+.legend-swatch { width: 22px; height: 22px; image-rendering: pixelated; }
+.legend-name { font-size: 12px; line-height: 1.2; }
+.legend-note { font-size: 11px; white-space: nowrap; text-align: right; }
+
+/* Smal scherm (geen telefoon liggend): speelveld boven, zijpaneel eronder */
+@media (max-width: 900px) {
+  .view { flex-direction: column; overflow: auto; }
+  .panel { flex: none; height: 62vh; }
+  .caution { height: 12px; margin: 12px 0 !important; width: auto !important; }
+  aside { width: auto; overflow: visible; }
+}

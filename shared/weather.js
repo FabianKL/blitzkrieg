@@ -11,7 +11,7 @@
 //             of water); burial: onderduiken; terrain: verandering bij het ingaan (zie
 //             game.js applyTerrainChange); en vrije vlaggen voor de kaart (fog, drops, fires, ...)
 // scale: alle seconden keer scale (de tests draaien met een snelle klok).
-import { TICK_RATE } from './game.js';
+import { TICK_RATE } from './world.js';
 import { TRACK_ERASER } from './config.js';
 
 // Is de regel in deze ronde en op dit moment van kracht? Geeft null of {since, left, warn}:

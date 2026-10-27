@@ -77,10 +77,12 @@ B- of M-badge met een pulserende ring.
 | 1945 Oder-front | artilleriebarrage | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
 | 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter |
 
-**Alle getallen staan in `shared/config.js`**: terreinklassen, maten (T = 5 cellen), zicht, kogels,
-gebouwen, rondes, hints, kaartgroottes en per map het terrein in procenten, de vaste kenmerken
-(dorpen, rivieren, wegen, ...), het weer, het gevaar, het schaarse middel en het uiterlijk van de
-tanks. Zie de uitleg bovenaan elk blok.
+**Alle getallen staan in `shared/config.js`**: terreinklassen, maten (T = 5 cellen), zicht, tank,
+kogels, mijnen, gebouwen, rondes, hints, netwerk, rook en kaartgroottes. Zie de uitleg bovenaan elk
+blok. **Elke kaart (veldslag) staat in een eigen bestand** in `shared/maps/` (`carentan.js`, ...):
+het terrein in procenten, de vaste kenmerken (dorpen, rivieren, wegen, ...), het weer, het gevaar,
+het schaarse middel en de meter met hun getallen, de kleuren en het uiterlijk van de tanks. De
+velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu staat.
 
 ### Afwijkingen van de spec (bewust)
 - **Zicht** (§9): in plaats van een vaste zichtstraal van 12 T is de zichtcirkel de halve hoogte van
@@ -116,7 +118,8 @@ tanks. Zie de uitleg bovenaan elk blok.
 
 ## Testen
 ```
-npm test            # alle tests (testserver met vaste kaart, snelle weerklok, 2 rondes om te winnen)
+npm test            # alle tests (testserver met vaste kaart, snelle weerklok, 2 rondes om te winnen;
+                    # tests zonder server lopen tegelijk in worker-threads, ~1,5 minuut)
 npm test -- ijs     # alleen tests met 'ijs' in de naam
 npm run test:gen    # de grote generatietest: elke map 100 keer, 4 groottes, 2/3/4 spelers
 npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
@@ -126,12 +129,13 @@ localhost, in de adresbalk):
 - `?debug=alles` toont alle tanks en zet het zicht uit;
 - `?zoom=3` zet de camera dichter op je tank (om details te bekijken);
 - `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
-- `blitzView.bench()` in de console van de weergave (het iframe) tekent 120 beelden direct na
-  elkaar en geeft de tijd per beeld, ook als het venster niet zichtbaar is.
+- `blitzView.bench()` in de console tekent 120 beelden direct na elkaar en geeft de tijd per beeld,
+  ook als het venster niet zichtbaar is.
 
 ## Uiterlijk per map (`look`)
 Alle maps gebruiken dezelfde weergave (PixiJS); alleen de instellingen verschillen. Die staan in
-`shared/config.js`: `LOOK` is de standaard, en elke map kan met `look: { ... }` velden overschrijven.
+`shared/config.js` (`LOOK`, de standaard) en in het bestand van de kaart in `shared/maps/`, dat met
+`look: { ... }` velden kan overschrijven.
 De spelregels kijken er niet naar.
 
 | Veld | Wat |
@@ -145,40 +149,48 @@ De spelregels kijken er niet naar.
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
 
 **Een nieuwe map een eigen stijl geven:**
-1. Kies in de map de weergave met `style` (`zomer`, `winter` of `woestijn`). Die bepaalt de vormen:
-   bomen, bases, tanks, en de textuur over de kaartkleuren.
+1. Kies in het bestand van de kaart de weergave met `style` (`zomer`, `winter` of `woestijn`). Die
+   bepaalt de vormen (bomen, bases, tanks, de textuur over de kaartkleuren) en de opmaak van het
+   zijpaneel.
 2. Geef de kleuren van het terrein in `classes`, `rocks`, `water`, `vegetation` en `tunnelColor`.
 3. Voeg een `look`-blok toe, bijvoorbeeld koud en besneeuwd:
    `look: { grade: { saturation: -0.15, tint: '#d2e2ff', tintStrength: 0.18 }, weather: 'snow', amount: 30 }`.
 4. Herstart de server en bekijk de map met `?zoom=2` en `?fps=1`.
 
-Een heel ander soort vormen (bijvoorbeeld een stad in de sneeuw) betekent een nieuwe stijlmodule naast
-`1942/1943/1944.js`. Die levert alleen pixelkleuren, `drawTank`, `drawBase` en objecten;
-zie de uitleg bovenaan `public/world-view.js`.
+Een heel ander soort vormen (bijvoorbeeld een stad in de sneeuw) betekent een nieuwe stijl in
+`public/styles/`: een tekenmodule `<naam>.js` (pixelkleuren, `drawTank`, `drawBase`, objecten; zie de
+uitleg bovenaan `public/world-view.js`) en een thema `<naam>.css` (kleuren en randen van het speelveld
+en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema in `index.html`.
 
 ## Opbouw
 | Bestand | Wat |
 |---|---|
-| `shared/config.js` | Alle getallen en de 10 maps. |
-| `shared/game.js` | Spelregels: terrein, rijden, graven, sporen, kogels, ijs, terreinveranderingen, rondes. Server én browser. |
-| `shared/mapgen.js` | Kaartmaker (§6): bases eerst, dan kenmerken, terrein tot de percentages, controle. |
+| `shared/config.js` | Alle algemene getallen (terrein, zicht, tank, kogels, netwerk, ...). |
+| `shared/maps/` | De kaarten: één bestand per veldslag, `index.js` met het mapmenu en de uitleg van de velden. |
+| `shared/game.js` | De ingang voor de spelregels (`import * as G`): geeft alles door uit de bestanden hieronder, plus rondes en score. Server én browser. |
+| `shared/world.js` | Kaartmaat, celtypes, terreinklassen, de tankvorm en deterministisch toeval. |
+| `shared/terrain.js` | Wat de kaart verandert: graven, sporen en vervagen, wegschieten, ijs en dooi, weer en gevaren. |
+| `shared/movement.js` | Rijden, kogels en mijnen. |
+| `shared/codec.js` | De kaart over de lijn: run-length encoding en base64. |
+| `shared/mapgen.js` | Kaartmaker (§6): bases eerst, dan kenmerken, terrein tot de percentages, controle; ook de retrokaart. |
 | `shared/weather.js` | Weerregels per ronde en timer. |
 | `shared/vision.js` | Zichtregel (kijkboog, zichtlijn, scherp of contour), richtingshints, zoeklichten. |
-| `shared/client-sim.js` | Clientkant zonder browsercode: berichten, voorspelling, posities. Browser én tests. |
+| `shared/client-sim.js` | Clientkant zonder browsercode: berichten (tabel `ON` met alle gebeurtenissen), voorspelling, posities. Browser én tests. |
 | `hazards.js` | Gevaren, schaarse middelen en meters (alleen server; die gooit de dobbelsteen). |
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
-| `public/index.html`, `shell.js` | De spelpagina: titel, menu's, en de weergave in een iframe. |
-| `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, weer, `look`. |
+| `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
+| `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
+| `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld). |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
-| `public/render-common.js` | Kaartschilder (tegelcanvassen), camera, kleuren en ruis. |
-| `public/1944.js`, `1943.js`, `1942.js` + `.html` | Stijlen zomer, winter en woestijn. |
-| `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van de stijlpagina's. |
+| `public/render-common.js` | Kaartschilder (tegelcanvassen), camera, kleuren en ruis, gedeelde tekeningen. |
+| `public/styles/` | De stijlen: `zomer.js`, `winter.js`, `woestijn.js` (tekenen) met hun thema `.css`, en `view.css` (opbouw van speelveld en zijpaneel). |
+| `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van het speelveld. |
 | `public/manifest.webmanifest`, `icon.svg` | Op het beginscherm zetten: volledig scherm, liggend. |
 | `public/retro.html`, `client.js` | Het originele Tunneler. |
-| `tests/` | `run.mjs`, `tests.mjs`, `maps.mjs`, `acceptance.mjs`, `gen.mjs`, `gen-checks.mjs`, `helpers.mjs`. |
+| `tests/` | `run.mjs`, `tests.mjs`, `maps.mjs`, `acceptance.mjs`, `gen.mjs`, `gen-checks.mjs`, `fingerprint.mjs` (zelfde seed = zelfde kaart), `helpers.mjs`. |
 
-Interne namen die zijn blijven staan: de map-id's, de stijlbestanden `1944/1943/1942`, de
-omgevingsvariabelen `TUNNELER_*` en de potnaam van retro.
+Interne namen die zijn blijven staan: de map-id's, de omgevingsvariabelen `TUNNELER_*` en de
+potnaam van retro.
 
 ## Waarom het snel en soepel is
 - De kaart gaat **één keer** over de lijn: kaart, terrein, sporen, planten en gaten als binaire RLE,
@@ -193,7 +205,7 @@ omgevingsvariabelen `TUNNELER_*` en de potnaam van retro.
   kruinen, effecten, mist, UI). Wat duur is (kaart, bomen, bases, tanks) wordt één keer getekend en
   daarna alleen verplaatst of gedraaid; ~4 ms per beeld op 1560×1012. De pakketten (`pixi.js`,
   `pixi-filters`, `simplex-noise`) komen via `npm install` en de server geeft ze op `/vendor/`; een
-  import map in de stijlpagina's koppelt de namen. Geen build-stap, en het werkt zonder internet.
+  import map in `index.html` koppelt de namen. Geen build-stap, en het werkt zonder internet.
 - **Kaartschilder per tegel**: een tegel (32×32 cellen) is een eigen texture en wordt pas geschilderd als hij in beeld komt;
   dure ruiskleuren worden per pixel onthouden, zodat graven/vervagen alleen nog opzoeken is. Pixels en
   kleurgeheugen bestaan alleen voor de 48 laatst geziene tegels (`?tiles=8` in de adresbalk om dat te

@@ -1,11 +1,11 @@
-// Tunneler winter: stijl voor de gedeelde wereldweergave (world-view.js), voor de Ardennen (/1943)
-// en Leningrad (/leningrad). Sneeuw, bevroren aarde in de tunnels, dennen- of berkenbos,
-// rotsblokken en water. Kaarten met fog: true beginnen in dichte mist die langzaam optrekt.
+// Stijl winter (Ardennen, Leningrad) voor de gedeelde wereldweergave (world-view.js). Sneeuw,
+// bevroren aarde in de tunnels, dennen- of berkenbos, rotsblokken en water. Kaarten met fog: true
+// beginnen in dichte mist die langzaam optrekt. De spelpagina (shell.js) start hem met start(game);
+// de opmaak van het zijpaneel staat in winter.css.
 import * as G from '/shared/game.js';
 import { startWorld, R } from '/world-view.js';
-import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots } from '/render-common.js';
+import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots, FIRE } from '/render-common.js';
 
-const $ = (id) => document.getElementById(id);
 let ctx = null; // canvas waarop de basis getekend wordt (zie drawBase)
 
 // Uiterlijk per kaart (config: tanks, via teamLook); mini = vaste kleur per speler op de minikaart
@@ -21,7 +21,6 @@ function teamLook(spec, i) {
   const hull = spec.variant ? shade(spec.hull, 0.85) : spec.hull;
   return { ...spec, hull, turret: mix(hull, '#ffffff', 0.12), mini: MINI[i] };
 }
-function onTeams() { hudKey = ''; }
 
 // ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
 // De dure ruiskleuren (sneeuw, bevroren aarde, water) worden per pixel onthouden;
@@ -297,7 +296,6 @@ function drawTank(g, team, x, y, ang) {
 const SNOW_BITS = ['#ffffff', '#e6ecf1', '#d2dae0'];
 const NEEDLES = ['#1c3529', '#274837', '#345c46', '#6b4a2c'];
 const FROZEN = ['#5a4232', '#463326', '#6e5442'];
-const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
 const METAL = ['#2a2c2e', '#3e4246', '#5a5e62'];
 
 function onEvent(e, spawn) {
@@ -409,54 +407,33 @@ function drawFog(cam, now) {
   return fogCanvas;
 }
 
-// ---------- Zijbalk ----------
-// De tankkaart is dezelfde als op de zomerkaarten (1944.js): dunne balken, knippert onder 20%
-function setFill(k, pct) {
-  const el = $(`fill-${k}`);
-  el.style.width = `${clamp(pct, 0, 1) * 100}%`;
-  el.classList.toggle('low', pct < 0.2);
+// Linksboven in het speelveld: hoe lang de ochtendmist nog hangt
+function fogLabel() {
+  if (!view.game.map) return '';
+  const pr = fogProgress();
+  return pr >= 1 ? '' : `MIST · OPGETROKKEN OVER ${Math.ceil((1 - pr) * FOG_SECONDS)} S`;
 }
 
-let hudKey = '';
-function hud() {
-  const { game } = view;
-  const self = game.tanks.get(game.me);
-  if (self) {
-    const key = `${game.me},${TEAMS[game.me].name},${self.f},${self.s},${self.m},${self.c},${self.a}`;
-    if (key !== hudKey) {
-      hudKey = key;
-      $('name').textContent = TEAMS[game.me].name;
-      setFill('fuel', (self.f ?? 0) / 100);
-      setFill('armour', (self.s ?? 0) / G.SHIELD_MAX);
-      setFill('ammo', (self.m ?? 0) / G.AMMO_MAX);
-      $('wins').textContent = self.c ?? 0;
-      document.querySelector('.card').classList.toggle('dead', self.a === 0);
-    }
-  }
-  if (game.map) {
-    const pr = fogProgress();
-    const txt = pr >= 1 ? '' : `MIST · OPGETROKKEN OVER ${Math.ceil((1 - pr) * FOG_SECONDS)} S`;
-    if ($('fog').textContent !== txt) $('fog').textContent = txt;
-  }
-}
-
-const view = startWorld({
-  // Leningrad gebruikt deze stijl ook: data-kaart="leningrad" in leningrad.html
-  room: 'ardennen', viewCells: 96, background: '#e9eef3', teams: TEAMS,
-  ground: snow, rock: snow, veg: snow, tunnel, water, base,
-  // minikaart (world-view.js): zolang de mist hangt, ligt die ook over de minikaart
-  minimap: {
-    smooth: false,
-    overlay: (g) => {
-      const density = 1 - smooth(fogProgress());
-      if (density > 0.01) { g.fillStyle = `rgba(226, 231, 237, ${0.92 * density})`; g.fillRect(0, 0, G.W, G.H); }
+let view = null;
+export default function start(game) {
+  view = startWorld({
+    viewCells: 96, background: '#e9eef3', teams: TEAMS,
+    ground: snow, rock: snow, veg: snow, tunnel, water, base,
+    // minikaart (world-view.js): zolang de mist hangt, ligt die ook over de minikaart
+    minimap: {
+      smooth: false,
+      overlay: (g) => {
+        const density = 1 - smooth(fogProgress());
+        if (density > 0.01) { g.fillStyle = `rgba(226, 231, 237, ${0.92 * density})`; g.fillRect(0, 0, G.W, G.H); }
+      },
     },
-  },
-  objects: { draw: drawObjects, over: true },
-  clouds: { puff: '245, 248, 252', smoke: '62, 64, 66' }, cloudAlpha: { puff: 0.7, smoke: 0.45 },
-  onEvent, overlay: drawFog, teamLook, onTeams, drawBase, drawTank,
-  shadow: { color: 0x283755, alpha: 0.35 },
-  tracer: ['rgba(255, 170, 60, 0)', 'rgba(255, 210, 110, 1)'],
-  eraser: { name: 'SNEEUWSTORM', haze: '232, 238, 245', hazeAlpha: 0.38, streak: '255, 255, 255' },
-  hud,
-});
+    objects: { draw: drawObjects, over: true },
+    clouds: { puff: '245, 248, 252', smoke: '62, 64, 66' }, cloudAlpha: { puff: 0.7, smoke: 0.45 },
+    onEvent, overlay: drawFog, teamLook, drawBase, drawTank,
+    shadow: { color: 0x283755, alpha: 0.35 },
+    tracer: ['rgba(255, 170, 60, 0)', 'rgba(255, 210, 110, 1)'],
+    eraser: { name: 'SNEEUWSTORM', haze: '232, 238, 245', hazeAlpha: 0.38, streak: '255, 255, 255' },
+    label: fogLabel,
+  }, game);
+  return view;
+}

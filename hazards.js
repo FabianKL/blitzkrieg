@@ -11,7 +11,7 @@
 // step(room, tick, events, hurt) elke tick, en snapshot(room) voor het instapbericht.
 // hurt(t, procent, events) haalt pantser af en laat de tank zo nodig ontploffen.
 import * as G from './shared/game.js';
-import { HINTS } from './shared/config.js';
+import { HINTS, SMOKE } from './shared/config.js';
 import { searchlightAt } from './shared/vision.js';
 
 const rnd = () => Math.random(); // (tests kunnen Math.random vervangen)
@@ -70,16 +70,17 @@ const fuelDepots = {
     room.hz.depots = [];
     for (let tries = 0; room.hz.depots.length < n && tries < 2000; tries++) {
       const x = Math.floor(rnd() * G.W), y = Math.floor(rnd() * G.H);
-      if (!freeSpot(w, x, y, 4) || w.bases.some((b) => Math.hypot(b.x - x, b.y - y) < 40)) continue;
-      if (room.hz.depots.some((d) => Math.hypot(d[0] - x, d[1] - y) < 60)) continue;
+      if (!freeSpot(w, x, y, cfg.reach) || w.bases.some((b) => Math.hypot(b.x - x, b.y - y) < cfg.fromBase)) continue;
+      if (room.hz.depots.some((d) => Math.hypot(d[0] - x, d[1] - y) < cfg.apart)) continue;
       room.hz.depots.push([x, y, 1]);
     }
     events.push({ t: 'dep', list: room.hz.depots });
   },
   step(room, tick, events) {
+    const reach = room.rules.scarce.reach;
     room.hz.depots.forEach((d, k) => {
       if (!d[2]) return;
-      const t = room.tanks.find((o) => o?.alive && Math.abs(o.x - d[0]) <= 4 && Math.abs(o.y - d[1]) <= 4);
+      const t = room.tanks.find((o) => o?.alive && Math.abs(o.x - d[0]) <= reach && Math.abs(o.y - d[1]) <= reach);
       if (!t) return;
       t.fuel = G.FUEL_MAX;
       d[2] = 0;
@@ -108,9 +109,9 @@ const ammoDepot = {
     room.hz.ammoDepot = v ? [v.x, v.y] : null;
   },
   step(room, tick) {
-    const d = room.hz.ammoDepot;
-    if (!d || tick % 6) return;
-    for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= 2.5 * G.T) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+    const d = room.hz.ammoDepot, cfg = room.rules.scarce;
+    if (!d || tick % Math.round(G.TICK_RATE / cfg.perSecond)) return;
+    for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= cfg.radiusT * G.T) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
   },
   snapshot(room) { return { ammoDepot: room.hz.ammoDepot }; },
 };
@@ -119,16 +120,17 @@ const ammoDepot = {
 // Koersk: na elk vuurgevecht). Rook blokkeert het zicht (§9), de clients tekenen hem. ----------
 function smokeStep(room, tick, events) {
   const f = room.wx?.flags || {};
-  if (f.farmSmoke && tick % ticks(5) === 0) { // drijvende rook boven de vallei (links van 55%)
-    events.push({ t: 'smoke', x: Math.round(rnd() * 0.55 * G.W), y: Math.round(rnd() * G.H), r: 2.5 * G.T, s: 20 });
+  const { farm, city } = SMOKE;
+  if (f.farmSmoke && tick % ticks(farm.everySeconds) === 0) { // drijvende rook boven de vallei
+    events.push({ t: 'smoke', x: Math.round(rnd() * farm.valleyX * G.W), y: Math.round(rnd() * G.H), r: farm.rT * G.T, s: farm.seconds });
   }
-  if (f.citySmoke && tick % ticks(4) === 0) { // rook boven Arnhem
-    const v = room.world.villages?.[0];
-    if (v) events.push({ t: 'smoke', x: Math.round(v.x + (rnd() - 0.5) * 20 * G.T), y: Math.round(v.y + (rnd() - 0.5) * 12 * G.T), r: 2 * G.T, s: 16 });
+  if (f.citySmoke && tick % ticks(city.everySeconds) === 0) { // rook boven Arnhem
+    const v = room.world.villages?.[0], [sx, sy] = city.spreadT;
+    if (v) events.push({ t: 'smoke', x: Math.round(v.x + (rnd() - 0.5) * sx * G.T), y: Math.round(v.y + (rnd() - 0.5) * sy * G.T), r: city.rT * G.T, s: city.seconds });
   }
 }
 export function battleSmoke(room, x, y, events) { // tank geraakt of brand: rookvlek van 20 s
-  if (room.wx?.flags.battleSmoke) events.push({ t: 'smoke', x, y, r: 1.5 * G.T, s: 20 });
+  if (room.wx?.flags.battleSmoke) events.push({ t: 'smoke', x, y, r: SMOKE.battle.rT * G.T, s: SMOKE.battle.seconds });
 }
 
 // ---------- Brandend graan (Koersk, §10.5) ----------
@@ -453,10 +455,10 @@ registerMeter('sand', (room, t, info) => {
   t.meterState.cells = 0;
   const cls = classUnder(room, t);
   if (cls === 'soft') {
-    if (t.gauge > m.danger) t.shield = Math.max(0, t.shield - Math.round(G.SHIELD_MAX / 100));
-    t.gauge += 2;
-  } else if (cls === 'hard' || cls === 'paved') t.gauge -= 5;
-  if (t.gauge >= 100) t.slow = SLOW(0.7);
+    if (t.gauge > m.danger) t.shield = Math.max(0, t.shield - Math.round((m.armorPct * G.SHIELD_MAX) / 100));
+    t.gauge += m.soft;
+  } else if (cls === 'hard' || cls === 'paved') t.gauge += m.firm;
+  if (t.gauge >= 100) t.slow = SLOW(m.slow);
   else if (t.gauge < m.danger) t.slow = G.SPEED_ONE;
 });
 
@@ -464,16 +466,18 @@ registerMeter('sand', (room, t, info) => {
 // seconde, rijden of in de eigen basis +10. Bij 0 bevroren: de tank komt in 4 s op snelheid.
 // Na de dooi vervalt dit.
 registerMeter('heat', (room, t, info) => {
+  const m = room.rules.meter;
   t.moved = info.moved;
   const speed = cellsPerSecond(t);
   if (room.wx?.flags.thawed) { t.gauge = 100; t.slow = G.SPEED_ONE; return; }
-  if (room.tick % G.TICK_RATE === 0) t.gauge += speed >= 0.3 * G.TICK_RATE || inOwnBase(room, t) ? 10 : -5;
+  if (room.tick % G.TICK_RATE === 0) t.gauge += speed >= m.idleBelow * G.TICK_RATE || inOwnBase(room, t) ? m.warm : m.cool;
   if (t.gauge <= 0) t.meterState.frozen = true;
   const wants = t.input && (t.input.dx || t.input.dy);
   if (t.meterState.frozen) { // bevroren motor: langzaam op gang (4 s)
     t.meterState.ramp = wants ? (t.meterState.ramp || 0) + 1 : 0;
-    t.slow = SLOW(Math.min(1, 0.1 + (0.9 * t.meterState.ramp) / (4 * G.TICK_RATE)));
-    if (t.meterState.ramp >= 4 * G.TICK_RATE && t.gauge > 0) { t.meterState.frozen = false; t.slow = G.SPEED_ONE; }
+    const ramp = ticks(m.rampSeconds);
+    t.slow = SLOW(Math.min(1, m.rampFrom + ((1 - m.rampFrom) * t.meterState.ramp) / ramp));
+    if (t.meterState.ramp >= ramp && t.gauge > 0) { t.meterState.frozen = false; t.slow = G.SPEED_ONE; }
   }
 });
 
@@ -481,17 +485,18 @@ registerMeter('heat', (room, t, info) => {
 // brandend vak +15; langzamer of stil -6; in de eigen basis -20. Bij 100 oververhit: hoogstens
 // 40% snelheid tot de meter onder 50 is.
 registerMeter('temp', (room, t, info) => {
+  const m = room.rules.meter;
   t.moved = info.moved;
   const speed = cellsPerSecond(t);
   if (room.tick % G.TICK_RATE === 0) {
-    if (isBurning(room, t.x, t.y)) t.gauge += 15;
-    else if (inOwnBase(room, t)) t.gauge -= 20;
-    else if (speed > 0.8 * G.TICK_RATE) t.gauge += 4;
-    else t.gauge -= 6;
+    if (isBurning(room, t.x, t.y)) t.gauge += m.fire;
+    else if (inOwnBase(room, t)) t.gauge += m.base;
+    else if (speed > m.fastAbove * G.TICK_RATE) t.gauge += m.fast;
+    else t.gauge += m.idle;
   }
   if (t.gauge >= 100) t.meterState.hot = true;
-  if (t.meterState.hot && t.gauge < 50) t.meterState.hot = false;
-  t.slow = t.meterState.hot ? SLOW(0.4) : G.SPEED_ONE;
+  if (t.meterState.hot && t.gauge < m.coolTo) t.meterState.hot = false;
+  t.slow = t.meterState.hot ? SLOW(m.hotSlow) : G.SPEED_ONE;
 });
 
 export function roundStart(room, events) {

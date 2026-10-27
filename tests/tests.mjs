@@ -6,6 +6,7 @@ import * as Wx from '../shared/weather.js';
 import * as Hz from '../hazards.js';
 import { mapTests } from './maps.mjs';
 import { acceptanceTest } from './acceptance.mjs';
+import { fingerprints, expectedFingerprints } from './fingerprint.mjs';
 
 const MAP_IDS = Object.keys(G.MAPS);
 const countEmpty = (map) => map.reduce((n, v) => n + (v === G.EMPTY ? 1 : 0), 0);
@@ -675,12 +676,12 @@ export const tests = [
       const out = [];
       for (const id of MAP_IDS) {
         const cfg = G.MAPS[id];
-        const sum = { cls: new Array(G.CLASS_NAMES.length).fill(0), water: 0, veg: 0, seaTop: 0, n: 0 };
+        const sum = { cls: new Array(G.CLASS_NAMES.length).fill(0), water: 0, veg: 0, n: 0 };
         for (let seed = 1; seed <= 20; seed++) {
           const w = G.generateMap(seed * 104729, cfg);
           for (let i = 0; i < w.map.length; i++) {
             if (w.map[i] === G.DIRT || w.map[i] === G.EMPTY) sum.cls[w.terrain[i]]++;
-            if (w.map[i] === G.WATER) { sum.water++; if (((i / G.W) | 0) < 40) sum.seaTop++; } // kust: 14 tot 36 cellen van de rand
+            if (w.map[i] === G.WATER) sum.water++;
           }
           for (let k = 0; k < w.vegHp.length; k++) {
             if (!w.vegCells[k].length) continue;
@@ -700,12 +701,10 @@ export const tests = [
           check(named || sum.cls[i] === 0, `${id}: klasse ${name} komt voor maar staat niet in de configuratie`);
           check(!named || sum.cls[i] > 0, `${id}: klasse ${name} staat in de configuratie maar komt niet voor`);
         }
-        const wantWater = (cfg.water && (cfg.water.rivers || cfg.water.canals || cfg.water.lakes || cfg.water.sea || cfg.water.frozenRiver?.holes)) ||
-          cfg.terrainPercent?.water || cfg.features?.some((f) => f.type === 'river' && !f.frozen);
+        const wantWater = cfg.terrainPercent?.water || cfg.features?.some((f) => f.type === 'river' && !f.frozen);
         check(!wantWater === !sum.water, `${id}: ${sum.water} watercellen, ${wantWater ? 'wel' : 'geen'} water verwacht`);
-        if (cfg.water?.sea === 'north') check(sum.seaTop > sum.water * 0.8, `${id}: de zee ligt niet langs de bovenrand`);
         check(!cfg.vegetation === !sum.veg, `${id}: ${sum.veg} planten`);
-        const wantBuildings = cfg.buildings || cfg.features?.some((f) => f.type === 'village');
+        const wantBuildings = cfg.terrainPercent?.building || cfg.features?.some((f) => f.type === 'village');
         check(!wantBuildings === !sum.buildings, `${id}: ${sum.buildings || 0} gebouwen`);
         out.push(`${id}: ${(sum.water / sum.n) | 0} water, ${(sum.veg / sum.n) | 0} planten`);
       }
@@ -788,10 +787,10 @@ export const tests = [
     },
   },
   {
-    name: 'vloeiend rijden: tekenen met een andere klok dan de voorspelling springt niet (ingebed speelveld)',
+    name: 'vloeiend rijden: tekenen met een andere klok dan de voorspelling springt niet',
     async run(port) {
       const a = await connectBot(port, 'barbarossa');
-      // de voorspelling loopt op klok A (buitenpagina), het tekenen op klok B = A - 3 s (iframe)
+      // de voorspelling loopt op klok A, het tekenen op klok B = A - 3 s (bv. een trage tab)
       let max = 0, prev = null;
       const t0 = Date.now();
       while (Date.now() - t0 < 3000) {
@@ -1076,6 +1075,15 @@ export const tests = [
       const dead = await connectBot(port, 'carentan', { autoPong: false });
       check(await waitFor(() => dead.closed, 12000, 200), 'dode verbinding werd niet afgesloten');
       return 'groot bericht geweigerd, flood begrensd, dode verbinding opgeruimd';
+    },
+  },
+  {
+    name: 'kaart-vingerafdruk: zelfde seed geeft dezelfde kaart als in tests/fingerprint.json',
+    run: async () => {
+      const got = fingerprints(), want = expectedFingerprints();
+      const diff = Object.keys(want).filter((k) => got[k] !== want[k]);
+      check(!diff.length, `andere kaart bij ${diff.slice(0, 5).join(', ')}${diff.length > 5 ? ' …' : ''} (bewust? node tests/fingerprint.mjs --write)`);
+      return `${Object.keys(want).length} kaarten gelijk`;
     },
   },
 ];

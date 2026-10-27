@@ -1,7 +1,7 @@
 // Acceptatiecriteria (SPEC-blitzkrieg §12): per criterium de tests die het controleren.
 // De test hieronder kijkt of al die tests bestaan (en dus meedraaien), en controleert zelf
 // criterium 1 (de naam) op de pagina's van de server.
-import { check } from './helpers.mjs';
+import { G, check } from './helpers.mjs';
 
 export const CRITERIA = [
   ['1. Het spel heet overal BLITZKRIEG', ['acceptatie']],
@@ -29,13 +29,20 @@ export function acceptanceTest(allTests) {
       for (const [crit, names] of CRITERIA) {
         for (const n of names) check(allTests.some((t) => t.name.includes(n)), `${crit}: test "${n}" ontbreekt`);
       }
-      for (const page of ['/', '/retro', '/1944.html', '/1943.html', '/1942.html']) {
+      for (const page of ['/', '/retro']) {
         const html = await (await fetch(`http://localhost:${port}${page}`)).text();
         const visible = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--[\s\S]*?-->/g, '');
         check(!/tunneler/i.test(visible), `${page}: "Tunneler" staat nog in de pagina`);
         check(/BLITZKRIEG/.test(html) || page !== '/', `${page}: geen BLITZKRIEG`);
       }
-      return `${CRITERIA.length} criteria gedekt; pagina's heten BLITZKRIEG`;
+      // elke stijl die een kaart gebruikt, bestaat als tekenmodule en thema
+      const styles = new Set(Object.values(G.MAPS).map((m) => m.style).filter(Boolean));
+      for (const st of styles) {
+        for (const file of [`/styles/${st}.js`, `/styles/${st}.css`]) {
+          check((await fetch(`http://localhost:${port}${file}`)).ok, `${file} ontbreekt`);
+        }
+      }
+      return `${CRITERIA.length} criteria gedekt; pagina's heten BLITZKRIEG; stijlen ${[...styles].join(', ')}`;
     },
   };
 }

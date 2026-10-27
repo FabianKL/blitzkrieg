@@ -2,13 +2,13 @@
 // Volgorde: bases eerst (willekeurig, met beschermde zone), dan de vaste kenmerken (dorpen,
 // rivieren, wegen met bruggen), dan het terrein invullen tot de percentages, en controleren.
 // Alles is deterministisch uit de seed: server en clients maken dezelfde kaart.
-// (Wordt aangeroepen vanuit game.js; gebruik hier geen game.js-waarden buiten functies.)
 import {
-  W, H, T, EMPTY as EMPTY_CELL, DIRT, ROCK, WATER, VEG, BUILDING, WALL, CLASS, CLASSES, VEGETATION, BUILDING_HP,
-  BASE_W, BASE_H, DOOR_CLEAR, ICE_BW, ICE_BH, MAP_SIZES, sizeDims, inBounds, mulberry32, makeNoise, makeBorder,
-  drawBases, connectBases, ensureThawRoute, addMines, indexVeg, applyTerrainChange,
-} from './game.js';
-import { VIEW_CELLS } from './config.js';
+  W, H, EMPTY as EMPTY_CELL, DIRT, ROCK, WATER, VEG, BUILDING, WALL, BASE, CLASS, CLASSES, BUILDING_HP, BASE_W, BASE_H,
+  BASE_W_CELLS, BASE_H_CELLS, DOOR_CLEAR, DOOR_HALF, ICE_BW, ICE_BH, MAX_PLAYERS, sizeDims, inBounds, mulberry32, makeNoise,
+  indexVeg, reachable,
+} from './world.js';
+import { applyTerrainChange } from './terrain.js';
+import { T, VEGETATION, MAP_SIZES, VIEW_CELLS } from './config.js';
 import { terrainChangesAt } from './weather.js';
 
 const ATTEMPTS = 8; // zo vaak opnieuw als de percentages niet binnen de marge komen
@@ -790,5 +790,164 @@ function fillClasses(map, terrain, fixedClass, border, classes, pct, P, seed, in
     acc += want[c];
     const end = c === classes.length - 1 ? order.length : Math.round((acc / total) * order.length);
     for (; k < end; k++) { terrain[open[order[k]]] = CLASS[classes[c]]; if (inside) fixedClass[open[order[k]]] = 1; }
+  }
+}
+
+const BASE_SPOTS = [[0.18, 0.25], [0.82, 0.75], [0.82, 0.25], [0.18, 0.75]];
+
+// ---------- Retrokaart en bouwstenen voor de kaartmakers ----------
+// Kaart maken. players = aantal bases (zoveel spelers als de kaartgrootte toelaat).
+// Kaarten met features (het formaat uit §11) gaan via de kaartmaker in mapgen.js; zonder features
+// is het de retrokaart: één terreinklasse, losse rotsblokken, een rotsrand en de bases.
+export function generateMap(seed, opts = {}, players = MAX_PLAYERS) {
+  if (opts.features) return generateFeatureMap(seed, opts, players);
+  const rnd = mulberry32(seed);
+  const noise = makeNoise(seed ^ 0x5bd1e995);
+  const map = new Uint8Array(W * H).fill(DIRT);
+  const terrain = new Uint8Array(W * H).fill(CLASS[Object.keys(opts.classes || { normal: 1 })[0]]);
+  // het aantal rotsen in de configuratie geldt voor middel; op andere groottes naar verhouding
+  const rk = opts.rocks || {}, count = Math.round((rk.count || 0) * (W * H) / (BASE_W_CELLS * BASE_H_CELLS));
+  for (let i = 0; i < count; i++) {
+    const cx = rnd() * W, cy = rnd() * H, r = rk.min + rnd() * (rk.max - rk.min);
+    for (let y = Math.floor(cy - r - 2); y <= cy + r + 2; y++) {
+      for (let x = Math.floor(cx - r - 2); x <= cx + r + 2; x++) {
+        if (inBounds(x, y) && Math.hypot(x - cx, y - cy) < r + (rnd() - 0.5) * 2.5) map[y * W + x] = ROCK; // gekartelde rand
+      }
+    }
+  }
+  const isBorder = makeBorder(map, noise);
+  const bases = BASE_SPOTS.slice(0, players).map(([fx, fy]) => ({
+    x: Math.round(fx * W + (rnd() - 0.5) * 30),
+    y: Math.round(fy * H + (rnd() - 0.5) * 20),
+  }));
+  const veg = new Uint16Array(W * H);
+  drawBases(map, veg, bases, isBorder, noise);
+  connectBases(map, bases, isBorder);
+  const w = { map, terrain, track: new Uint16Array(W * H), veg, vegHp: new Uint8Array(0), scar: new Uint8Array(W * H), ice: new Uint8Array(ICE_BW * ICE_BH) };
+  indexVeg(w);
+  return { ...w, bases, fields: [], mines: [] };
+}
+
+// ---------- Bouwstenen voor de kaartmakers ----------
+// Rand van rots: een rotswand van wisselende dikte (4 tot ~13 cellen), met grote golven en
+// kleine hapjes, zodat de rand van de kaart geen rechte lijn is. Minstens 4 dik, zodat hij ook
+// zichtbaar is als de camera niet helemaal tegen de rand staat. Geeft isBorder(x, y).
+export function makeBorder(map, noise) {
+  const edge = (u, side) => 4 + noise(u / 11, side * 97) * 7 + noise(u / 3, side * 97 + 41) * 2;
+  // de randdikte per rij en kolom één keer uitrekenen (de kaartmaker vraagt het heel vaak)
+  const left = Float32Array.from({ length: H }, (_, y) => edge(y, 0)), right = Float32Array.from({ length: H }, (_, y) => edge(y, 1));
+  const top = Float32Array.from({ length: W }, (_, x) => edge(x, 2)), bottom = Float32Array.from({ length: W }, (_, x) => edge(x, 3));
+  const isBorder = (x, y) => x < 0 || y < 0 || x >= W || y >= H || x < left[y] || W - 1 - x < right[y] || y < top[x] || H - 1 - y < bottom[x];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (isBorder(x, y)) map[y * W + x] = ROCK;
+    }
+  }
+  return isBorder;
+}
+
+// Bases tekenen: dunne muur in spelerskleur, opening boven en onder, eromheen vrijgemaakt
+export function drawBases(map, veg, bases, isBorder, noise) {
+  const obstacle = (v) => v === ROCK || v === WATER || v === VEG || v === BUILDING;
+  const clear = (i) => { map[i] = DIRT; veg[i] = 0; };
+  bases.forEach((b, i) => {
+    const x0 = b.x - (BASE_W >> 1), y0 = b.y - (BASE_H >> 1);
+    // Rots, water en planten rond de basis weghalen in een golvende, afgeronde vorm (geen
+    // rechthoek, anders worden ze in de buurt recht afgesneden). Minstens 5 cellen vrij.
+    for (let y = y0 - 14; y < y0 + BASE_H + 14; y++) {
+      for (let x = x0 - 14; x < x0 + BASE_W + 14; x++) {
+        if (!inBounds(x, y) || !obstacle(map[y * W + x]) || isBorder(x, y)) continue;
+        const dx = Math.max(x0 - x, 0, x - (x0 + BASE_W - 1)), dy = Math.max(y0 - y, 0, y - (y0 + BASE_H - 1));
+        if (Math.hypot(dx, dy) < 5 + noise(x / 5, y / 5) * 7) clear(y * W + x);
+      }
+    }
+    // Vrije uitrijstrook voor beide deuren: een trechter die naar buiten breder wordt,
+    // zodat je de basis uit kunt rijden en kunt draaien zonder meteen ergens tegen te botsen.
+    for (const [doorY, dir] of [[y0, -1], [y0 + BASE_H - 1, 1]]) {
+      for (let d = 1; d <= DOOR_CLEAR; d++) {
+        const y = doorY + dir * d;
+        const half = 7 + d * 0.45 + noise(b.x / 4 + d / 5, doorY / 4) * 3; // golvende zijkanten
+        for (let x = Math.floor(b.x - half - 2); x <= b.x + half + 2; x++) {
+          if (!inBounds(x, y) || !obstacle(map[y * W + x]) || isBorder(x, y)) continue;
+          if (Math.abs(x - b.x) < half + noise(x / 3, y / 3) * 1.5) clear(y * W + x);
+        }
+      }
+    }
+    for (let y = y0; y < y0 + BASE_H; y++) {
+      for (let x = x0; x < x0 + BASE_W; x++) {
+        const edgeX = x === x0 || x === x0 + BASE_W - 1;
+        const edgeY = y === y0 || y === y0 + BASE_H - 1;
+        const door = edgeY && !edgeX && Math.abs(x - b.x) <= DOOR_HALF;
+        map[y * W + x] = (edgeX || edgeY) && !door ? WALL + i : BASE + i;
+        veg[y * W + x] = 0;
+      }
+    }
+  });
+
+}
+
+// Bevroren rivier: de bases moeten elkaar ook na de dooi nog kunnen bereiken (via de brug).
+// Lukt dat niet, dan wordt de doorgang die connectBases graaft een dam van harde grond.
+export function ensureThawRoute(map, terrain, bases, isBorder) {
+  if (CLASS.ice !== undefined && terrain.includes(CLASS.ice)) {
+    const thawed = Uint8Array.from(map, (v, i) => (v === DIRT && terrain[i] === CLASS.ice ? WATER : v));
+    connectBases(thawed, bases, isBorder);
+    for (let i = 0; i < map.length; i++) {
+      if (thawed[i] !== DIRT) continue;
+      if (map[i] === ROCK || map[i] === WATER) map[i] = DIRT;
+      if (terrain[i] === CLASS.ice) terrain[i] = CLASS.hard;
+    }
+  }
+}
+
+
+// Mijnenvelden: ellipsen ver van de bases, met losse mijnen in het zand. Mijnen zijn geen
+// celtype: je graaft er gewoon doorheen.
+export function addMines(map, bases, rnd, count) {
+  const fields = [], mines = [];
+  for (let tries = 0; fields.length < count && tries < 40 * count; tries++) {
+    const f = {
+      x: Math.round(20 + rnd() * (W - 40)), y: Math.round(15 + rnd() * (H - 30)),
+      rx: Math.round(12 + rnd() * 16), ry: Math.round(8 + rnd() * 10),
+    };
+    if (bases.some((b) => Math.hypot((b.x - f.x) / (f.rx + 24), (b.y - f.y) / (f.ry + 20)) < 1)) continue;
+    if (fields.some((o) => Math.hypot(o.x - f.x, o.y - f.y) < (o.rx + f.rx) * 0.8)) continue;
+    fields.push(f);
+  }
+  const taken = new Set();
+  for (const f of fields) {
+    for (let y = f.y - f.ry; y <= f.y + f.ry; y++) {
+      for (let x = f.x - f.rx; x <= f.x + f.rx; x++) {
+        if (!inBounds(x, y) || ((x - f.x) / f.rx) ** 2 + ((y - f.y) / f.ry) ** 2 > 1) continue;
+        if (map[y * W + x] !== DIRT || rnd() > 0.035) continue;
+        let near = false; // minstens 2 cellen tussen mijnen
+        for (let j = -2; j <= 2 && !near; j++) for (let i = -2; i <= 2; i++) if (taken.has((y + j) * W + x + i)) { near = true; break; }
+        if (near) continue;
+        taken.add(y * W + x);
+        mines.push(y * W + x);
+      }
+    }
+  }
+  return { fields, mines };
+}
+
+export function connectBases(map, bases, isBorder) {
+  for (let tries = 0; tries < 4; tries++) {
+    const seen = reachable(map, bases[0]);
+    const lost = bases.filter((b) => !seen[b.y * W + b.x]);
+    if (!lost.length) return;
+    for (const b of lost) {
+      const n = Math.ceil(Math.hypot(bases[0].x - b.x, bases[0].y - b.y));
+      for (let s = 0; s <= n; s++) {
+        const cx = Math.round(b.x + ((bases[0].x - b.x) * s) / n), cy = Math.round(b.y + ((bases[0].y - b.y) * s) / n);
+        for (let y = cy - 5; y <= cy + 5; y++) {
+          for (let x = cx - 5; x <= cx + 5; x++) {
+            if (!inBounds(x, y) || isBorder(x, y)) continue;
+            const v = map[y * W + x];
+            if (v === ROCK || v === WATER) map[y * W + x] = DIRT;
+          }
+        }
+      }
+    }
   }
 }

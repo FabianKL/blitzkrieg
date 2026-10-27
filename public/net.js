@@ -74,8 +74,3 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
   return state;
 }
 
-// Zet rx/ry/rd van alle tanks en rx/ry/trail van alle kogels voor dit frame
-export function updateRenderPositions(state, now) {
-  Sim.updateRenderPositions(state, now);
-}
-

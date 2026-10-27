@@ -28,16 +28,14 @@ const VENDOR = {
 
 // ---------- Statische bestanden ----------
 // / is het spel (BLITZKRIEG), /retro het originele Tunneler. De weergaves (1944.html enz.)
-// worden door de spelpagina ingeladen. Oude adressen sturen door naar het spel.
+// worden door de spelpagina ingeladen.
 const PAGES = {
   '/': 'public/index.html',
   '/retro': 'public/retro.html',
 };
-const OLD_PAGES = new Set(['/1944', '/1943', '/1942', '/koersk', '/leningrad']);
 const server = http.createServer((req, res) => {
   let urlPath;
   try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { urlPath = '/'; }
-  if (OLD_PAGES.has(urlPath)) { res.writeHead(302, { Location: '/' }); res.end(); return; }
   const rel = VENDOR[urlPath] || PAGES[urlPath] || (urlPath.startsWith('/shared/') ? urlPath.slice(1) : 'public' + urlPath);
   const file = path.join(ROOT, rel);
   if (!VENDOR[urlPath] && !ALLOWED.some((d) => file.startsWith(d + path.sep))) { res.writeHead(404); res.end(); return; }
@@ -50,9 +48,7 @@ const server = http.createServer((req, res) => {
 
 // ---------- Instellingen (via omgevingsvariabelen, handig voor tests) ----------
 const FIXED_SEED = process.env.TUNNELER_SEED ? Number(process.env.TUNNELER_SEED) >>> 0 : null; // vaste kaart (tests)
-const HEARTBEAT_MS = 5000; // zo vaak pingen; wie niet antwoordt, wordt afgesloten
-const MAX_MSGS_PER_SEC = 60; // meer berichten van één speler negeren we
-const MAX_PAYLOAD = 4 * 1024; // spelers sturen alleen kleine berichten
+const { heartbeatMs: HEARTBEAT_MS, maxMsgsPerSec: MAX_MSGS_PER_SEC, maxPayload: MAX_PAYLOAD } = G.NET; // zie config.js
 // Spelregels; de tests zetten roundsToWin lager om een heel spel snel uit te spelen
 const GAME = { ...G.GAME, roundsToWin: Number(process.env.TUNNELER_ROUNDS_TO_WIN) || G.GAME.roundsToWin };
 // Weerklok: de tests laten het weer sneller lopen (0.05 = twintig keer zo snel)
@@ -82,8 +78,9 @@ function getRoom(name, size) {
     rooms.set(name, room);
     if (lobby) { room.size = G.DEFAULT_SIZE; newWorld(room); }
   }
-  if (!room.lobby && !room.tanks.some(Boolean) && room.size !== (G.MAP_SIZES[size] ? size : G.DEFAULT_SIZE)) {
-    room.size = G.MAP_SIZES[size] ? size : G.DEFAULT_SIZE;
+  const wanted = Object.hasOwn(G.MAP_SIZES, size) ? size : G.DEFAULT_SIZE;
+  if (!room.lobby && !room.tanks.some(Boolean) && room.size !== wanted) {
+    room.size = wanted;
     newWorld(room);
   }
   return room;
@@ -103,15 +100,13 @@ function configure(room, t, mapId, size) {
   if (!Object.hasOwn(G.MAPS, mapId) || mapId === 'retro' || !Object.hasOwn(G.MAP_SIZES, size)) return;
   if (room.tanks.filter(Boolean).length > G.MAP_SIZES[size].maxPlayers) return; // te veel spelers voor deze grootte
   if (mapId === room.mapId && size === room.size) return;
-  const old = [room.mapId, room.size];
-  room.mapId = mapId;
-  room.rules = G.MAPS[mapId];
-  room.size = size;
-  if (newGame(room)) return;
-  // de bases passen niet (te veel spelers voor deze kaartgrootte): terug en melden in het menu
-  [room.mapId, room.size] = old;
-  room.rules = G.MAPS[room.mapId];
-  newGame(room);
+  const old = { mapId: room.mapId, rules: room.rules, size: room.size };
+  Object.assign(room, { mapId, rules: G.MAPS[mapId], size });
+  const made = makeWorld(room);
+  if (made) { newGame(room, made); return; }
+  // de bases passen niet (te veel spelers voor deze kaartgrootte): de oude kaart blijft, melden in het menu
+  Object.assign(room, old);
+  useRoom(room);
   room.pendingEvents.push({ t: 'err', msg: 'De bases passen niet op deze kaartgrootte: kies een grotere kaart.' });
 }
 
@@ -140,16 +135,24 @@ function useRoom(room) {
   G.setMapSize(w, h);
 }
 
-function newWorld(room) {
+// Een nieuwe kaart voor dit potje: { world, seed }, of null als de bases niet passen (te veel
+// spelers voor deze kaartgrootte). Het potje zelf verandert nog niet.
+function makeWorld(room) {
   useRoom(room);
   const seed = FIXED_SEED ?? (Math.random() * 2 ** 32) >>> 0;
-  // zoveel bases als er spelers op deze kaartgrootte mogen
   try {
-    room.world = G.generateMap(seed, room.rules, G.MAP_SIZES[room.size].maxPlayers);
+    return { world: G.generateMap(seed, room.rules, G.MAP_SIZES[room.size].maxPlayers), seed }; // zoveel bases als er spelers mogen
   } catch (err) {
     if (err.message !== 'BASES') throw err;
-    return false;
+    return null;
   }
+}
+
+// Nieuwe kaart (made, of een nieuw gemaakte) en nieuw spel: ronde 1, scores op 0
+function newWorld(room, made = makeWorld(room)) {
+  if (!made) return false;
+  const { seed } = made;
+  room.world = made.world;
   room.mines = new Set(room.world.mines);
   room.mapTick = room.tick; // begin van deze kaart (mist in de Ardennen, stormklok)
   room.roundTick = room.tick; // begin van de ronde (weer per ronde)
@@ -234,8 +237,8 @@ function newRound(room, events) {
 }
 
 // Spel uit: nieuw spel met een nieuwe kaart. Iedereen krijgt een nieuw instapbericht.
-function newGame(room) {
-  if (!newWorld(room)) return false;
+function newGame(room, made) {
+  if (!newWorld(room, made)) return false;
   room.pendingEvents = [];
   const players = room.tanks.filter(Boolean);
   for (const t of players) { spawn(room, t); t.sent = {}; }
@@ -306,15 +309,14 @@ function tankFields(t, players) {
   };
 }
 
+// Eén tick van een potje: kogels, tanks, gevaren, graven en vervagen, en dan het tickbericht
 function step(room) {
   const tick = ++room.tick;
   const events = room.pendingEvents;
   room.pendingEvents = [];
-  const w = room.world, map = w.map;
   const live = room.tanks.filter(Boolean);
   if (!live.length) return;
   useRoom(room);
-  const dig = G.bulletsDig(room.rules);
 
   const host = hostOf(room);
   if (host !== room.host) { room.host = host; events.push({ t: 'h', i: host }); }
@@ -326,14 +328,35 @@ function step(room) {
     newRound(room, events);
   }
   const playing = room.phase === 'play';
-  const deaths = live.filter((t) => !t.alive).length;
-  // het weer van nu (zicht rekent elke client zelf uit; hier: sporenwisser en onderduiken)
-  const wx = room.wx = Weather.weatherAtTick(room.rules, room.round, tick, room.mapTick, room.roundTick, WEATHER_SCALE);
+  if (playing) {
+    const deaths = live.filter((t) => !t.alive).length;
+    // het weer van nu (zicht rekent elke client zelf uit; hier: sporenwisser en onderduiken)
+    room.wx = Weather.weatherAtTick(room.rules, room.round, tick, room.mapTick, room.roundTick, WEATHER_SCALE);
+    stepBullets(room, live, events);
+    for (const t of live) stepTank(room, t, live, events);
+    // gevaren en schaarse middelen van deze kaart
+    Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
+    if (live.filter((t) => !t.alive).length > deaths) endRound(room, events);
+  } else for (const t of live) t.selfDestruct = false;
 
-  // 1. Kogels (een treffer op begroeiing kost die plant een leven; clients zien in het
-  // 'x'-bericht dat er een plant staat en doen hetzelfde)
-  if (playing) room.bullets = room.bullets.filter((b) => {
-    const hit = G.stepBullet(b, map, live, dig);
+  // Graaf de tankvorm uit op de huidige plek en richting (clients doen exact hetzelfde)
+  for (const t of live) {
+    if (!t.alive) continue;
+    G.digTank(room.world, t.x, t.y, t.dir);
+    G.touchTank(room.world, t.x, t.y, t.dir); // bereden tunnels krijgen een vers spoor
+  }
+  // Sporen vervagen per terreinklasse (tijdens de storm sneller); op 0 loopt een tunnel dicht
+  G.fadeStep(room.world, tick, playing && room.wx.eraser);
+
+  sendTick(room, live, events);
+}
+
+// Kogels (een treffer op begroeiing kost die plant een leven; clients zien in het
+// 'x'-bericht dat er een plant staat en doen hetzelfde)
+function stepBullets(room, live, events) {
+  const w = room.world, dig = G.bulletsDig(room.rules);
+  room.bullets = room.bullets.filter((b) => {
+    const hit = G.stepBullet(b, w.map, live, dig);
     if (!hit && Hazards.bulletAt(room, b.x, b.y, events)) { events.push({ t: 'x', id: b.id, x: b.x, y: b.y, r: 0, o: b.owner }); return false; }
     if (!hit) return true;
     Hazards.bulletLanded(room, b.x - G.DIRS[b.d][0], b.y - G.DIRS[b.d][1], events);
@@ -348,78 +371,71 @@ function step(room) {
     }
     return false;
   });
+}
 
-  // 2. Tanks (een dode tank wacht op de volgende ronde)
-  for (const t of live) {
-    if (!t.alive || !playing) { t.selfDestruct = false; continue; }
-    // Zelfvernietiging: al het pantser weg en dood; telt voor niemand als kill
-    if (t.selfDestruct) { t.selfDestruct = false; t.shield = 0; kill(room, t, null, events); continue; }
-    if (t.cooldown > 0) t.cooldown--;
+// Eén tank: bijvullen, rijden, onderduiken, meters, mijnen, schieten, ijs en brandstof.
+// Een dode tank wacht op de volgende ronde.
+function stepTank(room, t, live, events) {
+  if (!t.alive) { t.selfDestruct = false; return; }
+  // Zelfvernietiging: al het pantser weg en dood; telt voor niemand als kill
+  if (t.selfDestruct) { t.selfDestruct = false; t.shield = 0; kill(room, t, null, events); return; }
+  const w = room.world, tick = room.tick, wx = room.wx;
+  if (t.cooldown > 0) t.cooldown--;
 
-    if (map[t.y * G.W + t.x] === G.BASE + t.id) {
-      // In eigen basis: bijtanken en repareren, tenzij de kaart dat schaars maakt (refill)
-      const refill = room.rules.refill || {};
-      if (refill.fuel !== false) t.fuel = Math.min(G.FUEL_MAX, t.fuel + 15);
-      if (refill.armor !== false && tick % 4 === 0) t.shield = Math.min(G.SHIELD_MAX, t.shield + 1);
-      if (refill.ammo !== false && tick % 6 === 0) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
-    } else if (tick % G.IDLE_DRAIN_EVERY === 0) {
-      t.fuel--;
-    }
-
-    // Rijden met de gedeelde regels (dezelfde die de browser gebruikt om te voorspellen)
-    const px = t.x, py = t.y;
-    G.moveTank(t, w, live.filter((o) => o !== t && o.alive));
-    // Onderduiken (§5.7): 2 seconden stil in een storm = bedekt, tot de tank rijdt of schiet
-    if (t.x !== px || t.y !== py || (t.input.fire && t.ammo > 0)) { t.still = 0; t.buried = false; }
-    else if (++t.still >= G.BURIAL_TICKS && wx.burial) t.buried = true;
-    // meters van de kaart (zand, motorwarmte, motortemperatuur): zie hazards.js
-    Hazards.tankStep(room, t, { moved: t.x !== px || t.y !== py, wx }, events, (tank, pct, ev) => hurt(room, tank, pct, ev));
-    if (!t.alive) continue;
-    // Voor de voorspelling: hoeveel ticks deze invoer (volgnummer) al is toegepast
-    if (t.seq !== t.ackSeq) { t.ackSeq = t.seq; t.seqTicks = 0; }
-    t.seqTicks++;
-
-    // Mijnen: alles wat onder de tank ligt ontploft
-    if (room.mines.size) {
-      for (const i of G.minesUnder(room.mines, t.x, t.y, t.dir)) {
-        room.mines.delete(i);
-        const mx = i % G.W, my = (i / G.W) | 0;
-        G.digStar(w, mx, my, G.MINE_DIG_R);
-        events.push({ t: 'm', x: mx, y: my, r: G.MINE_DIG_R, i: t.id });
-        t.shield = Math.max(0, t.shield - G.MINE_DAMAGE);
-      }
-      if (t.shield === 0) { kill(room, t, null, events); continue; }
-    }
-
-    if (t.input.fire && t.cooldown === 0 && t.ammo > 0) {
-      const [fx, fy] = G.DIRS[t.dir];
-      const b = { id: room.nextBulletId++, owner: t.id, ownerUid: t.uid, x: t.x + fx * (G.TANK_R + 1), y: t.y + fy * (G.TANK_R + 1), d: t.dir, fresh: true };
-      room.bullets.push(b);
-      t.ammo--;
-      t.cooldown = G.FIRE_COOLDOWN;
-      events.push({ t: 'b', id: b.id, x: b.x, y: b.y, d: b.d, i: t.id }); // i: wie schoot (voor de hint)
-    }
-
-    if (iceStep(room, t, events)) continue;
-
-    if (t.fuel <= 0) { t.fuel = 0; kill(room, t, null, events); }
+  if (w.map[t.y * G.W + t.x] === G.BASE + t.id) {
+    // In eigen basis: bijtanken en repareren, tenzij de kaart dat schaars maakt (refill)
+    const refill = room.rules.refill || {};
+    if (refill.fuel !== false) t.fuel = Math.min(G.FUEL_MAX, t.fuel + G.REFILL.fuel);
+    if (refill.armor !== false && tick % G.REFILL.armorEvery === 0) t.shield = Math.min(G.SHIELD_MAX, t.shield + 1);
+    if (refill.ammo !== false && tick % G.REFILL.ammoEvery === 0) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+  } else if (tick % G.IDLE_DRAIN_EVERY === 0) {
+    t.fuel--;
   }
 
-  // gevaren en schaarse middelen van deze kaart
-  if (playing) Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
+  // Rijden met de gedeelde regels (dezelfde die de browser gebruikt om te voorspellen)
+  const px = t.x, py = t.y;
+  G.moveTank(t, w, live.filter((o) => o !== t && o.alive));
+  const moved = t.x !== px || t.y !== py;
+  // Onderduiken (§5.7): 2 seconden stil in een storm = bedekt, tot de tank rijdt of schiet
+  if (moved || (t.input.fire && t.ammo > 0)) { t.still = 0; t.buried = false; }
+  else if (++t.still >= G.BURIAL_TICKS && wx.burial) t.buried = true;
+  // meters van de kaart (zand, motorwarmte, motortemperatuur): zie hazards.js
+  Hazards.tankStep(room, t, { moved, wx }, events, (tank, pct, ev) => hurt(room, tank, pct, ev));
+  if (!t.alive) return;
+  // Voor de voorspelling: hoeveel ticks deze invoer (volgnummer) al is toegepast
+  if (t.seq !== t.ackSeq) { t.ackSeq = t.seq; t.seqTicks = 0; }
+  t.seqTicks++;
 
-  if (playing && live.filter((t) => !t.alive).length > deaths) endRound(room, events);
-
-  // Graaf de tankvorm uit op de huidige plek en richting (clients doen exact hetzelfde)
-  for (const t of live) {
-    if (!t.alive) continue;
-    G.digTank(w, t.x, t.y, t.dir);
-    G.touchTank(w, t.x, t.y, t.dir); // bereden tunnels krijgen een vers spoor
+  // Mijnen: alles wat onder de tank ligt ontploft
+  if (room.mines.size) {
+    for (const i of G.minesUnder(room.mines, t.x, t.y, t.dir)) {
+      room.mines.delete(i);
+      const mx = i % G.W, my = (i / G.W) | 0;
+      G.digStar(w, mx, my, G.MINE_DIG_R);
+      events.push({ t: 'm', x: mx, y: my, r: G.MINE_DIG_R, i: t.id });
+      t.shield = Math.max(0, t.shield - G.MINE_DAMAGE);
+    }
+    if (t.shield === 0) { kill(room, t, null, events); return; }
   }
-  // Sporen vervagen per terreinklasse (tijdens de storm sneller); op 0 loopt een tunnel dicht
-  G.fadeStep(w, tick, playing && wx.eraser);
 
-  // 3. Delta-compressie: alleen velden die veranderd zijn sinds de vorige tick
+  if (t.input.fire && t.cooldown === 0 && t.ammo > 0) {
+    const [fx, fy] = G.DIRS[t.dir];
+    const b = { id: room.nextBulletId++, owner: t.id, ownerUid: t.uid, x: t.x + fx * (G.TANK_R + 1), y: t.y + fy * (G.TANK_R + 1), d: t.dir, fresh: true };
+    room.bullets.push(b);
+    t.ammo--;
+    t.cooldown = G.FIRE_COOLDOWN;
+    events.push({ t: 'b', id: b.id, x: b.x, y: b.y, d: b.d, i: t.id }); // i: wie schoot (voor de hint)
+  }
+
+  if (iceStep(room, t, events)) return;
+
+  if (t.fuel <= 0) { t.fuel = 0; kill(room, t, null, events); }
+}
+
+// Het tickbericht. Delta-compressie: alleen tankvelden die veranderd zijn sinds de vorige tick.
+// Altijd een bericht sturen: het is ook de klok waarop clients kogels laten bewegen.
+// Iedere speler krijgt er een eigen stukje bij (y): de bevestiging voor de voorspelling.
+function sendTick(room, live, events) {
   const p = [];
   for (const t of live) {
     const cur = tankFields(t, live.length);
@@ -430,10 +446,7 @@ function step(room) {
     }
     if (changed) p.push(entry);
   }
-
-  // Altijd een bericht sturen: het is ook de klok waarop clients kogels laten bewegen.
-  // Iedere speler krijgt er een eigen stukje bij (y): de bevestiging voor de voorspelling.
-  const msg = { t: 's', k: tick };
+  const msg = { t: 's', k: room.tick };
   if (p.length) msg.p = p;
   if (events.length) msg.e = events;
   const base = JSON.stringify(msg).slice(0, -1);

@@ -1,11 +1,9 @@
-// Tunneler 1944: stijl voor de gedeelde wereldweergave (world-view.js), voor Carentan (/1944)
-// en Koersk (/koersk). Fijne korrel over de kaartkleuren, zandzakken rond de bases,
-// gedetailleerde tanks van bovenaf en ploegkaarten.
+// Stijl zomer (Normandië, Arnhem, Koersk, ...) voor de gedeelde wereldweergave (world-view.js).
+// Fijne korrel over de kaartkleuren, zandzakken rond de bases, gedetailleerde tanks van bovenaf.
+// De spelpagina (shell.js) start hem met start(game); de opmaak van het zijpaneel staat in zomer.css.
 import * as G from '/shared/game.js';
 import { startWorld, R } from '/world-view.js';
-import { clamp, hash, vnoise, shade, mix, drawEmblem, drawSpots } from '/render-common.js';
-
-const $ = (id) => document.getElementById(id);
+import { hash, vnoise, shade, mix, drawEmblem, drawSpots, FIRE, sandbagRow } from '/render-common.js';
 
 // Uiterlijk per kaart (config: tanks, via teamLook); dit is alleen de begintoestand
 const TEAMS = [
@@ -22,7 +20,6 @@ function teamLook(spec, i) {
     ploeg: `PLOEG ${'ABCD'[i]} · ${sign}`,
   };
 }
-function onTeams() { card = null; } // ander uiterlijk (andere kaart): kaart opnieuw maken
 const BASE_NAMES = ['A', 'B', 'C', 'D'];
 
 // ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
@@ -106,7 +103,6 @@ function buildCracks() {
 const DIRT_CHUNKS = ['#5c4129', '#6e5034', '#4a3420', '#7d5c3c'];
 const METAL = ['#2a2a26', '#3b3b35', '#55524a'];
 const LEAVES = ['#36502a', '#56783a', '#7a5a34', '#8aa456'];
-const FIRE = ['#ffb347', '#ff8a2a', '#ffd27a', '#ff6a1a'];
 
 function onEvent(e, spawn) {
   if (e.t === 'x' && e.veg) spawn('chunk', e.x, e.y, e.fell ? 26 : 10, { speed: e.fell ? 18 : 12, life: 0.8, cols: LEAVES });
@@ -135,30 +131,15 @@ function onEvent(e, spawn) {
 }
 
 // ---------- Zandzakken ----------
-function bag(ctx, x, y, w, h) {
-  ctx.fillStyle = '#a8844d';
-  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.fill();
-  ctx.fillStyle = '#c09b61';
-  ctx.beginPath(); ctx.roundRect(x + 0.4, y + 0.38, w - 0.8, (h - 0.2) * 0.38, 0.35); ctx.fill();
-  ctx.strokeStyle = '#5c4527'; ctx.lineWidth = 0.18;
-  ctx.beginPath(); ctx.roundRect(x + 0.08, y + 0.1, w - 0.16, h - 0.2, 0.6); ctx.stroke();
-}
-function bagRow(ctx, a, b, fixed, horizontal) {
-  const len = b - a;
-  if (len <= 0.5) return;
-  const n = Math.max(1, Math.round(len / 5.5)), L = len / n; // langwerpige zakken
-  for (let k = 0; k < n; k++) {
-    if (horizontal) bag(ctx, a + k * L, fixed, L, 3); else bag(ctx, fixed, a + k * L, 3, L);
-  }
-}
+const BAGS = { bag: '#a8844d', top: '#c09b61', edge: '#5c4527', line: 0.18, len: 5.5 }; // langwerpige zakken
 function drawBase(ctx, b) {
   const { x0, y0, x1, y1, d0, d1 } = b;
   // Band van 3 cellen dik, gecentreerd op de muur van 1 cel
-  bagRow(ctx, y0 - 1, y1 + 2, x0 - 1, false);
-  bagRow(ctx, y0 - 1, y1 + 2, x1 - 1, false);
+  sandbagRow(ctx, y0 - 1, y1 + 2, x0 - 1, false, BAGS);
+  sandbagRow(ctx, y0 - 1, y1 + 2, x1 - 1, false, BAGS);
   for (const y of [y0 - 1, y1 - 1]) {
-    bagRow(ctx, x0 + 2, d0, y, true);
-    bagRow(ctx, d1 + 1, x1 - 1, y, true);
+    sandbagRow(ctx, x0 + 2, d0, y, true, BAGS);
+    sandbagRow(ctx, d1 + 1, x1 - 1, y, true, BAGS);
   }
   ctx.fillStyle = 'rgba(214, 196, 150, 0.7)';
   ctx.font = '1.7px "Special Elite", monospace';
@@ -207,51 +188,20 @@ function drawTank(ctx, team, x, y, ang) {
   ctx.restore();
 }
 
-// ---------- HUD: de kaart van je eigen tank bovenin de zijkolom ----------
-let card = null; // {el, id, key, fills, wins}
-function makeCard(id) {
-  const team = TEAMS[id];
-  const el = document.createElement('div');
-  el.className = 'card';
-  el.innerHTML = `
-    <div class="top"><span class="name">${team.name}</span><span class="wins">ZEGES<b>0</b></span></div>
-    <div class="row"><span>BRANDSTOF</span><div class="track"><div class="fill" style="background:${team.fuel}"></div></div></div>
-    <div class="row"><span>PANTSER</span><div class="track"><div class="fill" style="background:var(--rust)"></div></div></div>
-    <div class="row"><span>MUNITIE</span><div class="track"><div class="fill" style="background:var(--brass)"></div></div></div>`;
-  $('cards').replaceChildren(el);
-  return { el, id, key: '', fills: el.querySelectorAll('.fill'), wins: el.querySelector('b') };
+let view = null;
+export default function start(game) {
+  view = startWorld({
+    viewCells: 80, background: '#2a1f17', teams: TEAMS,
+    fullText: 'alle vier de ploegen zijn al bemand',
+    ground, tunnel, rock, water, veg, base,
+    afterTile: (tx, ty, setPx) => { for (const px of cracks.get(`${tx},${ty}`) || []) setPx(...px); },
+    skipRepaint: isInterior, // rots binnenin verandert nooit (en heeft barsten die we willen houden)
+    onMap: buildCracks,
+    clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
+    onEvent, drawBase, drawTank, teamLook,
+    shadow: { color: 0x000000, alpha: 0.38 },
+    eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },
+    label: () => TEAMS[view.game.me]?.ploeg ?? '', // je ploeg rechtsboven in het speelveld
+  }, game);
+  return view;
 }
-
-function hud() {
-  const { game } = view;
-  const t = game.tanks.get(game.me);
-  if (!t) return;
-  if (!card || card.id !== game.me) card = makeCard(game.me);
-  const key = `${t.f},${t.s},${t.m},${t.c},${t.a}`;
-  if (key !== card.key) {
-    card.key = key;
-    const pcts = [(t.f ?? 0) / 100, (t.s ?? 0) / G.SHIELD_MAX, (t.m ?? 0) / G.AMMO_MAX];
-    pcts.forEach((pct, k) => {
-      card.fills[k].style.width = `${clamp(pct, 0, 1) * 100}%`;
-      card.fills[k].classList.toggle('low', pct < 0.2);
-    });
-    card.wins.textContent = t.c ?? 0;
-    card.el.classList.toggle('dead', t.a === 0);
-  }
-  $('ploeg').textContent = TEAMS[game.me].ploeg;
-}
-
-const view = startWorld({
-  // Koersk gebruikt deze stijl ook: data-kaart="koersk" in koersk.html
-  room: 'carentan', viewCells: 80, background: '#2a1f17', teams: TEAMS,
-  fullText: 'alle vier de ploegen zijn al bemand',
-  ground, tunnel, rock, water, veg, base,
-  afterTile: (tx, ty, setPx) => { for (const px of cracks.get(`${tx},${ty}`) || []) setPx(...px); },
-  skipRepaint: isInterior, // rots binnenin verandert nooit (en heeft barsten die we willen houden)
-  onMap: buildCracks,
-  clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
-  onEvent, drawBase, drawTank, teamLook, onTeams,
-  shadow: { color: 0x000000, alpha: 0.38 },
-  eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },
-  hud,
-});
