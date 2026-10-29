@@ -170,7 +170,7 @@ function tryMap(seed, rules, players) {
       if (bx1 - bx0 > T && by1 - by0 > T) blocks.push([bx0, by0, bx1, by1]);
     }
   }
-  // wegen (en loopgraven: zigzag); over water komt een brug van minstens 3 T breed
+  // wegen; over water komt een brug van minstens 3 T breed
   const bridgeCells = new Uint8Array(N);
   const bridgeAt = (i) => {
     bridgeCells[i] = 1;
@@ -178,8 +178,7 @@ function tryMap(seed, rules, players) {
   };
   of('road').forEach((f, k) => {
     const width = f.width * T;
-    let path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.zigzag || 0) * T, noise, 700 + k, 0.1);
-    if (f.zigzag) path = zigzag(densify(path), f.zigzag * T, 6 * T);
+    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1, noise, 700 + k, 0.1);
     stroke(path, width / 2, (i) => {
       if (!open(i)) return;
       if (map[i] === WATER || (terrain[i] === CLASS.ice && fixedClass[i])) { if (f.bridges === false) return; bridgeAt(i); }
@@ -204,7 +203,7 @@ function tryMap(seed, rules, players) {
   // Wegen hebben een vaste breedte in T, dus op een grote kaart halen ze het percentage verhard
   // niet: dan komen er zijwegen bij, van de rand naar het dichtstbijzijnde stuk weg.
   const roadWidth = (of('road')[0]?.width || 2) * T;
-  if (of('road').length && !of('road').every((f) => f.zigzag)) {
+  if (of('road').length) {
     let P0 = 0, paved = 0;
     for (let i = 0; i < N; i++) if (!border[i]) { P0++; if (terrain[i] === CLASS.paved && fixedClass[i]) paved++; }
     const want = (((rules.terrainPercent.paved || 0) - 1) / 100) * P0;
@@ -456,14 +455,6 @@ function densify(path) {
   }
   out.push(path[path.length - 1]);
   return out;
-}
-// zigzag: punten opzij schuiven in een zaagtand (loopgraven)
-function zigzag(pts, amp, period) {
-  return pts.map(([x, y], s) => {
-    const [qx, qy] = pts[Math.min(pts.length - 1, s + 2)], [px, py] = pts[Math.max(0, s - 2)];
-    const dx = qx - px, dy = qy - py, L = Math.hypot(dx, dy) || 1, off = (Math.abs(((s / period) % 2) - 1) - 0.5) * 2 * amp;
-    return [x - (dy / L) * off, y + (dx / L) * off];
-  });
 }
 
 // Weer dat het terrein verandert (dooi, modder, overstroming): ook daarna moeten de bases elkaar

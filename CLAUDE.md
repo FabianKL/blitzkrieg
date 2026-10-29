@@ -86,6 +86,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk.
 - Mijnen bij El Alamein zijn onzichtbaar. Gevaren en weer worden alleen in de browser verborgen
   (geen anti-cheat nodig).
+- **Geen loopgraven bij Koersk** (en geen zigzag-optie in de kaartmaker): één zandweg met de brug.
 - **Geen metrotunnels in Berlijn.** Geen aparte pagina's per map: alles via de spelpagina.
 - Een weggeschoten plant ruimt alles binnen 4 cellen op (`FELL.clearRadius`), zodat een tank erdoor past.
 - K = zelfvernietiging: dood, telt voor niemand als kill.

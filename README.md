@@ -110,7 +110,9 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
 - **Plassen en rotsen** worden niet afgekapt door de rechthoekige zones (rond de bases, het dorp, een
   park, een gebied): komt een blob daaraan, dan wordt hij kleiner of komt hij ergens anders.
 - **Dorpshuizen** tellen niet mee in de percentages; ze gaan van de andere klassen af (ruimere marge).
-- **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen.
+- **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen. Er zijn **geen
+  loopgraven** (op verzoek): verhard is één zandweg met de brug over de Psel, aangevuld met
+  zijwegen vanaf de rand, samen nog steeds ~6%.
 - **Leningrad**: bevroren veen is lichter dan in de spec (#8a7e72), anders zijn tunnels niet te zien.
 - **Oder-front**: de helling heeft 1 eigen opening; de twee wegen erdoorheen zijn de andere twee.
 - **Bossen** liggen minstens 2 cellen uit elkaar (losse bossen); breedte 1–5 T zoals in de spec.

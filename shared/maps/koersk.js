@@ -6,7 +6,7 @@ export default { // §10.5
   tanks: { A: T_T34, B: { name: 'TIGER', hull: '#b8a066', mark: 'number', number: '121', camo: '#6b5a3a' } },
   terrainPercent: { normal: 45, hard: 15, soft: 12, paved: 6, rock: 8, vegetation: 8, water: 6 },
   classes: {
-    paved: { label: 'Loopgraven', color: '#7a6448' },
+    paved: { label: 'Zandweg', color: '#7a6448' },
     hard: { label: 'Droge steppe', color: '#a89060' },
     normal: { label: 'Graanvelden', color: '#b89a4a' },
     soft: { label: 'Zwarte aarde', color: '#3e3022' },
@@ -19,9 +19,8 @@ export default { // §10.5
   vegetation: { type: 'tree', label: 'Bosjes', color: '#3f5a2a', groundAfter: 'normal' },
   features: [
     { type: 'river', from: [0.6, 0], to: [1, 0.4], width: 3, bridges: 'atRoads' },
-    { type: 'road', from: [0.45, 0.3], to: [0.95, 0.1], width: 2, zigzag: 1.5 }, // loopgraven; deze over de enige brug
-    { type: 'road', from: [0.3, 0.55], to: [0.78, 0.6], width: 2, zigzag: 1.5 },
-    { type: 'road', from: [0.12, 0.82], to: [0.6, 0.78], width: 2, zigzag: 1.5 },
+    // één zandweg, met de enige brug over de Psel; de kaartmaker vult verhard aan met zijwegen
+    { type: 'road', from: [0.45, 0.3], to: [0.95, 0.1], width: 2 },
     { type: 'ridge', from: [0.05, 0.42], to: [0.45, 0.66], width: 1.5, openings: 2, wiggle: 0.5 },
     { type: 'ridge', from: [0.55, 0.92], to: [0.95, 0.7], width: 1.5, openings: 2, wiggle: 0.5 },
   ],
