@@ -132,7 +132,8 @@ localhost, in de adresbalk):
 - `?zoom=3` zet de camera dichter op je tank (om details te bekijken);
 - `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
 - `?kijk=0.5,0.45` zet de camera op die plek van de kaart (fractie van breedte en hoogte) in plaats
-  van op je tank, om water, ijs of bruggen te bekijken zonder erheen te rijden;
+  van op je tank, om water, ijs of bruggen te bekijken zonder erheen te rijden (in de console:
+  `blitzView.lookAt(0.5, 0.45)`, en `blitzView.lookAt()` terug naar je tank);
 - `?oud=1` (ook buiten localhost) tekent de grond met de oude kaartschilder op de CPU, om te vergelijken;
 - `blitzView.bench()` in de console tekent 120 beelden direct na elkaar en geeft de tijd per beeld,
   ook als het venster niet zichtbaar is (het kan niet sneller meten dan de verversing van het scherm);
@@ -153,6 +154,8 @@ De spelregels kijken er niet naar.
 | `light` | Eén lichtbron voor alle schaduwen: verschuiving `dx`, `dy` (cellen), `alpha`, `blur` (zachte rand). |
 | `weather`, `amount` | Deeltjes in beeld: `'snow'`, `'dust'`, `'rain'` of `null`, en hoeveel per 100×100 cellen (in een storm `stormFactor` keer zoveel). |
 | `vignette`, `fogSoft` | Donkere hoeken; hoe zacht de rand van je zichtveld inloopt. |
+| `water` | Water in de grondshader: `deep` (donkerte in het diepe), `depthCells` (zo ver van de kant is het diep), `shore` (lichter aan de kant), `shine` (glinstering), golven met `waveCells` (maat), `waveSpeed` en `waves` (sterkte). Ook de glans op moeras en doorwaadbare plekken. |
+| `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). |
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
 
 **Een nieuwe map een eigen stijl geven:**

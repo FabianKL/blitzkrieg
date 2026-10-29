@@ -88,8 +88,17 @@ export const DISPLAY = { minimap: true };
 //               contrast = hoeveel van de tekening overblijft (0 = effen, 1 = zoals getekend);
 //               een kaart kan met textures: { klasse: naam } een andere textuur uit
 //               public/assets/<stijl>/terrain/ kiezen dan manifest.json zegt
+//   water       water in de grondshader: deep = donkerte in het diepe (x de waterkleur), depthCells =
+//               zoveel cellen van de kant is het diep, shore = zoveel lichter aan de kant, shine =
+//               glinstering; golven: waveCells (maat in cellen), waveSpeed (vlekken per seconde),
+//               waves (sterkte, 0 = vlak)
+//   ice         ijs: depthCells en deep (donker, diep ijs naar het midden), frost (witte ijzel),
+//               sheen (glans), stress (zoveel donkerder en natter in een vak dat bijna breekt);
+//               barsten: crackWidth (dikte) en crackGrow (zoveel dikker per barststadium)
 export const LOOK = {
   ground: { cells: 16, tint: 0.8, contrast: 0.65 },
+  water: { deep: 0.6, depthCells: 5, shore: 0.22, shine: 0.3, waveCells: 7, waveSpeed: 0.06, waves: 0.3 },
+  ice: { depthCells: 8, deep: 0.55, frost: 0.4, sheen: 0.25, stress: 0.35, crackWidth: 1, crackGrow: 0.45 },
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },

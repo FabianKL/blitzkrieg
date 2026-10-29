@@ -5,8 +5,9 @@
 // De gamestate gaat als drie texturen van 1 pixel per cel naar de videokaart:
 //   cells  (nearest) r = celtype, g = terreinklasse, a = kras (0..3) + 128 als het de brug is
 //   fields (linear)  r = rots, g = water, b = begroeiing: de vervaagde velden (blurField) voor
-//                    ronde randen, bilineair zoals de oude createFieldSampler
-//   track  (linear)  r = spoor (trackMix), g = tunnelvorm (1 in een tunnel), b = tunnelrand
+//                    ronde randen, bilineair zoals de oude createFieldSampler; a = diepte: afstand
+//                    tot de kant in water en ijs (DEPTH_MAX cellen = 1)
+//   track  (linear)  r = spoor (trackMix; ook de rimpels in moeras en doorwaadbare plekken), g = tunnelvorm (1 in een tunnel), b = tunnelrand
 //                    (1 in een tunnel met spoor >= 0,5, zoals seenCell: alleen die krijgt een rand)
 //   solid  (linear)  r = rots, g = water, b = begroeiing: 1 in zo'n cel. Daarmee loopt de drempel
 //                    voor de ronde rand vloeiend van 0,5 (ernaast) naar 0,34 (erin), zodat losse
@@ -34,6 +35,12 @@ import { loadManifest, loadImage, terrainNames, terrainPath, report } from '/ass
 const N_CLASS = G.CLASS_NAMES.length;
 const MAT = { rock: N_CLASS, tunnel: N_CLASS + 1, rubble: N_CLASS + 2 };
 const N_MAT = N_CLASS + 3;
+// Water en ijs (fase 2): golven uit een eigen normaaltextuur die langzaam schuift (uTime), diepte
+// uit het diepteveld, glans van dezelfde lichtbron als de schaduwen (look.light). De ijsvakken
+// (uIce, 1 pixel per vak) geven per vak het barststadium: daar wordt het ijs donkerder en natter.
+// Instellingen in LOOK.water en LOOK.ice.
+const DEPTH_MAX = 12; // diepteveld: tot zoveel cellen van de kant (verder telt als even diep)
+const WAVE_SIZE = 256, WAVE_CYCLES = 4; // golftextuur: naadloos, 4 golfvlekken per zijde
 // Kleuren die de shader los krijgt (uCol)
 const COL = { tunnel: 0, water: 1, veg: 2, building: 3, bridge: 4, floor: 5, debris: 6, lip: 7, bank: 8, deep: 9, twig: 10 };
 const N_COL = 11;
@@ -76,6 +83,8 @@ uniform sampler2D uSolid;
 uniform sampler2D uAtlas;
 uniform sampler2D uNoise;
 uniform sampler2D uMask;
+uniform sampler2D uWave;  // golven: rg = helling, b = hoogte
+uniform sampler2D uIce;   // per ijsvak het barststadium (r = stadium / 3)
 uniform vec2 uMap;        // kaartmaat in cellen
 uniform vec4 uMaskRect;   // waar het zichtmasker ligt (x, y, w, h in cellen)
 uniform float uMaskOn;
@@ -85,6 +94,12 @@ uniform vec4 uMode;       // begroeiing (0 grond, 1 bladerdek, 2 takjes), oever 
 uniform vec4 uLip;        // tunnelrand: hoeveel, verdonkering (0 = kleur uCol lip), binnenrand, -
 uniform vec4 uFloor;      // basisvloer: voegen (cellen), bandensporen, korrel, -
 uniform vec4 uDoor;       // midden van de deur per basis (cellen)
+uniform float uTime;      // seconden, voor de golven
+uniform vec4 uLight;      // richting naar het licht (x, y, z), -
+uniform vec4 uWater;      // look.water: donker in het diepe, diepte (cellen), lichter aan de kant, glans
+uniform vec4 uWaves;      // look.water: golfmaat (cellen), snelheid, sterkte, -
+uniform vec4 uIceLook;    // look.ice: diepte (cellen), donker diep ijs, ijzel, glans
+uniform vec4 uIceMore;    // look.ice: spanning (donkerder bij barsten), ijsvak (cellen), -, -
 uniform vec4 uSlot[${N_MAT}]; // plek in de atlas (u, v, breedte, hoogte); breedte 0 = effen kleur
 uniform vec4 uTint[${N_MAT}]; // kleur van de kaart per materiaal
 uniform vec4 uMean[${N_MAT}]; // gemiddelde kleur van de textuur
@@ -92,6 +107,7 @@ uniform vec4 uCol[${N_COL}];
 
 const int EMPTY = ${G.EMPTY}, DIRT = ${G.DIRT}, ROCK = ${G.ROCK}, WATER = ${G.WATER}, VEG = ${G.VEG};
 const int BUILDING = ${G.BUILDING}, WALL = ${G.WALL}, BASE = ${G.BASE};
+const int FORD = ${G.CLASS.ford}, MARSH = ${G.CLASS.marsh};
 const int ICE = ${G.CLASS.ice}, MAT_TUNNEL = ${MAT.tunnel}, MAT_ROCK = ${MAT.rock}, MAT_RUBBLE = ${MAT.rubble};
 
 vec2 gX, gY; // afgeleiden van de textuurcoördinaat, buiten de takken uitgerekend (mipmaps)
@@ -177,10 +193,59 @@ vec3 rockAt(vec2 p, float f, float thr) {
   if (texture(uFields, (p - vec2(0.33)) / uMap).r < thr) return col * uMode.w;
   return col;
 }
-vec3 waterAt(vec2 p, float f, float thr) {
-  if (f < thr + 0.085) return uMode.y > 0.0 ? groundAt(p) * uMode.y : uCol[${COL.bank}].rgb;
-  float k = (sin(p.x * 2.4 + p.y * 0.9 + nz(p / 5.0) * 6.0) * 6.0 + (hash(p * 6.0) - 0.5) * 6.0) / 255.0;
-  return uCol[${COL.water}].rgb + k;
+// Golven: twee lagen die langzaam over elkaar schuiven; geeft de normaal van het wateroppervlak
+vec3 waveNormal(vec2 p, float strength) {
+  vec2 q1 = p / uWaves.x + uTime * uWaves.y * vec2(1.0, 0.35);
+  vec2 q2 = p / (uWaves.x * 0.63) + uTime * uWaves.y * vec2(-0.45, 0.8);
+  vec2 n = (texture(uWave, q1 / ${WAVE_CYCLES}.0).rg - 0.5) + (texture(uWave, q2 / ${WAVE_CYCLES}.0).rg - 0.5) * 0.7;
+  return normalize(vec3(n * 2.0 * strength, 1.0));
+}
+// Licht op een (bijna) vlak oppervlak: wat donkerder of lichter naar de helling, plus glans
+vec3 lit(vec3 base, vec3 n, float shine) {
+  vec3 L = normalize(uLight.xyz);
+  float diff = dot(n, L) / L.z; // 1 = vlak
+  float spec = pow(max(dot(n, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 70.0);
+  return base * mix(1.0, diff, 0.55) + spec * shine;
+}
+float depthAt(vec2 uv) { return texture(uFields, uv).a * ${DEPTH_MAX}.0; }
+// Water: lichter en ondieper aan de kant, donker in het diepe, golfjes en glinstering
+vec3 waterAt(vec2 p, float f, float thr, float depth) {
+  vec3 bank = uMode.y > 0.0 ? groundAt(p) * uMode.y : uCol[${COL.bank}].rgb;
+  float edge = smoothstep(thr + 0.05, thr + 0.11, f); // 0 = oever, 1 = water
+  if (edge <= 0.0) return bank;
+  float d = smoothstep(0.0, 1.0, depth / uWater.y);
+  vec3 w = uCol[${COL.water}].rgb;
+  vec3 col = mix(w * (1.0 + uWater.z), w * uWater.x, d);
+  col = lit(col, waveNormal(p, uWaves.z), uWater.w);
+  return mix(bank, col, edge);
+}
+// Doorwaadbare plek: ondiep water over stenen (lichter), met rimpels waar een tank reed
+vec3 stones(vec2 p) {
+  vec2 q = p * 1.4, c = floor(q);
+  float best = 9.0, id = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 cell = c + vec2(i, j), pt = cell + vec2(hash(cell * 1.7 + 3.0), hash(cell * 2.3 + 11.0));
+    float dd = distance(q, pt);
+    if (dd < best) { best = dd; id = hash(cell); }
+  }
+  return uTint[FORD].rgb * (0.7 + 0.4 * id) * (1.05 - 0.35 * smoothstep(0.25, 0.75, best));
+}
+float ripples(vec2 p, float tm) {
+  if (tm <= 0.0) return 0.0;
+  vec2 c = fract(p * 0.5) - 0.5;
+  return tm * (0.5 + 0.5 * sin(length(c) * 22.0 - uTime * 5.0)) * (1.0 - smoothstep(0.3, 0.5, length(c)));
+}
+vec3 fordAt(vec2 p, float tm) {
+  vec3 col = mix(stones(p), uCol[${COL.water}].rgb * 1.35, 0.38);
+  col *= 1.0 + 0.2 * ripples(p, tm);
+  return lit(col, waveNormal(p, uWaves.z * 0.8), uWater.w * 0.7);
+}
+// Moeras: de textuur, met plasjes die glinsteren en rimpels waar een tank reed
+vec3 marshAt(vec3 col, vec2 p, float tm) {
+  float wet = smoothstep(0.55, 0.75, nz(p / 3.0 + 21.0));
+  col = mix(col, col * vec3(0.8, 0.88, 0.95), wet * 0.6);
+  col *= 1.0 + 0.18 * ripples(p, tm);
+  return lit(col, waveNormal(p, uWaves.z * 0.5), uWater.w * (0.15 + 0.6 * wet));
 }
 vec3 vegAt(vec2 p, float f, float thr) {
   if (uMode.x < 0.5) return groundAt(p);
@@ -194,22 +259,32 @@ vec3 vegAt(vec2 p, float f, float thr) {
   if (f > 0.62) return g * vec3(0.8, 0.78, 0.72);
   return g;
 }
-// IJs: diepe, donkere plekken, lange stroomstrepen en wat korrel (barsten staan los erboven)
-vec3 iceAt(vec2 p) {
-  vec3 ice = uTint[ICE].rgb;
+// IJs: helder blauwwit aan de kant, dieper en donkerder naar het midden, ijzel in lange strepen
+// langs de stroom, een zachte glans, en donkerder, nat ijs in een vak dat bijna breekt
+// (stress 0..1; barsten en glinstering staan los erboven, zodat ze kunnen bewegen)
+vec3 iceAt(vec2 p, float depth, float stress) {
+  vec3 ice = uTint[ICE].rgb, deepCol = uCol[${COL.deep}].rgb;
+  float d = smoothstep(0.0, 1.0, depth / uIceLook.x);
   float deep = 0.5 + 0.5 * ((nz(p / 18.0) * 2.0 - 1.0) * 0.7 + (nz(p / 7.8 + 40.0) * 2.0 - 1.0) * 0.3);
-  float k = pow(1.0 - deep, 1.6) * 0.62;
+  float k = pow(1.0 - deep, 1.6) * uIceLook.y * mix(0.3, 1.2, d);
+  vec3 col = mix(ice, deepCol, clamp(k, 0.0, 0.85));
+  float frost = smoothstep(0.55, 0.8, nz(vec2(p.x / 14.0, p.y / 1.6) + 9.0)) * uIceLook.z;
+  col = mix(col, vec3(0.95, 0.97, 1.0), clamp(frost * (1.0 - 0.5 * d) + (1.0 - d) * 0.3 * uIceLook.z, 0.0, 1.0));
   float flow = (nz(vec2(p.x / 40.0, p.y / 2.2)) * 2.0 - 1.0) * 0.035;
-  float light = 1.0 + flow + (hash(p * 6.0) - 0.5) * 0.025 + (1.0 - k) * 0.04;
-  return mix(ice, uCol[${COL.deep}].rgb, k) * light;
+  col *= 1.0 + flow + (hash(p * 6.0) - 0.5) * 0.025;
+  col = mix(col, deepCol * 1.15, stress * uIceMore.x);
+  vec3 n = normalize(vec3((texture(uWave, p / (uWaves.x * 6.0)).rg - 0.5) * 0.35, 1.0));
+  return lit(col, n, uIceLook.w);
 }
-// Wak: open water met ijsschotsen en een gebroken ijsrand
-vec3 wakAt(vec2 p, float f, float thr) {
+// Wak: donker open water, met schotsen langs de gebroken rand en een paar losse schotsen
+vec3 wakAt(vec2 p, float f, float thr, float depth) {
   vec3 ice = uTint[ICE].rgb;
-  if (f < thr + 0.1) return ice * (1.08 + (hash(p * 6.0) - 0.5) * 0.06);
-  float s = nz(p * 1.33);
-  if (s > 0.7) return ice * (s < 0.73 ? 0.7 : 0.95 + (hash(p * 6.0) - 0.5) * 0.05);
-  return uCol[${COL.water}].rgb + (sin(p.x * 2.4 + p.y * 0.9) * 4.0 + (hash(p * 6.0) - 0.5) * 6.0) / 255.0;
+  float rim = smoothstep(thr, thr + 0.55, f); // 0 = rand van het wak, 1 = midden
+  float floe = nz(p / 3.5 + 13.0) - (0.3 + rim * 0.5), loose = nz(p / 2.2 + 40.0) - 0.8;
+  float t = max(floe, loose);
+  if (t > 0.0) return ice * (t < 0.02 ? 0.62 : 0.97 + (hash(p * 6.0) - 0.5) * 0.06); // schots met donkere waterlijn
+  vec3 w = uCol[${COL.water}].rgb * mix(1.15, uWater.x * 1.2, rim);
+  return lit(w, waveNormal(p, uWaves.z * 0.7), uWater.w);
 }
 // Gebouw: dak met pannenrijen, donkere rand en wat korrel
 vec3 roofAt(vec2 p, ivec2 ip, vec2 fr) {
@@ -264,13 +339,22 @@ void main() {
   }
   if (c == EMPTY) c = DIRT; // of het een tunnel is, zegt de tunnelvorm (zie tunnels)
   bool hidden = uMaskOn > 0.5 && maskAt(p) > 0.5; // geen zicht: de schone kaart
+  float tm = hidden ? 0.0 : texture(uTrack, uv).r; // rimpels in moeras en doorwaadbare plekken
   vec3 col;
-  if (cls == ICE && c == DIRT) col = iceAt(p);
-  else if (cls == ICE && c == WATER) col = wakAt(p, f.g, thrW);
+  if (cls == ICE && c == DIRT) {
+    float stress = hidden ? 0.0 : texelFetch(uIce, ivec2(p / uIceMore.y), 0).r;
+    col = iceAt(p, depthAt(uv), stress);
+  }
+  else if (cls == ICE && c == WATER) col = wakAt(p, f.g, thrW, depthAt(uv));
   else if ((flags & 128) != 0 && c == DIRT) col = bridgeCol(p, ip, fr);
-  else if (c == DIRT) { col = groundAt(p); if (!hidden) col = tunnels(col, p, uv, scar); }
+  else if (cls == FORD && c == DIRT) col = fordAt(p, tm);
+  else if (c == DIRT) {
+    col = groundAt(p);
+    if (cls == MARSH) col = marshAt(col, p, tm);
+    if (!hidden) col = tunnels(col, p, uv, scar);
+  }
   else if (c == ROCK) col = rockAt(p, f.r, thrR);
-  else if (c == WATER) col = waterAt(p, f.g, thrW);
+  else if (c == WATER) col = waterAt(p, f.g, thrW, depthAt(uv));
   else if (c == VEG) col = vegAt(p, f.b, thrV);
   else if (c == BUILDING) col = roofAt(p, ip, fr);
   else col = floorAt(p, c);
@@ -304,6 +388,55 @@ function noiseTexture(octaves) {
   }
   g.putImageData(img, 0, 0);
   return new Texture({ source: new CanvasSource({ resource: c, alphaMode: 'no-premultiply-alpha', addressMode: 'repeat', scaleMode: 'linear' }) });
+}
+
+// Golftextuur: hoogte (b) en helling (rg) van zachte golfjes, naadloos (simplex op een torus)
+function waveTexture() {
+  const N = WAVE_SIZE, h = new Float32Array(N * N), n4 = createNoise4D(G.mulberry32(4242));
+  const rad = WAVE_CYCLES / (2 * Math.PI);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const a = (x / N) * 2 * Math.PI, b = (y / N) * 2 * Math.PI;
+      h[y * N + x] = n4(Math.cos(a) * rad, Math.sin(a) * rad, Math.cos(b) * rad, Math.sin(b) * rad) * 0.7 +
+        n4(Math.cos(a * 2) * rad * 2 + 5, Math.sin(a * 2) * rad * 2, Math.cos(b * 2) * rad * 2, Math.sin(b * 2) * rad * 2) * 0.3;
+    }
+  }
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d'), img = g.createImageData(N, N), at = (x, y) => h[((y + N) % N) * N + ((x + N) % N)];
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = (y * N + x) * 4, k = N / WAVE_CYCLES / 24; // helling: ongeveer -0,5..0,5 bij sterkte 1
+      img.data[i] = 128 + Math.max(-127, Math.min(127, (at(x + 1, y) - at(x - 1, y)) * k * 127));
+      img.data[i + 1] = 128 + Math.max(-127, Math.min(127, (at(x, y + 1) - at(x, y - 1)) * k * 127));
+      img.data[i + 2] = 128 + 127 * at(x, y); img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new Texture({ source: new CanvasSource({ resource: c, alphaMode: 'no-premultiply-alpha', addressMode: 'repeat', scaleMode: 'linear' }) });
+}
+
+// Diepte: per water- of ijscel de afstand (in cellen, hoogstens DEPTH_MAX) tot de dichtstbijzijnde
+// cel die geen water of ijs is, in twee rondes over de kaart (afstand met schuine stappen van 1,4)
+function depthField(map, terrain) {
+  const W = G.W, H = G.H, d = new Float32Array(W * H), ice = G.CLASS.ice;
+  for (let i = 0; i < W * H; i++) d[i] = map[i] === G.WATER || terrain[i] === ice ? DEPTH_MAX : 0;
+  const pass = (y, x, dx, dy) => {
+    const i = y * W + x;
+    if (!d[i]) return;
+    let v = d[i];
+    const nx = x - dx, ny = y - dy;
+    if (nx >= 0 && nx < W) v = Math.min(v, d[i - dx] + 1);
+    if (ny >= 0 && ny < H) {
+      v = Math.min(v, d[i - dy * W] + 1);
+      if (nx >= 0 && nx < W) v = Math.min(v, d[i - dy * W - dx] + 1.4);
+      if (x + dx >= 0 && x + dx < W) v = Math.min(v, d[i - dy * W + dx] + 1.4);
+    }
+    d[i] = v;
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) pass(y, x, 1, 1);
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) pass(y, x, -1, -1);
+  return d;
 }
 
 // Procedurele grondtextuur (als er geen bestand is): grijze vlekken en korrel rond 0,85, naadloos
@@ -373,6 +506,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   const surface = { ...SURFACE, ...style.surface };
   for (const k of ['lip', 'rock', 'bank', 'floor']) surface[k] = { ...SURFACE[k], ...style.surface?.[k] };
   let noise = noiseTexture(3), octaves = 3;
+  const waves = waveTexture();
   const empty = Texture.WHITE.source;
   const uniforms = {
     uMap: { value: new Float32Array([G.W, G.H]), type: 'vec2<f32>' },
@@ -384,20 +518,30 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     uLip: { value: new Float32Array(4), type: 'vec4<f32>' },
     uFloor: { value: new Float32Array(4), type: 'vec4<f32>' },
     uDoor: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uTime: { value: 0, type: 'f32' },
+    uLight: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uWater: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uWaves: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uIceLook: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uIceMore: { value: new Float32Array(4), type: 'vec4<f32>' },
     uSlot: vec4s(N_MAT), uTint: vec4s(N_MAT), uMean: vec4s(N_MAT), uCol: vec4s(N_COL),
   };
   let cells = null, fields = null, track = null, solid = null, mesh = null, atlas = null;
+  let depth = null, iceTex = null; // diepteveld (depthField) en barststadium per ijsvak
   let src = null; // { pal, fields, rockField, bridgeMask } van de kaart van nu
   let dirty = []; // rechthoeken [x0, y0, x1, y1] die nog naar de videokaart moeten
   let atlasKey = '', loading = 0;
   const swatches = []; // legendavakjes die wachten op de renderer
 
-  // Gegevens van cel i in de drie texturen
+  // Gegevens van cel i in de texturen. Een spoor telt in een tunnel, en als rimpels op grond
+  // waar geen tunnel komt (moeras, doorwaadbare plek)
   function fill(i) {
-    const c = game.map[i], k = i * 4, dug = c === G.EMPTY, tm = dug ? trackMix(game, i) : 0;
+    const c = game.map[i], k = i * 4, dug = c === G.EMPTY;
+    const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
     cells.data[k] = c; cells.data[k + 1] = game.terrain[i];
     cells.data[k + 3] = (game.world.scar[i] & 3) | (src.bridgeMask?.[i] ? 128 : 0);
     fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = src.fields.water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
+    fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
     solid.data[k] = c === G.ROCK ? 255 : 0; solid.data[k + 1] = c === G.WATER ? 255 : 0; solid.data[k + 2] = c === G.VEG ? 255 : 0;
   }
@@ -456,6 +600,12 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     u.uDoor.value.set([0, 1, 2, 3].map((i) => bases[i]?.dc ?? 0));
   }
   function setLook(look) {
+    const u = uniforms, w = look.water, ice = look.ice;
+    u.uLight.value.set([-look.light.dx, -look.light.dy, 1.4, 0]); // schaduw naar rechtsonder = licht van linksboven
+    u.uWater.value.set([w.deep, w.depthCells, w.shore, w.shine]);
+    u.uWaves.value.set([w.waveCells, w.waveSpeed, w.waves, 0]);
+    u.uIceLook.value.set([ice.depthCells, ice.deep, ice.frost, ice.sheen]);
+    u.uIceMore.value.set([ice.stress, G.ICE_B, 0, 0]);
     uniforms.uGround.value.set([look.ground.cells, look.ground.tint, look.blend, look.ground.contrast]);
     uniforms.uGrain.value.set([look.noise.scale, look.noise.strength, look.noise.octaves, 0]);
     if (look.noise.octaves !== octaves) { // de fbm in de ruistextuur opnieuw uitrekenen
@@ -512,8 +662,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
       mesh?.destroy();
       mesh = null;
     }
+    depth = depthField(game.map, game.terrain);
     for (let i = 0; i < G.W * G.H; i++) fill(i);
     for (const t of [cells, fields, track, solid]) t.source.update();
+    iceTex?.source.destroy();
+    iceTex = { data: new Uint8Array(G.ICE_BW * G.ICE_BH * 4) };
+    iceTex.source = new BufferImageSource({ resource: iceTex.data, width: G.ICE_BW, height: G.ICE_BH, format: 'rgba8unorm', alphaMode: 'no-premultiply-alpha', scaleMode: 'nearest' });
+    iceChanged();
+    if (mesh) mesh.shader.resources.uIce = iceTex.source;
     dirty = [];
     uniforms.uMap.value.set([G.W, G.H]);
     setColors(state.pal, state.bases);
@@ -528,7 +684,8 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
         gl: { vertex: VERTEX, fragment: FRAGMENT, name: 'ground' },
         resources: {
           uCells: cells.source, uFields: fields.source, uTrack: track.source, uSolid: solid.source,
-          uAtlas: atlas || empty, uNoise: noise.source, uMask: empty, groundUniforms: uniforms,
+          uAtlas: atlas || empty, uNoise: noise.source, uMask: empty, uWave: waves.source, uIce: iceTex.source,
+          groundUniforms: uniforms,
         },
       });
       mesh = container.addChild(new Mesh({ geometry, shader }));
@@ -536,8 +693,23 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     loadAtlas(game.mapId || '');
   }
 
-  // Per beeld: wat veranderd is naar de videokaart
-  function update() {
+  // Water of ijs veranderde (wak, brug): diepte opnieuw, en zo ver eromheen als hij kan veranderen
+  function waterChanged([x0, y0, x1, y1]) {
+    if (!cells) return;
+    depth = depthField(game.map, game.terrain);
+    markRect(x0 - DEPTH_MAX - 2, y0 - DEPTH_MAX - 2, x1 + DEPTH_MAX + 2, y1 + DEPTH_MAX + 2);
+  }
+  // Een ijsvak kreeg een passage meer: het barststadium per vak opnieuw (klein: alles in één keer)
+  function iceChanged() {
+    if (!iceTex) return;
+    const ice = game.world.ice;
+    for (let b = 0; b < G.ICE_BW * G.ICE_BH; b++) iceTex.data[b * 4] = (G.iceStage(ice?.[b] || 0) / 3) * 255;
+    iceTex.source.update();
+  }
+
+  // Per beeld: de klok voor de golven, en wat veranderd is naar de videokaart
+  function update(now) {
+    uniforms.uTime.value = (now / 1000) % 3600;
     if (!dirty.length) return;
     for (const r of dirty) for (const t of [cells, fields, track, solid]) upload(t, r);
     dirty = [];
@@ -568,13 +740,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   }
 
   function destroy() {
-    for (const t of [cells, fields, track, solid]) t?.source.destroy();
+    for (const t of [cells, fields, track, solid, iceTex]) t?.source.destroy();
     atlas?.destroy();
     noise.destroy(true);
+    waves.destroy(true);
   }
 
   return {
-    load, markRect, markCell: (x, y) => markRect(x, y, x, y), update, setMask, setLook, swatch, flushSwatches, destroy,
+    load, markRect, markCell: (x, y) => markRect(x, y, x, y), waterChanged, iceChanged, update, setMask, setLook, swatch, flushSwatches, destroy,
     set onAtlas(fn) { onAtlas = fn; },
     get mesh() { return mesh; },
   };

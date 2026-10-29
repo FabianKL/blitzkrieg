@@ -77,12 +77,13 @@ function makePalette(rules) {
   };
 }
 
-// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light en ground per veld)
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water en ice per veld)
 function lookFor(rules) {
   const own = rules?.look || {};
   return {
     ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
     light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground },
+    water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice },
   };
 }
 // Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint
@@ -135,6 +136,8 @@ function crackLines(b) {
   return cracks;
 }
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
+// Een barst: donkere lijn met een lichte rand ernaast (kleur, dekking, breedte en verschuiving in cellen)
+const CRACK_LINES = [[0x1a3550, 0.5, 0.14, 0], [0xffffff, 0.45, 0.06, -0.08]];
 const CRACK_MS = 450; // zo lang groeit een nieuwe barst
 
 export function startWorld(style, game) {
@@ -406,7 +409,7 @@ export function startWorld(style, game) {
     }
     if (e.t === 'c') { // ijsvak heeft een passage meer: nieuwe barsten groeien, ijs splintert
       const from = G.iceStage(e.n - 1), to = G.iceStage(e.n);
-      if (to > from) crackGrow.set(e.b, { from, t0: performance.now() });
+      if (to > from) { crackGrow.set(e.b, { from, t0: performance.now() }); gpu?.iceChanged(); }
       const t = game.tanks.get(e.i);
       if (t && (e.i === game.me || t.seen === 'sharp')) particles.spawn('chunk', t.x, t.y, to > from ? 8 : 3, { speed: 8, life: 0.5, cols: ICE_BITS });
     }
@@ -414,6 +417,8 @@ export function startWorld(style, game) {
       const [x0, y0, x1, y1] = e.box;
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
       bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      gpu?.waterChanged(e.box);
+      gpu?.iceChanged();
       crackGrow.delete(e.b);
       const cx = (e.b % G.ICE_BW) * G.ICE_B + G.ICE_B / 2, cy = ((e.b / G.ICE_BW) | 0) * G.ICE_B + G.ICE_B / 2;
       particles.spawn('chunk', cx, cy, 30, { speed: 14, life: 0.9, cols: ICE_BITS });
@@ -436,6 +441,7 @@ export function startWorld(style, game) {
       const [x0, y0, x1, y1] = game.bridge?.box || [0, 0, 0, 0];
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
       bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      gpu?.waterChanged([x0, y0, x1, y1]);
       if (e.blown) { particles.spawn('flash', e.x, e.y, 1, { life: 0.4, r0: 3, r1: 12 }); shake = Math.max(shake, 0.5); }
     }
     if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, bothPainters, e.box); buildObjects(e.box); }
@@ -783,7 +789,7 @@ export function startWorld(style, game) {
     const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
-    if (gpu) gpu.update();
+    if (gpu) gpu.update(now);
     else {
       flushPainter(painter, cam);
       groundTiles.sync(cam);
@@ -844,7 +850,11 @@ export function startWorld(style, game) {
               if (line.twig && part < 0.8) continue; // zijtakjes pas als de barst bijna uit is
               const pts = line.pts, n = line.twig ? 1 : (pts.length - 1) * part;
               if (game.map[Math.round(pts[0][1]) * G.W + Math.round(pts[0][0])] === G.WATER) continue;
-              for (const [col, alpha, width, off] of [[0x1a3550, 0.5, 0.14, 0], [0xffffff, 0.45, 0.06, -0.08]]) {
+              // hoe verder het vak is, hoe dikker de barsten; vlak voor het breken ook een natte rand
+              const wk = look.ice.crackWidth * (1 + look.ice.crackGrow * (st - 1));
+              const passes = st >= 3 ? [[0x0c1c2c, 0.22, 0.42, 0], ...CRACK_LINES] : CRACK_LINES;
+              for (const [col, alpha, w0, off] of passes) {
+                const width = w0 * wk;
                 crackG.moveTo(pts[0][0] + off, pts[0][1] + off);
                 for (let i = 1; i <= Math.ceil(n); i++) {
                   const f = Math.min(1, n - (i - 1)), [ax, ay] = pts[i - 1], [qx, qy] = pts[i];
@@ -951,8 +961,9 @@ export function startWorld(style, game) {
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
   const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
-  // ?kijk=0.5,0.45: de camera kijkt naar die plek (fractie van de kaart) in plaats van naar je tank
-  const FOCUS = (DEBUG_HOST && debugParam('kijk')?.split(',').map(Number)) || null;
+  // ?kijk=0.5,0.45: de camera kijkt naar die plek (fractie van de kaart) in plaats van naar je tank;
+  // in de console ook blitzView.lookAt(0.5, 0.45), en lookAt() weer terug naar je tank
+  let FOCUS = (DEBUG_HOST && debugParam('kijk')?.split(',').map(Number)) || null;
   // zichtcirkel in cellen: de halve hoogte van het beeld; het weer (game.vision, in T) kan hem
   // kleiner maken
   const visionRadius = () => {
@@ -1224,6 +1235,7 @@ export function startWorld(style, game) {
     drawMinimap: () => side.drawMinimap(),
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
+    lookAt: (fx, fy) => { if (DEBUG_HOST) FOCUS = fx === undefined ? null : [fx, fy]; },
     assets: () => assetReport, // welke texturen en sprites er gebruikt worden (de rest is procedureel of de oude tekening)
     // Opruimen bij een kaart met een andere stijl: beeldlus stoppen, videokaart vrijgeven
     destroy() {
