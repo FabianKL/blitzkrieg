@@ -3,15 +3,24 @@
 // schermpixel uit wat er ligt, dus de grond is scherp op elke zoomstand.
 //
 // De gamestate gaat als drie texturen van 1 pixel per cel naar de videokaart:
-//   cells  (nearest) r = celtype, g = terreinklasse, a = kras (0..3) + 128 als het de brug is
+//   cells  (nearest) r = celtype, g = terreinklasse, b = klasse + 1 van de dichtstbijzijnde weg
+//                    (0 = geen weg), a = kras (0..3) + 128 als het de brug is
 //   fields (linear)  r = rots, g = water, b = begroeiing: de vervaagde velden (blurField) voor
 //                    ronde randen, bilineair zoals de oude createFieldSampler; a = diepte: afstand
 //                    tot de kant in water en ijs (DEPTH_MAX cellen = 1)
 //   track  (linear)  r = spoor (trackMix; ook de rimpels in moeras en doorwaadbare plekken), g = tunnelvorm (1 in een tunnel), b = tunnelrand
-//                    (1 in een tunnel met spoor >= 0,5, zoals seenCell: alleen die krijgt een rand)
+//                    (1 in een tunnel met spoor >= 0,5, zoals seenCell: alleen die krijgt een rand),
+//                    a = ijs (1 op grond met de klasse ijs): de rand van het ijs loopt glad, niet per cel
 //   solid  (linear)  r = rots, g = water, b = begroeiing: 1 in zo'n cel. Daarmee loopt de drempel
 //                    voor de ronde rand vloeiend van 0,5 (ernaast) naar 0,34 (erin), zodat losse
-//                    cellen niet verdwijnen en er geen trapjes op de celgrenzen komen
+//                    cellen niet verdwijnen en er geen trapjes op de celgrenzen komen;
+//                    a = klasse + 1 van het terrein naast de weg, voor verharde cellen onder een weg
+//   roads  (linear)  het wegenveld (view/roads.js): r = afstand tot de rand van de dichtstbijzijnde
+//                    weg, g = tot de op één na dichtstbijzijnde, b = plek langs de weg (zaagtand: één
+//                    keer rond per grondtextuur; de shader mengt hem zelf, zie phaseAt), a = afstand
+//                    tot het midden met teken (voor de textuur). De wegen worden een gladde rijbaan met berm,
+//                    rijsporen en (per kaart) stoeprand en middenstreep; bij een kruising loopt alles
+//                    zonder naad in elkaar over (look.road)
 // Bij graven, vervagen en schade worden alleen de veranderde cellen bijgewerkt en per beeld als
 // kleine rechthoeken geüpload (texSubImage2D).
 //
@@ -29,6 +38,7 @@ import * as G from '/shared/game.js';
 import { Mesh, MeshGeometry, Shader, BufferImageSource, CanvasSource, Texture, Rectangle } from 'pixi.js';
 import { createNoise4D } from 'simplex-noise';
 import { trackMix, rgb } from '/render-common.js';
+import { roadField, ROAD_NEAR, ROAD_FAR } from '/view/roads.js';
 import { loadManifest, loadImage, terrainNames, terrainPath, report } from '/assets.js';
 
 // Materialen: eerst alle terreinklassen (in de volgorde van G.CLASS_NAMES), dan deze drie
@@ -39,11 +49,12 @@ const N_MAT = N_CLASS + 3;
 // uit het diepteveld, glans van dezelfde lichtbron als de schaduwen (look.light). De ijsvakken
 // (uIce, 1 pixel per vak) geven per vak het barststadium: daar wordt het ijs donkerder en natter.
 // Instellingen in LOOK.water en LOOK.ice.
+const LAT_PAD = 2; // afstand tot het midden van de weg: tot zoveel cellen buiten de rand
 const DEPTH_MAX = 12; // diepteveld: tot zoveel cellen van de kant (verder telt als even diep)
 const WAVE_SIZE = 256, WAVE_CYCLES = 4; // golftextuur: naadloos, 4 golfvlekken per zijde
 // Kleuren die de shader los krijgt (uCol)
-const COL = { tunnel: 0, water: 1, veg: 2, building: 3, bridge: 4, floor: 5, debris: 6, lip: 7, bank: 8, deep: 9, twig: 10 };
-const N_COL = 11;
+const COL = { tunnel: 0, water: 1, veg: 2, building: 3, bridge: 4, floor: 5, debris: 6, lip: 7, bank: 8, deep: 9, twig: 10, verge: 11, curb: 12 };
+const N_COL = 13;
 const TEX_SIZE = 512, PAD = 16; // grondtextuur en de rand eromheen in de atlas (tegen naden bij mipmaps)
 const PROC_SIZE = 256; // procedurele vervanger (kleiner: wordt bij het laden uitgerekend)
 const NOISE_SIZE = 256, NOISE_CYCLES = 8; // ruistextuur: 8 ruisvlekken per zijde, naadloos
@@ -85,6 +96,7 @@ uniform sampler2D uNoise;
 uniform sampler2D uMask;
 uniform sampler2D uWave;  // golven: rg = helling, b = hoogte
 uniform sampler2D uIce;   // per ijsvak het barststadium (r = stadium / 3)
+uniform sampler2D uRoad;  // wegenveld
 uniform vec2 uMap;        // kaartmaat in cellen
 uniform vec4 uMaskRect;   // waar het zichtmasker ligt (x, y, w, h in cellen)
 uniform float uMaskOn;
@@ -100,6 +112,9 @@ uniform vec4 uWater;      // look.water: donker in het diepe, diepte (cellen), l
 uniform vec4 uWaves;      // look.water: golfmaat (cellen), snelheid, sterkte, -
 uniform vec4 uIceLook;    // look.ice: diepte (cellen), donker diep ijs, ijzel, glans
 uniform vec4 uIceMore;    // look.ice: spanning (donkerder bij barsten), ijsvak (cellen), -, -
+uniform vec4 uRoadA;      // look.road: halve breedte, berm (cellen), berm (hoeveel), afstand rijspoor tot het midden
+uniform vec4 uRoadB;      // look.road: afronding binnenhoeken (cellen), kruising (cellen), stoeprand (cellen), middenstreep
+uniform vec4 uRoadC;      // look.road: rijsporen (sterkte), breedte rijspoor, wegen aan (1/0), bereik van de afstand tot het midden
 uniform vec4 uSlot[${N_MAT}]; // plek in de atlas (u, v, breedte, hoogte); breedte 0 = effen kleur
 uniform vec4 uTint[${N_MAT}]; // kleur van de kaart per materiaal
 uniform vec4 uMean[${N_MAT}]; // gemiddelde kleur van de textuur
@@ -107,7 +122,7 @@ uniform vec4 uCol[${N_COL}];
 
 const int EMPTY = ${G.EMPTY}, DIRT = ${G.DIRT}, ROCK = ${G.ROCK}, WATER = ${G.WATER}, VEG = ${G.VEG};
 const int BUILDING = ${G.BUILDING}, WALL = ${G.WALL}, BASE = ${G.BASE};
-const int FORD = ${G.CLASS.ford}, MARSH = ${G.CLASS.marsh};
+const int FORD = ${G.CLASS.ford}, MARSH = ${G.CLASS.marsh}, PAVED = ${G.CLASS.paved};
 const int ICE = ${G.CLASS.ice}, MAT_TUNNEL = ${MAT.tunnel}, MAT_ROCK = ${MAT.rock}, MAT_RUBBLE = ${MAT.rubble};
 
 vec2 gX, gY; // afgeleiden van de textuurcoördinaat, buiten de takken uitgerekend (mipmaps)
@@ -126,7 +141,12 @@ float nz(vec2 q) { return texture(uNoise, q / ${NOISE_CYCLES}.0).r; }
 float fbm(vec2 q) { return texture(uNoise, q / ${NOISE_CYCLES}.0).b * 2.0 - 1.0; }
 ivec2 clampCell(ivec2 q) { return clamp(q, ivec2(0), ivec2(uMap) - 1); }
 int cellAt(ivec2 q) { return int(texelFetch(uCells, clampCell(q), 0).r * 255.0 + 0.5); }
-int clsAt(ivec2 q) { return int(texelFetch(uCells, clampCell(q), 0).g * 255.0 + 0.5); }
+// terreinklasse om de grond mee te mengen: onder een weg die van ernaast (de weg zelf tekent roadAt)
+int clsAt(ivec2 q) {
+  ivec2 c = clampCell(q);
+  int under = int(texelFetch(uSolid, c, 0).a * 255.0 + 0.5);
+  return under > 0 ? under - 1 : int(texelFetch(uCells, c, 0).g * 255.0 + 0.5);
+}
 bool bridgeAt(ivec2 q) { return (int(texelFetch(uCells, clampCell(q), 0).a * 255.0 + 0.5) & 128) != 0; }
 bool blocks(int c, bool rockOnly) { return rockOnly ? c == ROCK : (c == ROCK || c == WATER || c == VEG); }
 // afgeronde hoek van een rots-, water- of plantcel: neem het terrein van de buur aan die kant
@@ -185,6 +205,53 @@ vec3 tunnels(vec3 col, vec2 p, vec2 uv, int scar) {
     vec3 lip = uLip.y > 0.0 ? col * uLip.y : uCol[${COL.lip}].rgb;
     return mix(col, lip, smoothstep(0.2, 0.5, t.b) * uLip.x);
   }
+  return col;
+}
+// Plek langs de weg (0..1, één keer rond per textuur): bilineair gemengd, maar over de sprong van
+// 1 naar 0 heen (gewone filtering zou daar een naad geven)
+float phaseAt(vec2 p) {
+  vec2 q = p - 0.5, f = fract(q);
+  ivec2 i0 = ivec2(floor(q));
+  float a = texelFetch(uRoad, clampCell(i0), 0).b, b = texelFetch(uRoad, clampCell(i0 + ivec2(1, 0)), 0).b;
+  float c = texelFetch(uRoad, clampCell(i0 + ivec2(0, 1)), 0).b, d = texelFetch(uRoad, clampCell(i0 + ivec2(1, 1)), 0).b;
+  b = a + fract(b - a + 0.5) - 0.5; c = a + fract(c - a + 0.5) - 0.5; d = a + fract(d - a + 0.5) - 0.5;
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+// Weg: gladde rijbaan uit het wegenveld, met de textuur van zijn klasse langs de weg gelegd
+// (sporen en kasseirijen lopen mee met de bocht), rijsporen, berm en (per kaart) stoeprand en
+// middenstreep. Bij een kruising (sd2 klein) een afgeronde binnenhoek en de textuur weer in
+// wereldcoördinaten, zodat er geen naad komt.
+vec3 roadAt(vec3 col, vec2 p, vec2 uv, ivec2 ip) {
+  int rc = int(texelFetch(uCells, clampCell(ip), 0).b * 255.0 + 0.5) - 1;
+  if (rc < 0) return col;
+  vec4 r = texture(uRoad, uv);
+  float range = ${ROAD_FAR - ROAD_NEAR}.0;
+  float d1 = r.r * range + ${ROAD_NEAR}.0, d2 = r.g * range + ${ROAD_NEAR}.0;
+  float k = uRoadB.x, h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+  float d = mix(d2, d1, h) - k * h * (1.0 - h); // zachte minimum: afgeronde binnenhoeken
+  if (d > uRoadA.y + 0.5) return col;
+  // berm: de grond naast de weg wordt modderig (of besneeuwd), sterker vlak naast de rijbaan
+  float verge = (1.0 - smoothstep(0.0, uRoadA.y, d)) * uRoadA.z * (0.75 + 0.5 * nz(p * 1.7));
+  col = mix(col, uCol[${COL.verge}].rgb, clamp(verge, 0.0, 1.0));
+  float aa = fwidth(d) * 0.75 + 0.02;
+  if (d > aa) return col;
+  float dir = smoothstep(0.0, uRoadB.y, d2); // 0 bij een kruising: geen richting
+  float t = (r.a * 2.0 - 1.0) * uRoadC.w; // afstand tot het midden, met teken
+  float sl = phaseAt(p) * uGround.x; // plek langs de weg
+  vec3 road = mix(material(rc, p), material(rc, vec2(sl, t + uRoadA.x)), dir);
+  // rijsporen: twee donkere banen op vaste afstand van het midden
+  float rut = 1.0 - smoothstep(0.0, uRoadC.y, abs(abs(t) - uRoadA.w));
+  road *= 1.0 - uRoadC.x * rut * (0.6 + 0.4 * nz(p * 2.0));
+  if (uRoadB.z > 0.0 && d > -uRoadB.z) road = uCol[${COL.curb}].rgb * (0.92 + hash(p * 6.0) * 0.1); // stoeprand
+  if (uRoadB.w > 0.0 && abs(t) < 0.09 && fract(sl / 3.0) < 0.5) road = mix(road, vec3(0.92), uRoadB.w * dir); // middenstreep
+  return mix(road, col, smoothstep(-aa, aa, d));
+}
+// Straten zonder middellijn (het rooster van een stad): stoeprand langs de rand van de verharde cellen
+vec3 curbAt(vec3 col, ivec2 ip, vec2 fr, vec2 p) {
+  float c = uRoadB.z;
+  if ((fr.x < c && clsAt(ip + ivec2(-1, 0)) != PAVED) || (fr.x > 1.0 - c && clsAt(ip + ivec2(1, 0)) != PAVED) ||
+      (fr.y < c && clsAt(ip + ivec2(0, -1)) != PAVED) || (fr.y > 1.0 - c && clsAt(ip + ivec2(0, 1)) != PAVED))
+    return uCol[${COL.curb}].rgb * (0.92 + hash(p * 6.0) * 0.1);
   return col;
 }
 vec3 rockAt(vec2 p, float f, float thr) {
@@ -339,9 +406,10 @@ void main() {
   }
   if (c == EMPTY) c = DIRT; // of het een tunnel is, zegt de tunnelvorm (zie tunnels)
   bool hidden = uMaskOn > 0.5 && maskAt(p) > 0.5; // geen zicht: de schone kaart
-  float tm = hidden ? 0.0 : texture(uTrack, uv).r; // rimpels in moeras en doorwaadbare plekken
+  vec4 tr = texture(uTrack, uv);
+  float tm = hidden ? 0.0 : tr.r; // rimpels in moeras en doorwaadbare plekken
   vec3 col;
-  if (cls == ICE && c == DIRT) {
+  if (c == DIRT && tr.a > 0.5) {
     float stress = hidden ? 0.0 : texelFetch(uIce, ivec2(p / uIceMore.y), 0).r;
     col = iceAt(p, depthAt(uv), stress);
   }
@@ -350,6 +418,8 @@ void main() {
   else if (cls == FORD && c == DIRT) col = fordAt(p, tm);
   else if (c == DIRT) {
     col = groundAt(p);
+    if (uRoadC.z > 0.0) col = roadAt(col, p, uv, ip);
+    else if (uRoadB.z > 0.0 && cls == PAVED) col = curbAt(col, ip, fr, p);
     if (cls == MARSH) col = marshAt(col, p, tm);
     if (!hidden) col = tunnels(col, p, uv, scar);
   }
@@ -524,10 +594,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     uWaves: { value: new Float32Array(4), type: 'vec4<f32>' },
     uIceLook: { value: new Float32Array(4), type: 'vec4<f32>' },
     uIceMore: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uRoadA: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uRoadB: { value: new Float32Array(4), type: 'vec4<f32>' },
+    uRoadC: { value: new Float32Array(4), type: 'vec4<f32>' },
     uSlot: vec4s(N_MAT), uTint: vec4s(N_MAT), uMean: vec4s(N_MAT), uCol: vec4s(N_COL),
   };
   let cells = null, fields = null, track = null, solid = null, mesh = null, atlas = null;
   let depth = null, iceTex = null; // diepteveld (depthField) en barststadium per ijsvak
+  let roads = null, roadTex = null; // wegenveld (roadField) en zijn texture
   let src = null; // { pal, fields, rockField, bridgeMask } van de kaart van nu
   let dirty = []; // rechthoeken [x0, y0, x1, y1] die nog naar de videokaart moeten
   let atlasKey = '', loading = 0;
@@ -538,12 +612,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   function fill(i) {
     const c = game.map[i], k = i * 4, dug = c === G.EMPTY;
     const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
-    cells.data[k] = c; cells.data[k + 1] = game.terrain[i];
+    cells.data[k] = c; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
     cells.data[k + 3] = (game.world.scar[i] & 3) | (src.bridgeMask?.[i] ? 128 : 0);
     fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = src.fields.water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
     fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
+    track.data[k + 3] = game.terrain[i] === G.CLASS.ice && (dug || c === G.DIRT) ? 255 : 0;
     solid.data[k] = c === G.ROCK ? 255 : 0; solid.data[k + 1] = c === G.WATER ? 255 : 0; solid.data[k + 2] = c === G.VEG ? 255 : 0;
+    solid.data[k + 3] = roads.under[i];
   }
   // Rechthoek bijwerken; dicht bij elkaar liggende rechthoeken worden er één (graven = veel cellen)
   function markRect(x0, y0, x1, y1) {
@@ -606,6 +682,12 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     u.uWaves.value.set([w.waveCells, w.waveSpeed, w.waves, 0]);
     u.uIceLook.value.set([ice.depthCells, ice.deep, ice.frost, ice.sheen]);
     u.uIceMore.value.set([ice.stress, G.ICE_B, 0, 0]);
+    const rd = look.road, hw = (game.roads?.[0]?.w ?? 2 * G.T) / 2;
+    u.uRoadA.value.set([hw, rd.verge, rd.vergeAmount, rd.rutOffset]);
+    u.uRoadB.value.set([rd.smooth, rd.junction, rd.curb, rd.line]);
+    u.uRoadC.value.set([rd.ruts, rd.rutWidth, game.roads?.length ? 1 : 0, hw + LAT_PAD]);
+    put(u.uCol.value, COL.verge, rd.vergeColor ? unit(rd.vergeColor) : src?.pal.tunnel.map((v) => v / 255) ?? [0.3, 0.25, 0.2]);
+    put(u.uCol.value, COL.curb, unit(rd.curbColor));
     uniforms.uGround.value.set([look.ground.cells, look.ground.tint, look.blend, look.ground.contrast]);
     uniforms.uGrain.value.set([look.noise.scale, look.noise.strength, look.noise.octaves, 0]);
     if (look.noise.octaves !== octaves) { // de fbm in de ruistextuur opnieuw uitrekenen
@@ -663,6 +745,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
       mesh = null;
     }
     depth = depthField(game.map, game.terrain);
+    loadRoads(state.look.ground.cells);
     for (let i = 0; i < G.W * G.H; i++) fill(i);
     for (const t of [cells, fields, track, solid]) t.source.update();
     iceTex?.source.destroy();
@@ -674,6 +757,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     uniforms.uMap.value.set([G.W, G.H]);
     setColors(state.pal, state.bases);
     setLook(state.look);
+    if (mesh) mesh.shader.resources.uRoad = roadTex.source;
     if (!mesh) {
       const geometry = new MeshGeometry({
         positions: new Float32Array([0, 0, G.W, 0, G.W, G.H, 0, G.H]),
@@ -684,13 +768,29 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
         gl: { vertex: VERTEX, fragment: FRAGMENT, name: 'ground' },
         resources: {
           uCells: cells.source, uFields: fields.source, uTrack: track.source, uSolid: solid.source,
-          uAtlas: atlas || empty, uNoise: noise.source, uMask: empty, uWave: waves.source, uIce: iceTex.source,
+          uAtlas: atlas || empty, uNoise: noise.source, uMask: empty, uWave: waves.source, uIce: iceTex.source, uRoad: roadTex.source,
           groundUniforms: uniforms,
         },
       });
       mesh = container.addChild(new Mesh({ geometry, shader }));
     }
     loadAtlas(game.mapId || '');
+  }
+
+  // Wegenveld van deze kaart (vast: wegen veranderen niet tijdens het spel). period = lengte langs
+  // de weg waarna de plek rond is, gelijk aan één grondtextuur, zodat die naadloos doorloopt.
+  function loadRoads(period) {
+    roads = roadField(game.roads || [], game.terrain);
+    roadTex?.source.destroy();
+    roadTex = dataTexture(true);
+    const range = ROAD_FAR - ROAD_NEAR, enc = (v) => Math.max(0, Math.min(255, ((v - ROAD_NEAR) / range) * 255));
+    const L = (game.roads?.[0]?.w ?? 2 * G.T) / 2 + LAT_PAD; // bereik van de afstand tot het midden
+    for (let i = 0; i < G.W * G.H; i++) {
+      const k = i * 4, ph = roads.s[i] / period;
+      roadTex.data[k] = enc(roads.sd1[i]); roadTex.data[k + 1] = enc(roads.sd2[i]);
+      roadTex.data[k + 2] = (ph - Math.floor(ph)) * 255;
+      roadTex.data[k + 3] = 127.5 + 127.5 * Math.max(-1, Math.min(1, roads.lat[i] / L));
+    }
   }
 
   // Water of ijs veranderde (wak, brug): diepte opnieuw, en zo ver eromheen als hij kan veranderen
@@ -740,7 +840,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   }
 
   function destroy() {
-    for (const t of [cells, fields, track, solid, iceTex]) t?.source.destroy();
+    for (const t of [cells, fields, track, solid, iceTex, roadTex]) t?.source.destroy();
     atlas?.destroy();
     noise.destroy(true);
     waves.destroy(true);

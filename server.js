@@ -266,6 +266,8 @@ function sendInit(room, t) {
     mapId: room.mapId, // welke kaart; de instellingen staan in config.js
     lobby: room.lobby, host: hostOf(room),
     lm: room.world.landmarks || [], // herkenningspunten (kerk) in dorpen
+    // middellijnen van de wegen (alleen voor de weergave): punten op 0,1 cel, breedte, klasse
+    rd: (room.world.roads || []).map((r) => ({ p: r.path.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), w: r.width, c: r.class })),
     m0: room.mapTick, r0: room.roundTick, wx: WEATHER_SCALE,
     hz: Hazards.snapshot(room), // depots, aangekondigde barrage
     game: gameState(room),

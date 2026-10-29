@@ -29,6 +29,7 @@ export function createState() {
     lobby: false, // potje met wachtkamer (de spelpagina op /)
     host: -1, // speler die de kaart kiest en start
     landmarks: [], // herkenningspunten in dorpen: {kind, x, y}
+    roads: [], // middellijnen van de wegen (weergave): {p: [[x, y], ...], w: breedte, c: klasse}
     message: null, // melding van de server voor in het menu
     smokes: [], // rookvlekken die het zicht blokkeren: {x, y, r, until}
     depots: [], // brandstofdepots: [x, y, vol]
@@ -73,6 +74,7 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.lobby = !!msg.lobby;
   state.host = msg.host ?? -1;
   state.landmarks = msg.lm || [];
+  state.roads = msg.rd || [];
   applyHz(state, msg.hz);
   const n = G.W * G.H;
   const decode = (b64) => G.rleDecode(G.fromBase64(b64), n);

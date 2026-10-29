@@ -77,13 +77,13 @@ function makePalette(rules) {
   };
 }
 
-// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water en ice per veld)
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water, ice en road per veld)
 function lookFor(rules) {
   const own = rules?.look || {};
   return {
     ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
     light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground },
-    water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice },
+    water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice }, road: { ...LOOK.road, ...own.road },
   };
 }
 // Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint

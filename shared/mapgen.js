@@ -176,9 +176,12 @@ function tryMap(seed, rules, players) {
     bridgeCells[i] = 1;
     disk(i % W, (i / W) | 0, 1.5 * T, (j) => { if (map[j] === WATER || (terrain[j] === CLASS.ice && fixedClass[j])) { setPaved(j); bridgeCells[j] = 1; } });
   };
+  // middellijnen van de wegen, alleen voor de weergave (de cellen hieronder zijn de echte weg)
+  const roads = [];
   of('road').forEach((f, k) => {
     const width = f.width * T;
     const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1, noise, 700 + k, 0.1);
+    roads.push({ path, width, class: f.class || 'paved' });
     stroke(path, width / 2, (i) => {
       if (!open(i)) return;
       if (map[i] === WATER || (terrain[i] === CLASS.ice && fixedClass[i])) { if (f.bridges === false) return; bridgeAt(i); }
@@ -217,7 +220,9 @@ function tryMap(seed, rules, players) {
         if (d < bd) { bd = d; best = [i % W, (i / W) | 0]; }
       }
       if (!best || bd < 6 * T) continue;
-      stroke(routePath(a, best, zone, roadWidth / 2 + 1, noise, 900 + k, 0.1), roadWidth / 2, (i) => {
+      const path = routePath(a, best, zone, roadWidth / 2 + 1, noise, 900 + k, 0.1);
+      roads.push({ path, width: roadWidth, class: 'paved' });
+      stroke(path, roadWidth / 2, (i) => {
         if (!open(i) || map[i] === WATER || map[i] === BUILDING || map[i] === ROCK || (terrain[i] === CLASS.ice && fixedClass[i])) return;
         if (!(terrain[i] === CLASS.paved && fixedClass[i])) paved++;
         setPaved(i);
@@ -390,7 +395,7 @@ function tryMap(seed, rules, players) {
   };
   indexVeg(w);
   const result = {
-    ...w, bases, fields, mines, border, landmarks, bridges: components(bridgeCells), zone, rivers: riverCells.map((r) => r.path),
+    ...w, bases, fields, mines, border, landmarks, bridges: components(bridgeCells), zone, rivers: riverCells.map((r) => r.path), roads,
     villages: villages.map((v) => ({ name: v.f.name, x: v.cx, y: v.cy, depot: v.f.depot }))
   };
   // Onvermijdelijke afwijking: kenmerken met een vaste breedte in T (§6.0) schalen niet mee met

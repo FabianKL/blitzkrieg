@@ -23,7 +23,8 @@ export default { // §10.8
     { type: 'road', from: [0.5, 0.5], to: [0.85, 1], width: 2 },
     { type: 'river', from: [0, 0.8], to: [1, 0.8], width: 2, bridges: 'atRoads' },
   ],
-  look: { grade: { saturation: -0.12, contrast: 1.04, tint: '#d4e2ff', tintStrength: 0.15 }, noise: { scale: 8, strength: 0.1 }, blend: 3, weather: 'snow', amount: 25, vignette: 0.25, fogSoft: 0.2 },
+  // wegen: opgeschoven sneeuw in de berm
+  look: { grade: { saturation: -0.12, contrast: 1.04, tint: '#d4e2ff', tintStrength: 0.15 }, noise: { scale: 8, strength: 0.1 }, blend: 3, weather: 'snow', amount: 25, vignette: 0.25, fogSoft: 0.2 , road: { vergeColor: '#f2f6fa', vergeAmount: 0.55 } },
   tunnelColor: '#2b2118',
   weather: [
     { label: 'Dichte mist', from: { secondsInRound: 0 }, untilRound: 2, effect: { visibility: { start: 2, end: 12, overSeconds: 120 }, fog: true } },

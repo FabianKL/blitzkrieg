@@ -59,6 +59,9 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   `docs/opdracht-claude-code-graphics.md` (fases 0–8).
 - **Effecten verraden niets**: mondingsvuur, splinters en kogels van anderen alleen als je ze scherp
   ziet; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
+- **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
+  echte weg) en de server stuurt ze in het instapbericht (`rd`). `public/view/roads.js` maakt er een
+  veld van voor de grondshader.
 - **Kaartmaker**: `shared/mapgen.js` plaatst eerst de bases, dan de vaste kenmerken, en vult daarna
   het terrein tot de percentages. Lukt een poging niet, dan probeert hij het opnieuw met een andere
   seed. Bij krappe kaarten worden de regels stap voor stap versoepeld: eerst de vensterregel, dan de
