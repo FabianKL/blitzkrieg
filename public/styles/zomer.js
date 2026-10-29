@@ -194,6 +194,11 @@ export default function start(game) {
     viewCells: 80, background: '#2a1f17', teams: TEAMS,
     fullText: 'alle vier de ploegen zijn al bemand',
     ground, tunnel, rock, water, veg, base,
+    // grondshader (view/ground-gpu.js): donkere rand langs tunnels, bladerdek, modderige oever
+    surface: {
+      lip: { shade: 0.6, amount: 1, inner: 1 }, rock: { edge: 0.44, light: 1.27 }, veg: 'canopy',
+      bank: { shade: 0.62 }, floor: { color: '#2c2119', grid: 3, grain: 8 }, debris: '#70502e',
+    },
     afterTile: (tx, ty, setPx) => { for (const px of cracks.get(`${tx},${ty}`) || []) setPx(...px); },
     skipRepaint: isInterior, // rots binnenin verandert nooit (en heeft barsten die we willen houden)
     onMap: buildCracks,

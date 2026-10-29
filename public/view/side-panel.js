@@ -1,7 +1,7 @@
 // Het zijpaneel, op elke kaart hetzelfde (CLAUDE.md): je tankkaart, de minikaart en de legenda.
 // De opmaak staat per stijl in styles/*.css; dit vult de elementen uit index.html.
-// v = { game, style, at(x, y), flushPainter, en (per kaart anders) pal, bases, bridgeMask,
-// painter, objects, cam } uit world-view.js.
+// v = { game, style, at(x, y), paintRegion(g, sx, sy, n, after), en (per kaart anders) pal,
+// bases, bridgeMask, objects, cam } uit world-view.js.
 import * as G from '/shared/game.js';
 import { HUD, TUNNEL } from '/shared/config.js';
 import { hash, rgb, R, REFILL_COLORS, paintRefillIcon } from '/render-common.js';
@@ -9,7 +9,7 @@ import { hash, rgb, R, REFILL_COLORS, paintRefillIcon } from '/render-common.js'
 const $ = (id) => document.getElementById(id);
 
 export function createSidePanel(v) {
-  const { game, style, at, flushPainter } = v;
+  const { game, style, at } = v;
 
   // ---------- Minikaart: 1 pixel per cel, bijgewerkt per veranderde cel ----------
   // Een kaart om te navigeren, op elke map hetzelfde (canvas #mini op de pagina): het terrein in
@@ -183,9 +183,7 @@ export function createSidePanel(v) {
     }
     if (!spot) return;
     const [sx, sy] = spot;
-    flushPainter(v.painter, { x: sx, y: sy, w: N, h: N }); // zorgt dat dat stuk kaart geschilderd is
-    v.painter.layer.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
-    v.objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height);
+    v.paintRegion(g, sx, sy, N, () => v.objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height));
   }
   // ---------- Tankkaart in het zijpaneel (op elke kaart dezelfde, opmaak per stijl in CSS) ----------
   // Naam, zeges en drie meters; alleen bijwerken als er iets veranderd is. Plus de korte tekst van

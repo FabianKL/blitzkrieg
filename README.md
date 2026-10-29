@@ -131,8 +131,12 @@ localhost, in de adresbalk):
 - `?debug=alles` toont alle tanks en zet het zicht uit;
 - `?zoom=3` zet de camera dichter op je tank (om details te bekijken);
 - `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
+- `?kijk=0.5,0.45` zet de camera op die plek van de kaart (fractie van breedte en hoogte) in plaats
+  van op je tank, om water, ijs of bruggen te bekijken zonder erheen te rijden;
+- `?oud=1` (ook buiten localhost) tekent de grond met de oude kaartschilder op de CPU, om te vergelijken;
 - `blitzView.bench()` in de console tekent 120 beelden direct na elkaar en geeft de tijd per beeld,
-  ook als het venster niet zichtbaar is.
+  ook als het venster niet zichtbaar is (het kan niet sneller meten dan de verversing van het scherm);
+- `blitzView.assets()` in de console zegt welke texturen en sprites uit `public/assets/` komen.
 
 ## Uiterlijk per map (`look`)
 Alle maps gebruiken dezelfde weergave (PixiJS); alleen de instellingen verschillen. Die staan in
@@ -145,6 +149,7 @@ De spelregels kijken er niet naar.
 | `grade` | Kleurfilter over de wereld: `saturation` (-1 grijs .. 1 feller), `brightness`, `contrast` (1 = gelijk), `tint` (`#rrggbb`) met `tintStrength` (0..1). |
 | `noise` | Grondtextuur met simplex-ruis: `scale` (cellen per vlek), `strength`, `octaves`. Werkt vooral op donkere grond. |
 | `blend` | Breedte van de zachte overgang tussen terreinklassen, in cellen. |
+| `ground` | Grondtexturen: `cells` (zoveel cellen beslaat één textuur van 512 px), `tint` (0 = eigen kleur van de textuur, 1 = klassekleur van de kaart), `contrast` (0 = effen, 1 = zoals getekend), `textures` (`{ klasse: naam }`: een andere textuur dan het manifest zegt). |
 | `light` | Eén lichtbron voor alle schaduwen: verschuiving `dx`, `dy` (cellen), `alpha`, `blur` (zachte rand). |
 | `weather`, `amount` | Deeltjes in beeld: `'snow'`, `'dust'`, `'rain'` of `null`, en hoeveel per 100×100 cellen (in een storm `stormFactor` keer zoveel). |
 | `vignette`, `fogSoft` | Donkere hoeken; hoe zacht de rand van je zichtveld inloopt. |
@@ -183,8 +188,10 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
 | `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld). |
+| `public/view/ground-gpu.js` | De grond op de videokaart: één mesh met een eigen shader (terreinklassen met texturen, tunnels, rots, water, ijs, puin, schone kaart buiten je zicht). |
+| `public/assets.js`, `public/assets/` | Asset-loader en de sprites en texturen zelf (`manifest.json` zegt wat er is, `LEESMIJ.md` wat wat is). Wat ontbreekt, wordt procedureel of zoals vroeger getekend. |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
-| `public/render-common.js` | Kaartschilder (tegelcanvassen), camera, kleuren en ruis, gedeelde tekeningen. |
+| `public/render-common.js` | Oude kaartschilder (tegelcanvassen, alleen nog met `?oud=1`), camera, kleuren en ruis, gedeelde tekeningen. |
 | `public/styles/` | De stijlen: `zomer.js`, `winter.js`, `woestijn.js` (tekenen) met hun thema `.css`, en `view.css` (opbouw van speelveld en zijpaneel). |
 | `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van het speelveld. |
 | `public/manifest.webmanifest`, `icon.svg` | Op het beginscherm zetten: volledig scherm, liggend. |
@@ -208,7 +215,11 @@ potnaam van retro.
   daarna alleen verplaatst of gedraaid; ~4 ms per beeld op 1560×1012. De pakketten (`pixi.js`,
   `pixi-filters`, `simplex-noise`) komen via `npm install` en de server geeft ze op `/vendor/`; een
   import map in `index.html` koppelt de namen. Geen build-stap, en het werkt zonder internet.
-- **Kaartschilder per tegel**: een tegel (32×32 cellen) is een eigen texture en wordt pas geschilderd als hij in beeld komt;
+- **Grond op de videokaart**: de kaart gaat als een paar texturen van 1 pixel per cel naar de
+  videokaart (celtype, klasse, sporen, randvelden); een shader rekent per schermpixel uit wat er ligt,
+  dus scherp op elke zoomstand. Bij graven worden alleen de veranderde cellen geüpload. Instappen
+  kost ~0,2 s in plaats van ~1,5 s (de oude schilder moest eerst alle tegels in beeld schilderen).
+- **Oude kaartschilder per tegel** (`?oud=1`): een tegel (32×32 cellen) is een eigen texture en wordt pas geschilderd als hij in beeld komt;
   dure ruiskleuren worden per pixel onthouden, zodat graven/vervagen alleen nog opzoeken is. Pixels en
   kleurgeheugen bestaan alleen voor de 48 laatst geziene tegels (`?tiles=8` in de adresbalk om dat te
   testen). Een omgeschoten plant werkt alleen het stukje kaart eromheen bij; alleen die tegel gaat

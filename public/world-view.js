@@ -50,6 +50,8 @@ import {
 } from '/render-common.js';
 import { createSidePanel } from '/view/side-panel.js';
 import { createHazardView } from '/view/hazards-view.js';
+import { createGroundGpu } from '/view/ground-gpu.js';
+import { report as assetReport } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
 export { R }; // pixels per cel in de kaarttextuur (de stijlen tekenen ermee)
@@ -75,10 +77,13 @@ function makePalette(rules) {
   };
 }
 
-// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise en light per veld)
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light en ground per veld)
 function lookFor(rules) {
   const own = rules?.look || {};
-  return { ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise }, light: { ...LOOK.light, ...own.light } };
+  return {
+    ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
+    light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground },
+  };
 }
 // Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint
 function gradeMatrix({ saturation, brightness, contrast, tint, tintStrength }) {
@@ -143,6 +148,9 @@ export function startWorld(style, game) {
   // clean: de kaart zonder tunnels en sporen, over de grond waar je geen zicht hebt (zie drawSight)
   for (const name of ['ground', 'clean', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
+  // ?oud=1: de oude kaartschilder op de CPU (tegelcanvassen) in plaats van de grondshader, om te vergelijken
+  const OLD = new URLSearchParams(location.search).get('oud') === '1';
+  const gpu = OLD ? null : createGroundGpu({ container: L.ground, game, style, getRenderer: () => renderer });
   let bases = [], rockField = null, fields = null;
   const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
   const at = (x, y) => cellAt(game.map, x, y);
@@ -320,14 +328,28 @@ export function startWorld(style, game) {
   // Schilder bijwerken (en de tegels in view schilderen), met de goede cache voor p.cached
   function flushPainter(pt, view) { painting = pt; pt.flush(view); }
   // Een rechthoek opnieuw schilderen, op de gewone en de schone kaart
-  const bothPainters = { markRect: (x0, y0, x1, y1) => { painter.markRect(x0, y0, x1, y1); cleanPainter.markRect(x0, y0, x1, y1); } };
+  const bothPainters = {
+    markRect: (x0, y0, x1, y1) => {
+      if (gpu) { gpu.markRect(x0, y0, x1, y1); return; }
+      painter.markRect(x0, y0, x1, y1); cleanPainter.markRect(x0, y0, x1, y1);
+    },
+  };
 
   // ---------- Zijpaneel: minikaart, legenda en tankkaart (view/side-panel.js) ----------
   const side = createSidePanel({
-    game, style, at, flushPainter,
+    game, style, at,
     get pal() { return pal; }, get bases() { return bases; }, get bridgeMask() { return bridgeMask; },
-    get painter() { return painter; }, get objects() { return objects; }, get cam() { return view.cam; },
+    get objects() { return objects; }, get cam() { return view.cam; },
+    // stuk kaart (n x n cellen vanaf sx, sy) op het canvas van g; after() als het er staat
+    paintRegion(g, sx, sy, n, after) {
+      if (gpu) { gpu.swatch(g, sx, sy, n, after); return; }
+      flushPainter(painter, { x: sx, y: sy, w: n, h: n }); // zorgt dat dat stuk kaart geschilderd is
+      painter.layer.drawRegion(g, sx, sy, n, n, 0, 0, g.canvas.width, g.canvas.height);
+      after?.();
+    },
   });
+
+  if (gpu) gpu.onAtlas = () => side.buildLegend(); // de legenda toont de echte grondtexturen
 
   // ---------- Objectlaag (bomen, rotsblokken, struikjes) ----------
   // box = [x0, y0, x1, y1] in cellen: alleen dat stuk opnieuw tekenen (na een omgeschoten
@@ -452,9 +474,11 @@ export function startWorld(style, game) {
     makeBridgeMask();
     applyLook(lookFor(game.rules));
     view.colors = pal.hex;
-    painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
-    cleanPainter = createMapPainter({ R, paintCell: cellPainter(true), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
-    cleanCells = Uint8Array.from({ length: map.length }, (_, i) => cleanValue(i));
+    if (OLD) {
+      painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
+      cleanPainter = createMapPainter({ R, paintCell: cellPainter(true), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
+      cleanCells = Uint8Array.from({ length: map.length }, (_, i) => cleanValue(i));
+    }
     makeObjects();
     crackCache.clear();
     crackGrow.clear();
@@ -462,11 +486,11 @@ export function startWorld(style, game) {
     rockField = blurField(map, (c) => c === G.ROCK);
     fields = obstacleFields(map);
     bases = findBases(map);
-    style.onMap?.(map);
+    if (OLD) style.onMap?.(map); // alleen voor de oude kaartschilder (rotsbarsten bij zomer)
+    else gpu.load({ pal, look, fields, rockField, bases, get bridgeMask() { return bridgeMask; } });
     side.loadMap();
     buildObjects();
-    groundTiles.use(painter.layer);
-    cleanTiles.use(cleanPainter.layer);
+    if (OLD) { groundTiles.use(painter.layer); cleanTiles.use(cleanPainter.layer); }
     objTiles.use(objects);
     buildBases();
     clearTankTextures();
@@ -476,7 +500,9 @@ export function startWorld(style, game) {
   const hooks = {
     onMap: loadMap,
     onDig: (x, y) => {
-      painter.markDig(x, y); side.paintMini(x, y); mapVersion++;
+      side.paintMini(x, y); mapVersion++;
+      if (gpu) { gpu.markCell(x, y); return; }
+      painter.markDig(x, y);
       // de schone kaart alleen als hij er echt anders uitziet (dus niet bij graven en rijden)
       const i = y * G.W + x, v = cleanValue(i);
       if (cleanCells && v !== cleanCells[i]) { cleanCells[i] = v; cleanPainter.markDig(x, y); }
@@ -639,6 +665,7 @@ export function startWorld(style, game) {
     filterKey = '';
     vignette.alpha = look.vignette;
     shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
+    gpu?.setLook(look);
     visionKey = '';
   }
 
@@ -750,15 +777,18 @@ export function startWorld(style, game) {
       if (lastShield !== null && self.s < lastShield && self.a) shake = Math.max(shake, look.shakeOnHit);
       lastShield = self.s;
     }
-    const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake);
+    const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake, FOCUS);
     // sightOn: de zichtregel geldt (je leeft, geen debug); overlayOn: het zichtveld staat ook in
     // beeld (mist, schaduw, vervaging; de knop ZICHT in de bovenste balk)
     const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
-    flushPainter(painter, cam);
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
-    groundTiles.sync(cam);
-    if (sightOn) { flushPainter(cleanPainter, cam); cleanTiles.sync(cam); }
+    if (gpu) gpu.update();
+    else {
+      flushPainter(painter, cam);
+      groundTiles.sync(cam);
+      if (sightOn) { flushPainter(cleanPainter, cam); cleanTiles.sync(cam); }
+    }
     objTiles.sync(cam);
 
     marks.clear();
@@ -779,8 +809,8 @@ export function startWorld(style, game) {
     drawSmokes(now);
     drawWeather(cam, now, dt);
     sightSprite.visible = visionSprite.visible = overlayOn;
-    L.clean.visible = sightOn;
-    if (!sightOn) crackMask.texture = Texture.EMPTY; // leeg omgekeerd masker: alle barsten te zien
+    L.clean.visible = sightOn && !gpu;
+    if (!sightOn) { crackMask.texture = Texture.EMPTY; gpu?.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
     if (sightOn) { drawSight(me, cam); hz.drawMirages(me, cam, now); }
     if (overlayOn) drawFog(me, cam);
@@ -921,6 +951,8 @@ export function startWorld(style, game) {
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
   const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
+  // ?kijk=0.5,0.45: de camera kijkt naar die plek (fractie van de kaart) in plaats van naar je tank
+  const FOCUS = (DEBUG_HOST && debugParam('kijk')?.split(',').map(Number)) || null;
   // zichtcirkel in cellen: de halve hoogte van het beeld; het weer (game.vision, in T) kan hem
   // kleiner maken
   const visionRadius = () => {
@@ -1017,6 +1049,8 @@ export function startWorld(style, game) {
       for (const s of [sightSprite, cleanMask, crackMask]) { s.position.set(x0 - SH / 2, y0 - SH / 2); s.scale.set(SH); }
     }
     if (maskTex) crackMask.texture = maskTex; // zelfde masker, omgekeerd (zie crackLayer)
+    // de grondshader leest hetzelfde masker: daar de schone kaart
+    if (maskTex) gpu?.setMask(maskTex, cleanMask.x, cleanMask.y, maskTex.width * SH, maskTex.height * SH);
   }
   // Rook: blokkeert het zicht zolang hij hangt (game.smokes, van de server)
   function drawSmokes(now) {
@@ -1121,7 +1155,7 @@ export function startWorld(style, game) {
     }
     times.sort((a, b) => a - b);
     const avg = times.reduce((a, b) => a + b, 0) / n;
-    return { avg: +avg.toFixed(2), p95: +times[Math.floor(n * 0.95)].toFixed(2), max: +times[n - 1].toFixed(2), tiles: painter?.layer.list.filter(Boolean).length };
+    return { avg: +avg.toFixed(2), p95: +times[Math.floor(n * 0.95)].toFixed(2), max: +times[n - 1].toFixed(2), ground: gpu ? 'shader' : `${painter?.layer.list.filter(Boolean).length} tegels` };
   }
 
   function frame(now, once = false) {
@@ -1134,6 +1168,7 @@ export function startWorld(style, game) {
     if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
     side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
+    gpu?.flushSwatches(); // legenda: uitsnedes van de grond
     renderer.render(stage);
     if (FPS) countFrame(now, performance.now() - t0);
   }
@@ -1189,12 +1224,14 @@ export function startWorld(style, game) {
     drawMinimap: () => side.drawMinimap(),
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
+    assets: () => assetReport, // welke texturen en sprites er gebruikt worden (de rest is procedureel of de oude tekening)
     // Opruimen bij een kaart met een andere stijl: beeldlus stoppen, videokaart vrijgeven
     destroy() {
       alive = false;
       resize?.disconnect();
       if (renderer) destroyRenderer();
       stage.destroy({ children: true });
+      gpu?.destroy();
       if (window.blitzView === view) delete window.blitzView;
     },
   };

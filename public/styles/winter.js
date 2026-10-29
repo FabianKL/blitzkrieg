@@ -419,6 +419,12 @@ export default function start(game) {
   view = startWorld({
     viewCells: 96, background: '#e9eef3', teams: TEAMS,
     ground: snow, rock: snow, veg: snow, tunnel, water, base,
+    // grondshader (view/ground-gpu.js): witte sneeuwlip langs tunnels, besneeuwde oever,
+    // platgereden sneeuw in de basis met bandensporen; bomen staan in de objectlaag
+    surface: {
+      lip: { color: '#f4f8fc', amount: 0.75, inner: 0.85 }, rock: { edge: 0.62, light: 1.18 }, veg: 'ground',
+      bank: { color: '#eef4fa' }, floor: { color: '#d8dde6', tracks: 0.9, grain: 10 }, debris: '#705030',
+    },
     // minikaart (world-view.js): zolang de mist hangt, ligt die ook over de minikaart
     minimap: {
       smooth: false,

@@ -305,13 +305,14 @@ export const unpack = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 export const pack = (r, g, b) => (clamp(Math.round(r), 0, 255) << 16) | (clamp(Math.round(g), 0, 255) << 8) | clamp(Math.round(b), 0, 255);
 
 // ---------- Canvas, camera en tanks ----------
-// Camera rond je eigen tank; viewCells langs de kortste kant, nooit meer dan de kaart
-export function camera(game, canvas, viewCells, shake) {
+// Camera rond je eigen tank; viewCells langs de kortste kant, nooit meer dan de kaart.
+// focus = [fx, fy] (fractie van de kaart): kijk daar in plaats van naar je tank (?kijk=, ontwikkelen)
+export function camera(game, canvas, viewCells, shake, focus = null) {
   const Z = Math.max(Math.min(canvas.width, canvas.height) / viewCells, canvas.width / G.W, canvas.height / G.H);
   const w = canvas.width / Z, h = canvas.height / Z;
   const self = game.tanks.get(game.me);
-  const fx = self && self.rx !== undefined ? self.rx + 0.5 : G.W / 2;
-  const fy = self && self.ry !== undefined ? self.ry + 0.5 : G.H / 2;
+  const fx = focus ? focus[0] * G.W : self && self.rx !== undefined ? self.rx + 0.5 : G.W / 2;
+  const fy = focus ? focus[1] * G.H : self && self.ry !== undefined ? self.ry + 0.5 : G.H / 2;
   const x = clamp(fx - w / 2, 0, G.W - w), y = clamp(fy - h / 2, 0, G.H - h);
   const sx = shake > 0 ? (Math.random() - 0.5) * shake * 3 : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake * 3 : 0;
   return { Z, x, y, w, h, drawX: x + sx, drawY: y + sy };

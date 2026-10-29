@@ -82,7 +82,14 @@ export const DISPLAY = { minimap: true };
 //               loopt de mist al zacht in (0 = harde rand)
 //   iceShine    glinstering op ijs (0..1); shakeOnHit: schudden als je eigen tank geraakt wordt
 //   haze        hittewaas in pixels zolang het weer heatHaze heeft (0 = uit)
+//   ground      grondshader (public/view/ground-gpu.js): cells = zoveel cellen beslaat één
+//               grondtextuur (512 px, getekend op 32 px per cel), tint = hoeveel de textuur naar
+//               de klassekleur van de kaart gekleurd wordt (0 = eigen kleur, 1 = klassekleur),
+//               contrast = hoeveel van de tekening overblijft (0 = effen, 1 = zoals getekend);
+//               een kaart kan met textures: { klasse: naam } een andere textuur uit
+//               public/assets/<stijl>/terrain/ kiezen dan manifest.json zegt
 export const LOOK = {
+  ground: { cells: 16, tint: 0.8, contrast: 0.65 },
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },

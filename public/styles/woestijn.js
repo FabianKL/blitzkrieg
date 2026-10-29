@@ -265,6 +265,11 @@ export default function start(game) {
   view = startWorld({
     viewCells: 90, background: '#d9be86', teams: TEAMS, teamLook,
     ground, tunnel, rock, water, veg, base,
+    // grondshader (view/ground-gpu.js): lichte zandlip, schaduw in de loopgraaf, takjes, natte zandrand
+    surface: {
+      lip: { shade: 1.1, amount: 0.5, inner: 0.72 }, rock: { edge: 0.55, light: 1.3 }, veg: 'twigs',
+      bank: { shade: 0.8 }, floor: { color: '#d2b680', tracks: 0.88, grain: 10 }, debris: '#624c30', twig: '#58422a',
+    },
     // minikaart (world-view.js): tijdens een zandstorm waait er stof over de hele kaart
     minimap: {
       rect: 'rgba(46, 36, 22, 0.9)',

@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json; charset=utf-8',
 };
 const ALLOWED = [path.join(ROOT, 'public'), path.join(ROOT, 'shared')];
 // Pakketten voor de weergave (PixiJS e.d.), rechtstreeks uit node_modules: alleen deze bestanden.

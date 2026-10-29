@@ -42,8 +42,10 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   een tekenmodule `public/styles/<stijl>.js` met een thema `<stijl>.css` (op `body[data-style]`).
   Bij een kaart met een andere stijl ruimt `shell.js` de weergave op (`view.destroy()`: beeldlus,
   renderer, WebGL-context) en start hij de nieuwe op een nieuw canvas. Geen iframe meer.
-- **Weergave**: `public/world-view.js` doet alles wat de stijlen gemeen hebben: kaartschilder per
-  tegel, zicht en mist, hints, objecten en tanks; het zijpaneel (minikaart, legenda, tankkaart) staat
+- **Weergave**: `public/world-view.js` doet alles wat de stijlen gemeen hebben: zicht en mist,
+  hints, objecten en tanks. De grond tekent `public/view/ground-gpu.js` op de videokaart (één mesh met
+  een eigen shader en texturen van 1 pixel per cel; de oude kaartschilder per tegel staat nog achter
+  `?oud=1` tot de eigenaar de nieuwe graphics heeft goedgekeurd); het zijpaneel (minikaart, legenda, tankkaart) staat
   in `public/view/side-panel.js`, gevaren en laadplekken in beeld in `public/view/hazards-view.js`. Tekenen gaat met **PixiJS** in
   lagen (`L` in `startWorld`); de gamestate is de enige bron, de weergave leest hem elk frame uit.
   Kaart- en objecttegels, bases en tanks worden met Canvas 2D één keer getekend en als texture
@@ -51,6 +53,10 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   een korte tekst in het speelveld (`label`); de tankkaart zit in `world-view.js`.
 - **Uiterlijk per map**: `LOOK` in `shared/config.js` en `look` in het kaartbestand (kleurfilter, grondtextuur,
   weerdeeltjes, lichtbron, vignet, ijs). Alleen voor de weergave; zie README "Uiterlijk per map".
+- **Assets**: sprites en texturen staan in `public/assets/` (`manifest.json` is de bron, `LEESMIJ.md`
+  zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
+  tekent de weergave het procedureel of zoals vroeger. De opdracht voor de graphics staat in
+  `docs/opdracht-claude-code-graphics.md` (fases 0–8).
 - **Effecten verraden niets**: mondingsvuur, splinters en kogels van anderen alleen als je ze scherp
   ziet; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Kaartmaker**: `shared/mapgen.js` plaatst eerst de bases, dan de vaste kenmerken, en vult daarna

@@ -28,7 +28,8 @@ export default { // §10.5
   // per seconde: in een brandend vak fire, in de eigen basis base, sneller dan fastAbove van de
   // topsnelheid fast, anders idle; bij 100 oververhit (snelheid hotSlow) tot onder coolTo
   meter: { type: 'temp', label: 'Motortemperatuur', danger: 100, color: '#e0603a', fire: 15, base: -20, fast: 4, idle: -6, fastAbove: 0.8, coolTo: 50, hotSlow: 0.4 },
-  look: { grade: { saturation: 0.05, tint: '#ffe8c0', tintStrength: 0.1 }, noise: { strength: 0.08 } },
+  // zandweg: grind tot er een eigen zandwegtextuur voor de zomer is
+  look: { grade: { saturation: 0.05, tint: '#ffe8c0', tintStrength: 0.1 }, noise: { strength: 0.08 }, ground: { textures: { paved: 'grind' } } },
   tunnelColor: '#2e2418',
   weather: [
     { label: 'Zomerhitte', untilRound: 2, effect: { visibility: 12, fires: true, battleSmoke: true } },
