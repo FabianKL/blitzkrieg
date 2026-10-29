@@ -1,9 +1,9 @@
 // Stijl zomer (Normandië, Arnhem, Koersk, ...) voor de gedeelde wereldweergave (world-view.js).
-// Fijne korrel over de kaartkleuren, zandzakken rond de bases, gedetailleerde tanks van bovenaf.
+// Donkere rand langs tunnels (surface), zandzakken rond de bases, gedetailleerde tanks van bovenaf.
 // De spelpagina (shell.js) start hem met start(game); de opmaak van het zijpaneel staat in zomer.css.
 import * as G from '/shared/game.js';
-import { startWorld, R } from '/world-view.js';
-import { hash, vnoise, shade, mix, drawEmblem, drawSpots, FIRE, sandbagRow } from '/render-common.js';
+import { startWorld } from '/world-view.js';
+import { shade, mix, drawEmblem, drawSpots, FIRE, sandbagRow } from '/render-common.js';
 
 // Uiterlijk per kaart (config: tanks, via teamLook); dit is alleen de begintoestand
 const TEAMS = [
@@ -21,83 +21,6 @@ function teamLook(spec, i) {
   };
 }
 const BASE_NAMES = ['A', 'B', 'C', 'D'];
-
-// ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
-// De kleuren zelf komen uit de kaart; hier alleen korrel, randen en vlekken.
-function ground(p) {
-  const { n, j } = p;
-  p.ground();
-  p.shade(n < 0.5 ? 1 : n < 0.76 ? 0.86 : n < 0.94 ? 1.14 : 1.32);
-  p.r += j; p.g += j; p.b += j * 0.7;
-  // donkere rand langs een tunnel
-  const { u, v } = p;
-  if ((v === 0 && p.nT === G.EMPTY) || (v === R - 1 && p.nB === G.EMPTY) || (u === 0 && p.nL === G.EMPTY) || (u === R - 1 && p.nR === G.EMPTY)) {
-    p.r *= 0.6; p.g *= 0.6; p.b *= 0.6;
-  }
-}
-function tunnel(p) {
-  const k = (p.n - 0.5) * 10;
-  p.tunnelBase();
-  p.r += k; p.g += k; p.b += k * 0.8;
-  if ((p.X + p.Y) % 5 === 0) { p.r -= 5; p.g -= 4; p.b -= 3; }
-  if (p.debris()) p.set(112 + k, 80 + k, 46 + k); // splinters van een weggeschoten boom
-}
-function rock(p) {
-  const out = p.rockF < p.rockThr + 0.07; // donkere omlijning
-  const hi = !out && p.rockAt(-2, -2) < p.rockThr; // licht randje linksboven
-  p.rockBase();
-  p.shade(out ? 0.44 : hi ? 1.27 : 1 + (p.n - 0.5) * 0.09);
-}
-function water(p) {
-  // donker water met golfjes, modderige oever
-  if (p.waterF() < p.waterThr + 0.08) { p.ground(); p.shade(0.62); p.r += p.j; p.g += p.j; p.b += p.j; return; }
-  const k = Math.sin(p.X * 0.45 + p.Y * 0.18 + vnoise(p.X / 30, p.Y / 30) * 6) * 6 + (p.n - 0.5) * 6;
-  p.waterBase();
-  p.r += k; p.g += k; p.b += k;
-}
-function veg(p) {
-  // bladerdek: donkere rand, vlekken licht en donker groen (rond de kleur van de kaart)
-  const leaf = vnoise(p.X / 2.3, p.Y / 2.3);
-  p.vegBase();
-  p.shade(p.vegF() < p.vegThr + 0.08 ? 0.6 : leaf > 0.62 ? 1.55 : leaf > 0.4 ? 1.05 : 0.75);
-  p.r += p.j * 0.5; p.g += p.j * 0.5;
-}
-function base(p) { // basisvloer en muur (de zandzakken worden er los overheen getekend)
-  const k = (p.n - 0.5) * 8;
-  p.set(44 + k, 33 + k, 25 + k);
-  if (p.X % (3 * R) === 0 || p.Y % (3 * R) === 0) { p.r -= 9; p.g -= 7; p.b -= 5; }
-}
-
-// Dunne lichte barsten in grote rotsen: eenmalig uitgerekend, per tegel getekend
-const isInterior = (x, y) => [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]].every(([dx, dy]) => view.at(x + dx, y + dy) === G.ROCK);
-let cracks = new Map(); // tegel -> [[X, Y, r, g, b], ...]
-function buildCracks() {
-  cracks = new Map();
-  const put = (X, Y, r, g, b) => {
-    const t = `${(X / R / 32) | 0},${(Y / R / 32) | 0}`;
-    if (!cracks.has(t)) cracks.set(t, []);
-    cracks.get(t).push([X, Y, r, g, b]);
-  };
-  for (let y = 3; y < G.H - 3; y++) {
-    for (let x = 3; x < G.W - 3; x++) {
-      if (hash(x * 7 + 1, y * 13 + 5) % 60 !== 0 || !isInterior(x, y)) continue;
-      const rnd = G.mulberry32(hash(x, y));
-      let px = x * R + R / 2, py = y * R + R / 2, ang = rnd() * Math.PI * 2;
-      for (let s = 0, ok = true; s < 3 && ok; s++) {
-        const len = (2 + rnd() * 3) * R;
-        ang += (rnd() - 0.5) * 1.6;
-        const cx = Math.cos(ang), cy = Math.sin(ang);
-        for (let t = 0; t < len; t++) {
-          const X = Math.round(px + cx * t), Y = Math.round(py + cy * t);
-          if (!isInterior((X / R) | 0, (Y / R) | 0)) { ok = false; break; }
-          put(X, Y, 178, 180, 175);
-          put(X, Y + 1, 102, 104, 100);
-        }
-        px += cx * len; py += cy * len;
-      }
-    }
-  }
-}
 
 // ---------- Effecten ----------
 const DIRT_CHUNKS = ['#5c4129', '#6e5034', '#4a3420', '#7d5c3c'];
@@ -193,15 +116,11 @@ export default function start(game) {
   view = startWorld({
     viewCells: 80, background: '#2a1f17', teams: TEAMS,
     fullText: 'alle vier de ploegen zijn al bemand',
-    ground, tunnel, rock, water, veg, base,
     // grondshader (view/ground-gpu.js): donkere rand langs tunnels, bladerdek, modderige oever
     surface: {
       lip: { shade: 0.6, amount: 1, inner: 1 }, rock: { edge: 0.44, light: 1.27 }, veg: 'canopy',
       bank: { shade: 0.62 }, floor: { color: '#2c2119', grid: 3, grain: 8 }, debris: '#70502e',
     },
-    afterTile: (tx, ty, setPx) => { for (const px of cracks.get(`${tx},${ty}`) || []) setPx(...px); },
-    skipRepaint: isInterior, // rots binnenin verandert nooit (en heeft barsten die we willen houden)
-    onMap: buildCracks,
     clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
     onEvent, drawBase, drawTank, teamLook,
     shadow: { color: 0x000000, alpha: 0.38 },

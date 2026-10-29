@@ -43,13 +43,14 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   Bij een kaart met een andere stijl ruimt `shell.js` de weergave op (`view.destroy()`: beeldlus,
   renderer, WebGL-context) en start hij de nieuwe op een nieuw canvas. Geen iframe meer.
 - **Weergave**: `public/world-view.js` doet alles wat de stijlen gemeen hebben: zicht en mist,
-  hints, objecten en tanks. De grond tekent `public/view/ground-gpu.js` op de videokaart (één mesh met
-  een eigen shader en texturen van 1 pixel per cel; de oude kaartschilder per tegel staat nog achter
-  `?oud=1` tot de eigenaar de nieuwe graphics heeft goedgekeurd); het zijpaneel (minikaart, legenda, tankkaart) staat
+  hints en tanks. De grond tekent `public/view/ground-gpu.js` op de videokaart (één mesh met een eigen
+  shader en texturen van 1 pixel per cel), bomen en rotsen `public/view/objects-view.js` (sprites uit
+  de atlas van de stijl), bruggen `public/view/bridges-view.js`; het zijpaneel (minikaart, legenda, tankkaart) staat
   in `public/view/side-panel.js`, gevaren en laadplekken in beeld in `public/view/hazards-view.js`. Tekenen gaat met **PixiJS** in
   lagen (`L` in `startWorld`); de gamestate is de enige bron, de weergave leest hem elk frame uit.
-  Kaart- en objecttegels, bases en tanks worden met Canvas 2D één keer getekend en als texture
-  gebruikt. Een stijl levert alleen kleuren per pixel, tanks (zonder schaduw), bases, effecten en
+  Bases en tanks (en de getekende objecten als er geen atlas is) worden met Canvas 2D één keer
+  getekend en als texture gebruikt. Een stijl levert alleen `surface` (details van de grond), tanks
+  (zonder schaduw), bases, effecten en
   een korte tekst in het speelveld (`label`); de tankkaart zit in `world-view.js`.
 - **Uiterlijk per map**: `LOOK` in `shared/config.js` en `look` in het kaartbestand (kleurfilter, grondtextuur,
   weerdeeltjes, lichtbron, vignet, ijs). Alleen voor de weergave; zie README "Uiterlijk per map".

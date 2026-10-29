@@ -1,15 +1,15 @@
 // Gedeelde wereldweergave voor alle maps (stijlen zomer, winter, woestijn in styles/). Hier zit
-// alles wat voor elke stijl hetzelfde is: kaartschilder, ronde randen van rots/water/begroeiing,
-// sporen, minikaart, legenda, tankkaart, objectlaag, camera, tanks, deeltjes, storm en meldingen.
-// Een stijl levert alleen kleuren en tekeningen.
+// alles wat voor elke stijl hetzelfde is: zicht en mist, sporen, objecten, camera, tanks,
+// deeltjes, storm en meldingen. De grond tekent view/ground-gpu.js (shader), bruggen
+// view/bridges-view.js, bomen en rotsen view/objects-view.js (sprites); het zijpaneel staat in
+// view/side-panel.js. Een stijl levert alleen kleuren en tekeningen.
 //
 // Tekenen gaat met PixiJS (WebGL) in lagen, zie L in startWorld. De gamestate is de enige bron:
 // de weergave leest hem elk frame uit en zet sprites en Graphics klaar. Wat duur is om te tekenen
-// (kaart, bomen, bases, tanks) wordt één keer met Canvas 2D getekend en als texture gebruikt;
-// van de kaart worden alleen gewijzigde tegels opnieuw geüpload.
+// (bases, tanks, de oude objecttekening) wordt één keer met Canvas 2D getekend en als texture gebruikt.
 //
 // De kleuren van terrein, tunnels, rots, water en begroeiing komen uit de kaartconfiguratie
-// (config.js); een stijl legt er zijn eigen textuur overheen (p.ground() en p.shade(), zie onder).
+// (config.js); de grondtexturen uit public/assets/ (manifest.json).
 // De spelpagina (shell.js) heeft de verbinding, de menu's en de titel. Hij start een weergave met
 // startWorld(style, game) en geeft de berichten door aan view.hooks; bij een kaart met een andere
 // stijl ruimt hij hem op met view.destroy() en start de volgende op een nieuw canvas #game.
@@ -18,13 +18,12 @@
 //
 // Een stijl is een object met (alles behalve de kleuren is optioneel):
 //   viewCells, background, teams, fullText (melding als het potje vol is)
-//   ground, tunnel, rock, water, veg, base   kleur per pixel: (p) => zet p.r/p.g/p.b (zie hieronder)
-//   ice, wak, building         ijs, wakken en gebouwen (anders de standaard hieronder)
+//   surface                    details van de grond in de shader (zie SURFACE in view/ground-gpu.js)
 // De minikaart staat aan of uit via DISPLAY.minimap in config.js (of minimap per kaart);
 // staat hij uit, dan verdwijnen het canvas en alles met data-minimap op de pagina.
 //   mini(c, x, y)              kleur [r, g, b] van een cel op de minikaart
-//   objects: {draw(ctx, x0, y0, x1, y1), over}   eigen laag met bomen e.d. (Canvas 2D, in celmaten); over = boven de tanks
-//   afterTile, skipRepaint     doorgegeven aan de kaartschilder
+//   objects: {draw(ctx, x0, y0, x1, y1), over}   getekende bomen e.d. (Canvas 2D, in celmaten), als er
+//                              geen sprites zijn (view/objects-view.js); over = boven de tanks
 //   clouds, cloudAlpha         soorten rook/stof voor de deeltjes
 //   onMap(map), onEvent(e, spawn)
 //   drawUnder(g, cam, now)     extra's onder de tanks; g is een Pixi-Graphics in celmaten
@@ -44,22 +43,19 @@ import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFi
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
-  hash, vnoise, rgb, pack, cellAt, seenCell, trackMix, showsTunnel, obstacleFields, plantFelled, createObstacleSampler, isDebris,
-  eraserInfo, findBases, blurField, createFieldSampler, createMapPainter, createTileCanvases, TILE, camera,
+  hash, rgb, cellAt, obstacleFields, plantFelled, eraserInfo, findBases, blurField, createTileCanvases, TILE, camera,
   smoothTankAngles, createOverlay, statusOverlay, showBandwidth, R, paintRefillIcon,
 } from '/render-common.js';
 import { createSidePanel } from '/view/side-panel.js';
 import { createHazardView } from '/view/hazards-view.js';
 import { createGroundGpu } from '/view/ground-gpu.js';
 import { createBridgeView } from '/view/bridges-view.js';
+import { createObjectView } from '/view/objects-view.js';
 import { report as assetReport } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
-export { R }; // pixels per cel in de kaarttextuur (de stijlen tekenen ermee)
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
-const GROUND_SLOT = 8; // cache-vak voor de terreinkleur (stijlen gebruiken 0..7)
 const ICE_CLS = G.CLASS.ice;
-const smoothstep = (t) => t * t * (3 - 2 * t);
 
 // Kleuren van de kaart als [r, g, b]; wat de kaart niet opgeeft, krijgt een neutrale kleur
 const FALLBACK = { tunnel: '#2e2418', water: '#1f3440', rock: '#8d9196', veg: '#36502a' };
@@ -78,12 +74,12 @@ function makePalette(rules) {
   };
 }
 
-// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water, ice, road en bridge per veld)
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water, ice, road, bridge en objects per veld)
 function lookFor(rules) {
   const own = rules?.look || {};
   return {
     ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
-    light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground },
+    light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground }, objects: { ...LOOK.objects, ...own.objects },
     water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice }, road: { ...LOOK.road, ...own.road },
     bridge: { ...LOOK.bridge, ...own.bridge },
   };
@@ -101,8 +97,6 @@ function gradeMatrix({ saturation, brightness, contrast, tint, tintStrength }) {
   return m;
 }
 const isNeutral = (g) => !g.saturation && g.brightness === 1 && g.contrast === 1 && !g.tintStrength;
-// Getal uit een tekst (kaartnaam): dezelfde grondtextuur voor iedereen op die kaart
-const seedOf = (str) => [...str].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261);
 
 // Barsten in een ijsvak: per vak vaste grillige lijnen (in cellen), per stadium twee meer.
 // Elke barst loopt vanuit een punt bij het midden twee kanten op, met een knik per stuk en
@@ -150,211 +144,35 @@ export function startWorld(style, game) {
   // schuift hem); de UI-laag staat in schermpixels.
   const stage = new Container(), world = stage.addChild(new Container());
   const L = {};
-  // clean: de kaart zonder tunnels en sporen, over de grond waar je geen zicht hebt (zie drawSight)
-  for (const name of ['ground', 'clean', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
+  for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
-  // ?oud=1: de oude kaartschilder op de CPU (tegelcanvassen) in plaats van de grondshader, om te vergelijken
-  const OLD = new URLSearchParams(location.search).get('oud') === '1';
-  const gpu = OLD ? null : createGroundGpu({ container: L.ground, game, style, getRenderer: () => renderer });
+  // De grond tekent de videokaart (view/ground-gpu.js)
+  const gpu = createGroundGpu({ container: L.ground, game, style, getRenderer: () => renderer });
   let bases = [], rockField = null, fields = null;
-  const rocks = createFieldSampler(R), obs = createObstacleSampler(R);
   const at = (x, y) => cellAt(game.map, x, y);
-  const seen = (x, y) => seenCell(game, x, y);
-  // Zo ziet de schone kaart een cel: een tunnel of krater is gewoon grond
-  const cleanAt = (x, y) => { const c = at(x, y); return c === G.EMPTY ? G.DIRT : c; };
-
-  // ---------- Kaarttextuur ----------
-  // Per pixel bepaalt de weergave wát er ligt (met ronde randen en vage sporen); de stijl
-  // kiest alleen de kleur. p is één hergebruikt object, dus geen geheugen per pixel:
-  //   x, y (cel), u, v (pixel in de cel), X, Y (pixel op de kaart), idx (celindex), cls (terreinklasse)
-  //   own (celtype), c (wat deze pixel toont), nT/nB/nL/nR (buren zoals de weergave ze ziet)
-  //   h (pixelhash), n (0..1), j (-8..7) voor korrel, base (basisnummer of -1)
-  //   rockF/rockThr: rotsveld en drempel (rand = net boven de drempel), waterThr, vegThr
-  //   set(r, g, b), packed(0xRRGGBB), cached(slot, fn), cachedValue(slot, fn), shade(k), debris()
-  //   ground(): terreinkleur van de kaart, met zachte overgangen tussen de klassen
-  //   tunnelBase(), waterBase(), rockBase(), vegBase(): kleur van de kaart voor dat soort cel
-  //   waterF(), vegF(), rockAt(du, dv): veldwaarden voor randen en schaduw
-  const p = {
-    x: 0, y: 0, u: 0, v: 0, X: 0, Y: 0, idx: 0, cls: 0, own: 0, c: 0, nT: 0, nB: 0, nL: 0, nR: 0,
-    h: 0, n: 0, j: 0, base: -1, rockF: 0, rockThr: 0.5, waterThr: 0.5, vegThr: 0.5, r: 0, g: 0, b: 0,
-    get bases() { return bases; },
-    set(r, g, b) { p.r = r; p.g = g; p.b = b; },
-    packed(c) { p.r = (c >> 16) & 255; p.g = (c >> 8) & 255; p.b = c & 255; },
-    cached(slot, fn) { p.packed(painting.cache(slot, p.X, p.Y, fn)); },
-    cachedValue: (slot, fn) => painting.cache(slot, p.X, p.Y, fn),
-    shade(k) { p.r *= k; p.g *= k; p.b *= k; },
-    ground() { p.packed(painting.cache(GROUND_SLOT, p.X, p.Y, groundColor)); },
-    tunnelBase() { p.set(...pal.tunnel); },
-    waterBase() { p.set(...pal.water); },
-    rockBase() { p.set(...pal.rock); },
-    vegBase() { p.set(...pal.veg); },
-    debris: () => isDebris(game, p.idx, p.h),
-    waterF: () => obs.water.sample(p.u, p.v),
-    vegF: () => obs.veg.sample(p.u, p.v),
-    rockAt: (du, dv) => rocks.sample(p.u + du, p.v + dv),
-  };
   let pal = makePalette({});
-  let look = lookFor({}), noise2 = null, hasIce = false;
-  // Grondtextuur: een paar lagen simplex-ruis (fbm), -1..1
-  function groundNoise(X, Y) {
-    const n = look.noise;
-    let v = 0, amp = 1, sum = 0, f = 1 / (R * n.scale);
-    for (let o = 0; o < n.octaves; o++) { v += amp * noise2(X * f, Y * f); sum += amp; amp *= 0.5; f *= 2; }
-    return v / sum;
-  }
-  // Terreinkleur op pixel (X, Y): de klassekleuren van de vier dichtstbijzijnde cellen, gemengd
-  // op een met ruis verschoven plek. Zo lopen grenzen golvend en zacht in elkaar over in
-  // plaats van in blokjes per cel.
-  const clsColor = (x, y) => pal.cls[game.terrain[Math.min(G.H - 1, Math.max(0, y)) * G.W + Math.min(G.W - 1, Math.max(0, x))]];
-  function groundColor(X, Y) {
-    const b = look.blend; // breedte van de overgang in cellen
-    const wx = X / R - 0.5 + (vnoise(X / 13, Y / 13) - 0.5) * b, wy = Y / R - 0.5 + (vnoise(X / 13 + 71, Y / 13 + 29) - 0.5) * b;
-    const x0 = Math.floor(wx), y0 = Math.floor(wy), fx = smoothstep(wx - x0), fy = smoothstep(wy - y0);
-    const a = clsColor(x0, y0), q = clsColor(x0 + 1, y0), c = clsColor(x0, y0 + 1), d = clsColor(x0 + 1, y0 + 1);
-    const mixc = (k) => (a[k] * (1 - fx) + q[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy;
-    const r = mixc(0), g = mixc(1), b2 = mixc(2);
-    // vlekken licht en donker, vooral op donkere grond (veen, aarde); sneeuw blijft rustig
-    const dark = Math.min(1, Math.max(0.1, 1.15 - (0.3 * r + 0.59 * g + 0.11 * b2) / 255));
-    const n = look.noise.strength ? 1 + look.noise.strength * dark * groundNoise(X, Y) : 1;
-    return pack(r * n, g * n, b2 * n);
-  }
-  // IJs: diepe, donkere plekken die vloeiend overgaan in licht ijs, met lange stroomstrepen
-  // (de rivier loopt van west naar oost) en wat korrel. Barsten en glinstering staan los
-  // daarboven (drawIce), zodat ze kunnen bewegen.
-  const ICE_SLOT = 9; // cache-vak (stijlen 0..7, terrein 8)
-  const DEEP = [34, 58, 82]; // kleur van diep, donker ijs
-  function iceColor(X, Y) {
-    const ice = pal.cls[ICE_CLS], f = 1 / (R * 18);
-    const deep = 0.5 + 0.5 * (noise2(X * f, Y * f) * 0.7 + noise2(X * f * 2.3 + 40, Y * f * 2.3) * 0.3); // 0..1
-    const k = Math.pow(1 - deep, 1.6) * 0.62; // hoeveel donker ijs
-    const flow = noise2(X / (R * 40), Y / (R * 2.2)) * 0.035; // lange strepen langs de stroom
-    const grain = (((hash(X, Y) & 1023) / 1023) - 0.5) * 0.025;
-    const light = 1 + flow + grain + (1 - k) * 0.04;
-    return pack(...ice.map((v, i) => (v * (1 - k) + DEEP[i] * k) * light));
-  }
-  function paintIce() {
-    p.cached(ICE_SLOT, iceColor);
-  }
-  // Wak: open water met ijsschotsen en een gebroken ijsrand
-  function paintWak() {
-    const ice = pal.cls[ICE_CLS];
-    if (p.waterF() < p.waterThr + 0.1) { p.set(...ice); p.shade(1.08 + (p.n - 0.5) * 0.06); return; }
-    const f = vnoise(p.X / 4.5, p.Y / 4.5);
-    if (f > 0.7) { p.set(...ice); p.shade(f < 0.73 ? 0.7 : 0.95 + (p.n - 0.5) * 0.05); return; }
-    p.waterBase();
-    const k = Math.sin(p.X * 0.4 + p.Y * 0.15) * 4 + (p.n - 0.5) * 6;
-    p.r += k; p.g += k; p.b += k;
-  }
+  let look = lookFor({}), hasIce = false;
 
-  // Gebouw: grijs dak met pannenrijen, donkere rand en een lichte nok in het midden
-  function paintBuilding() {
-    p.set(...pal.building);
-    const edge = (p.u === 0 && p.nL !== G.BUILDING) || (p.u === R - 1 && p.nR !== G.BUILDING) ||
-      (p.v === 0 && p.nT !== G.BUILDING) || (p.v === R - 1 && p.nB !== G.BUILDING);
-    if (edge) { p.shade(0.5); return; }
-    p.shade((p.Y % 3 === 0 ? 0.82 : 1) * (0.96 + p.n * 0.08) * (p.X % 9 === 0 ? 0.9 : 1));
-  }
-  // Puin van een kapotgeschoten gebouw: grijze brokken die nooit vervagen
-  function rubble() {
-    if ((p.h >>> 8) % 100 >= 38) return;
-    p.set(...pal.building);
-    p.shade(0.6 + p.n * 0.55);
-  }
-
-  // Brug die kan ontploffen (Market Garden): betonplaten met naden en een donkere rand, in
-  // plaats van de wegkleur. bridgeMask: cellen van die brug (gezet in loadMap).
+  // Brug die kan ontploffen (Market Garden): zijn cellen, voor de minikaart (gezet in loadMap).
+  // De brug komt mee in het instapbericht, of (vanuit de wachtkamer) pas met 'hz' bij de start.
   let bridgeMask = null;
-  const onBridge = (x, y) => G.inBounds(x, y) && bridgeMask[y * G.W + x] === 1;
-  // De brug komt mee in het instapbericht, of (vanuit de wachtkamer) pas met 'hz' bij de start
   function makeBridgeMask() {
     bridgeMask = null;
     if (!game.bridge?.cells?.length) return;
     bridgeMask = new Uint8Array(G.W * G.H);
     for (const i of game.bridge.cells) bridgeMask[i] = 1;
   }
-  function paintBridge() {
-    p.set(...pal.bridge);
-    const edge = (p.u === 0 && !onBridge(p.x - 1, p.y)) || (p.u === R - 1 && !onBridge(p.x + 1, p.y)) ||
-      (p.v === 0 && !onBridge(p.x, p.y - 1)) || (p.v === R - 1 && !onBridge(p.x, p.y + 1));
-    if (edge) { p.shade(0.55); return; }
-    p.shade((p.X % 12 === 0 || p.Y % 12 === 0 ? 0.82 : 1) * (0.95 + p.n * 0.1));
-  }
-
-  const colorOf = [];
-  colorOf[G.DIRT] = style.ground; colorOf[G.EMPTY] = style.tunnel; colorOf[G.ROCK] = style.rock;
-  colorOf[G.WATER] = style.water; colorOf[G.VEG] = style.veg; colorOf[G.BUILDING] = style.building || paintBuilding;
-
-  // clean = schone kaart: tunnels, kraters en sporen worden gewoon grond (zie L.clean)
-  const cellPainter = (clean) => function paintCell(x, y, setPx) {
-    const cell = clean ? cleanAt : at, nb = clean ? cleanAt : seen;
-    const own = cell(x, y), idx = y * G.W + x;
-    p.x = x; p.y = y; p.idx = idx; p.own = own; p.cls = game.terrain[idx];
-    p.nT = nb(x, y - 1); p.nB = nb(x, y + 1); p.nL = nb(x - 1, y); p.nR = nb(x + 1, y);
-    p.base = own >= G.BASE ? own - G.BASE : own >= G.WALL && own < G.BASE ? own - G.WALL : -1;
-    rocks.load(rockField, x, y);
-    obs.load(fields, x, y, own, p.nT, p.nB, p.nL, p.nR);
-    // in een echte rots/water/plantcel een lagere drempel, zodat losse cellen niet verdwijnen
-    const thr = p.rockThr = own === G.ROCK ? 0.34 : 0.5;
-    p.waterThr = own === G.WATER ? 0.34 : 0.5;
-    p.vegThr = own === G.VEG ? 0.34 : 0.5;
-    const tm = own === G.EMPTY ? trackMix(game, idx) : 0; // 1 = vers spoor, helemaal tunnel
-    for (let v = 0; v < R; v++) {
-      for (let u = 0; u < R; u++) {
-        const X = x * R + u, Y = y * R + v, h = hash(X, Y);
-        p.u = u; p.v = v; p.X = X; p.Y = Y; p.h = h;
-        p.n = (h & 1023) / 1023; p.j = ((h >>> 10) & 15) - 8;
-        const f = p.rockF = rocks.sample(u, v);
-        let c = own;
-        if (f >= thr) c = G.ROCK;
-        else if (own === G.ROCK) {
-          // afgeronde hoek van een rotscel: neem het terrein van de buur aan die kant
-          const side = u < R / 2 ? p.nL : p.nR, vert = v < R / 2 ? p.nT : p.nB;
-          c = side !== G.ROCK ? side : vert !== G.ROCK ? vert : G.DIRT;
-        }
-        c = obs.pick(u, v, c); // water en begroeiing met ronde randen
-        if (c === G.EMPTY && !showsTunnel(h, tm)) c = G.DIRT; // vaag spoor: hier nog terrein
-        p.c = c;
-        if (p.cls === ICE_CLS && c === G.DIRT) (style.ice || paintIce)(p);
-        else if (p.cls === ICE_CLS && c === G.WATER) (style.wak || paintWak)(p);
-        else if (bridgeMask?.[idx] && (c === G.DIRT || c === G.EMPTY)) paintBridge();
-        else (colorOf[c] || style.base)(p); // muur en vloer van de bases: style.base
-        if ((c === G.DIRT || c === G.EMPTY) && game.world.scar[idx] === G.SCAR_RUBBLE) rubble();
-        setPx(X, Y, p.r, p.g, p.b);
-      }
-    }
-  };
-
-  // Kaartschilder, minikaart en objectlaag hebben de maat van de kaart: ze worden bij elke
-  // nieuwe kaart opnieuw gemaakt (zie loadMap), want de kaartgrootte kan verschillen.
-  // cleanPainter schildert de schone kaart; painting is de schilder die nu bezig is (voor p.cached).
-  let painter = null, cleanPainter = null, painting = null;
-  let cleanCells = null; // per cel hoe de schone kaart hem zag (cleanValue; zie onDig)
-  const cleanValue = (i) => (game.map[i] === G.EMPTY ? G.DIRT : game.map[i]) | (game.world.scar[i] === G.SCAR_RUBBLE ? 128 : 0);
-  // Schilder bijwerken (en de tegels in view schilderen), met de goede cache voor p.cached
-  function flushPainter(pt, view) { painting = pt; pt.flush(view); }
-  // Een rechthoek opnieuw schilderen, op de gewone en de schone kaart
-  const bothPainters = {
-    markRect: (x0, y0, x1, y1) => {
-      if (gpu) { gpu.markRect(x0, y0, x1, y1); return; }
-      painter.markRect(x0, y0, x1, y1); cleanPainter.markRect(x0, y0, x1, y1);
-    },
-  };
 
   // ---------- Zijpaneel: minikaart, legenda en tankkaart (view/side-panel.js) ----------
   const side = createSidePanel({
     game, style, at,
     get pal() { return pal; }, get bases() { return bases; }, get bridgeMask() { return bridgeMask; },
-    get objects() { return objects; }, get cam() { return view.cam; },
+    get objects() { return objectView.active ? objectView : objects; }, get cam() { return view.cam; },
     // stuk kaart (n x n cellen vanaf sx, sy) op het canvas van g; after() als het er staat
-    paintRegion(g, sx, sy, n, after) {
-      if (gpu) { gpu.swatch(g, sx, sy, n, after); return; }
-      flushPainter(painter, { x: sx, y: sy, w: n, h: n }); // zorgt dat dat stuk kaart geschilderd is
-      painter.layer.drawRegion(g, sx, sy, n, n, 0, 0, g.canvas.width, g.canvas.height);
-      after?.();
-    },
+    paintRegion: (g, sx, sy, n, after) => gpu.swatch(g, sx, sy, n, after),
   });
 
-  if (gpu) gpu.onAtlas = () => side.buildLegend(); // de legenda toont de echte grondtexturen
+  gpu.onAtlas = () => side.buildLegend(); // de legenda toont de echte grondtexturen
 
   // ---------- Objectlaag (bomen, rotsblokken, struikjes) ----------
   // box = [x0, y0, x1, y1] in cellen: alleen dat stuk opnieuw tekenen (na een omgeschoten
@@ -403,24 +221,25 @@ export function startWorld(style, game) {
   let shake = 0;
   function onEvent(e) {
     if (e.t === 'x' && e.fell) { // plant of gebouw weg: alleen daar de randen en objecten opnieuw
-      plantFelled(fields, game.map, bothPainters, e.box);
+      plantFelled(fields, game.map, gpu, e.box);
       buildObjects(e.box);
+      objectView.rebuild(e.box);
     }
     if (e.t === 'x' && e.building && (style.clouds || { smoke: 1 }).smoke) { // stof en brokken van een gebouw
       particles.spawn('smoke', e.x, e.y, e.fell ? 14 : 3, { speed: e.fell ? 5 : 2, life: e.fell ? 2.4 : 1.2, r0: 1, r1: e.fell ? 7 : 3 });
     }
     if (e.t === 'c') { // ijsvak heeft een passage meer: nieuwe barsten groeien, ijs splintert
       const from = G.iceStage(e.n - 1), to = G.iceStage(e.n);
-      if (to > from) { crackGrow.set(e.b, { from, t0: performance.now() }); gpu?.iceChanged(); }
+      if (to > from) { crackGrow.set(e.b, { from, t0: performance.now() }); gpu.iceChanged(); }
       const t = game.tanks.get(e.i);
       if (t && (e.i === game.me || t.seen === 'sharp')) particles.spawn('chunk', t.x, t.y, to > from ? 8 : 3, { speed: 8, life: 0.5, cols: ICE_BITS });
     }
     if (e.t === 'w' && e.box) { // ijs gebroken: waterrand bijwerken, schotsen en spatwater
       const [x0, y0, x1, y1] = e.box;
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
-      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
-      gpu?.waterChanged(e.box);
-      gpu?.iceChanged();
+      gpu.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      gpu.waterChanged(e.box);
+      gpu.iceChanged();
       crackGrow.delete(e.b);
       const cx = (e.b % G.ICE_BW) * G.ICE_B + G.ICE_B / 2, cy = ((e.b / G.ICE_BW) | 0) * G.ICE_B + G.ICE_B / 2;
       particles.spawn('chunk', cx, cy, 30, { speed: 14, life: 0.9, cols: ICE_BITS });
@@ -436,24 +255,26 @@ export function startWorld(style, game) {
     if (e.t === 'hz' && game.bridge && !bridgeMask) { // spel gestart: nu is bekend waar de brug ligt
       makeBridgeMask();
       const [x0, y0, x1, y1] = game.bridge.box;
-      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      gpu.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) side.paintMini(x, y);
     }
     if (e.t === 'bridge') { // brug ontploft of hersteld
       const [x0, y0, x1, y1] = game.bridge?.box || [0, 0, 0, 0];
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
-      bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
-      gpu?.waterChanged([x0, y0, x1, y1]);
-      bridgeView?.onBlast(e, seesSharp);
+      gpu.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+      gpu.waterChanged([x0, y0, x1, y1]);
+      bridgeView.onBlast(e, seesSharp);
       if (e.blown) { particles.spawn('flash', e.x, e.y, 1, { life: 0.4, r0: 3, r1: 12 }); shake = Math.max(shake, 0.5); }
     }
-    if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, bothPainters, e.box); buildObjects(e.box); }
-    if (e.t === 'fc') bothPainters.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
+    if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, gpu, e.box); buildObjects(e.box); objectView.rebuild(e.box); }
+    if (e.t === 'fc') gpu.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
     if (e.t === 'gun' && e.tx !== undefined) { particles.spawn('flash', e.x, e.y, 1, { life: 0.2, r0: 1, r1: 3 }); }
     if (e.t === 'zb') { // barrage: inslagen en kapotte boomtoppen
       const [x0, y0, x1, y1] = e.box;
-      bothPainters.markRect(x0, y0, x1, y1);
+      gpu.markRect(x0, y0, x1, y1);
       buildObjects(e.box);
+      objectView.rebuild(e.box);
+      for (const [cx, cy, r] of e.craters || []) objectView.addCrater(cx, cy, r);
       for (let k = 0; k < 8; k++) {
         const x = x0 + Math.random() * (x1 - x0), y = y0 + Math.random() * (y1 - y0);
         particles.spawn('flash', x, y, 1, { life: 0.3, r0: 1.5, r1: 5 });
@@ -463,6 +284,7 @@ export function startWorld(style, game) {
     }
     hintFor(e);
     if (e.t === 'k') {
+      objectView.addCrater(e.x, e.y, e.r ?? G.DEATH_DIG_R);
       const self = game.tanks.get(game.me);
       if (self && Math.hypot(self.x - e.x, self.y - e.y) < style.viewCells / 2) shake = Math.max(shake, 0.35);
     }
@@ -483,24 +305,24 @@ export function startWorld(style, game) {
     makeBridgeMask();
     applyLook(lookFor(game.rules));
     view.colors = pal.hex;
-    if (OLD) {
-      painter = createMapPainter({ R, paintCell: cellPainter(false), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
-      cleanPainter = createMapPainter({ R, paintCell: cellPainter(true), afterTile: style.afterTile, skipRepaint: style.skipRepaint });
-      cleanCells = Uint8Array.from({ length: map.length }, (_, i) => cleanValue(i));
-    }
-    makeObjects();
+    objects = null; // eerst kijken of er sprites zijn (objectView), anders de getekende objecten
     crackCache.clear();
     crackGrow.clear();
     hasIce = game.terrain.includes(ICE_CLS);
     rockField = blurField(map, (c) => c === G.ROCK);
     fields = obstacleFields(map);
     bases = findBases(map);
-    if (OLD) style.onMap?.(map); // alleen voor de oude kaartschilder (rotsbarsten bij zomer)
-    else { gpu.load({ pal, look, fields, rockField, bases }); bridgeView.load(look); }
+    style.onMap?.(map);
+    gpu.load({ pal, look, fields, rockField, bases });
+    bridgeView.load(look);
     side.loadMap();
-    buildObjects();
-    if (OLD) { groundTiles.use(painter.layer); cleanTiles.use(cleanPainter.layer); }
-    objTiles.use(objects);
+    objTiles.use(null);
+    objectView.load(look).then((sprites) => {
+      if (!alive || game.map !== map) return;
+      if (!sprites) { makeObjects(); buildObjects(); objTiles.use(objects); }
+      gpu.setObjects(sprites, objectView.vanishOnFell);
+      side.buildLegend();
+    });
     buildBases();
     clearTankTextures();
     side.buildLegend();
@@ -510,11 +332,7 @@ export function startWorld(style, game) {
     onMap: loadMap,
     onDig: (x, y) => {
       side.paintMini(x, y); mapVersion++;
-      if (gpu) { gpu.markCell(x, y); return; }
-      painter.markDig(x, y);
-      // de schone kaart alleen als hij er echt anders uitziet (dus niet bij graven en rijden)
-      const i = y * G.W + x, v = cleanValue(i);
-      if (cleanCells && v !== cleanCells[i]) { cleanCells[i] = v; cleanPainter.markDig(x, y); }
+      gpu.markCell(x, y);
     },
     onEvent,
     onStatus: statusOverlay(setOverlay, style.fullText || 'alle vier de tanks zijn al bemand'),
@@ -524,14 +342,14 @@ export function startWorld(style, game) {
   // ---------- Tekenen (PixiJS) ----------
   // De lagen staan bovenaan (L). Hier de onderdelen per laag; drawWorld zet ze elk frame klaar
   // vanuit de gamestate, daarna tekent Pixi alles in één keer.
-  const groundTiles = createTileSprites(L.ground, R, TILE);
   // Schone kaart: alleen te zien waar je geen zicht hebt (masker: wit = verborgen, zie drawSight).
   // Het masker staat naast de tegels, want use() ruimt alle tegels in hun laag op.
-  const cleanTiles = createTileSprites(L.clean.addChild(new Container()), R, TILE);
-  const cleanMask = L.clean.addChild(new Sprite());
-  L.clean.mask = cleanMask;
+  // Zichtmasker (wit = geen zicht, zie drawSight): voor de grondshader (schone kaart) en de ijsbarsten.
+  // Deze sprite staat nergens in beeld; hij houdt alleen de texture en zijn plek vast.
+  const cleanMask = new Sprite();
   const objectsUnder = L.objects.addChild(new Container()), baseLayer = L.objects.addChild(new Container());
-  const objTiles = createTileSprites(style.objects?.over ? L.canopy : objectsUnder, R, TILE, L.shadows.addChild(new Container()));
+  // getekende objecten (als er geen sprites zijn); eigen containers, want use() ruimt de hele laag op
+  const objTiles = createTileSprites((style.objects?.over ? L.canopy : objectsUnder).addChild(new Container()), R, TILE, L.shadows.addChild(new Container()));
   const marks = L.marks.addChild(new Graphics());
   // B/M-badge boven elke volle laadplek (brandstof, munitie), zoals op de minikaart
   const badgeTex = Object.fromEntries(['fuel', 'ammo'].map((kind) => {
@@ -543,7 +361,14 @@ export function startWorld(style, game) {
   const badges = spritePool(L.effects.addChild(new Container()), badgeTex.fuel);
   const badgeRings = L.effects.addChild(new Graphics());
   // IJsbarsten verraden waar iemand reed: alleen waar je zicht hebt (omgekeerd masker, drawSight)
-  const crackLayer = L.marks.addChild(new Container()), crackG = crackLayer.addChild(new Graphics());
+  const crackLayer = L.marks.addChild(new Container()), craterLayer = crackLayer.addChild(new Container());
+  const crackG = crackLayer.addChild(new Graphics());
+  // Bomen, rotsen en kraters als sprites (view/objects-view.js); zonder atlas de getekende objecten
+  // bij objTiles. Kraters in de laag van de ijsbarsten: alleen te zien waar je zicht hebt.
+  const objectView = createObjectView({
+    under: objectsUnder, over: L.canopy.addChild(new Container()), shadows: L.shadows.addChild(new Container()),
+    craters: craterLayer, game, shadowColor: style.shadow?.color ?? 0x000000,
+  });
   const crackMask = crackLayer.addChild(new Sprite());
   crackLayer.setMask({ mask: crackMask, inverse: true });
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
@@ -581,11 +406,11 @@ export function startWorld(style, game) {
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
-  // Bruggen als sprites (view/bridges-view.js), onder alles in de objectlaag; met ?oud=1 niet
-  const bridgeView = gpu ? createBridgeView({
+  // Bruggen als sprites (view/bridges-view.js), onder alles in de objectlaag
+  const bridgeView = createBridgeView({
     layer: L.objects.addChildAt(new Container(), 0), shadowLayer: L.shadows.addChildAt(new Container(), 0),
     game, particles, shadowColor: SHADOW.color,
-  }) : null;
+  });
   // ziet de speler deze plek scherp? (effecten verraden niets)
   const seesSharp = (x, y) => {
     const me = eye();
@@ -676,7 +501,6 @@ export function startWorld(style, game) {
   L.ui.setChildIndex(vignette, 0); // onder de hints en labels
   function applyLook(next) {
     look = next;
-    noise2 = createNoise2D(G.mulberry32(seedOf(game.mapId || '')));
     Object.assign(SHADOW, { dx: look.light.dx, dy: look.light.dy, alpha: look.light.alpha });
     objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
     for (const s of tankSprites.values()) s.shadow.alpha = SHADOW.alpha;
@@ -684,8 +508,8 @@ export function startWorld(style, game) {
     filterKey = '';
     vignette.alpha = look.vignette;
     shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
-    gpu?.setLook(look);
-    bridgeView?.setLook(look);
+    gpu.setLook(look);
+    bridgeView.setLook(look);
     visionKey = '';
   }
 
@@ -803,12 +627,9 @@ export function startWorld(style, game) {
     const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
-    if (gpu) { gpu.update(now); bridgeView.update(); }
-    else {
-      flushPainter(painter, cam);
-      groundTiles.sync(cam);
-      if (sightOn) { flushPainter(cleanPainter, cam); cleanTiles.sync(cam); }
-    }
+    gpu.update(now);
+    bridgeView.update();
+    objectView.update(cam);
     objTiles.sync(cam);
 
     marks.clear();
@@ -829,8 +650,7 @@ export function startWorld(style, game) {
     drawSmokes(now);
     drawWeather(cam, now, dt);
     sightSprite.visible = visionSprite.visible = overlayOn;
-    L.clean.visible = sightOn && !gpu;
-    if (!sightOn) { crackMask.texture = Texture.EMPTY; gpu?.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
+    if (!sightOn) { crackMask.texture = Texture.EMPTY; gpu.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
     if (sightOn) { drawSight(me, cam); hz.drawMirages(me, cam, now); }
     if (overlayOn) drawFog(me, cam);
@@ -1075,7 +895,7 @@ export function startWorld(style, game) {
     }
     if (maskTex) crackMask.texture = maskTex; // zelfde masker, omgekeerd (zie crackLayer)
     // de grondshader leest hetzelfde masker: daar de schone kaart
-    if (maskTex) gpu?.setMask(maskTex, cleanMask.x, cleanMask.y, maskTex.width * SH, maskTex.height * SH);
+    if (maskTex) gpu.setMask(maskTex, cleanMask.x, cleanMask.y, maskTex.width * SH, maskTex.height * SH);
   }
   // Rook: blokkeert het zicht zolang hij hangt (game.smokes, van de server)
   function drawSmokes(now) {
@@ -1180,7 +1000,7 @@ export function startWorld(style, game) {
     }
     times.sort((a, b) => a - b);
     const avg = times.reduce((a, b) => a + b, 0) / n;
-    return { avg: +avg.toFixed(2), p95: +times[Math.floor(n * 0.95)].toFixed(2), max: +times[n - 1].toFixed(2), ground: gpu ? 'shader' : `${painter?.layer.list.filter(Boolean).length} tegels` };
+    return { avg: +avg.toFixed(2), p95: +times[Math.floor(n * 0.95)].toFixed(2), max: +times[n - 1].toFixed(2), ground: 'shader' };
   }
 
   function frame(now, once = false) {
@@ -1193,7 +1013,7 @@ export function startWorld(style, game) {
     if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
     side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
-    gpu?.flushSwatches(); // legenda: uitsnedes van de grond
+    gpu.flushSwatches(); // legenda: uitsnedes van de grond
     renderer.render(stage);
     if (FPS) countFrame(now, performance.now() - t0);
   }
@@ -1201,7 +1021,7 @@ export function startWorld(style, game) {
   // ---------- Gevaren en schaarse middelen in beeld (view/hazards-view.js) ----------
   const hz = createHazardView({
     game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius,
-    get pal() { return pal; }, get bridgeSprites() { return !!bridgeView?.active; },
+    get pal() { return pal; }, get bridgeSprites() { return bridgeView.active; },
   });
 
   // ---------- Ronde en score (§2) ----------
@@ -1257,7 +1077,8 @@ export function startWorld(style, game) {
       resize?.disconnect();
       if (renderer) destroyRenderer();
       stage.destroy({ children: true });
-      gpu?.destroy();
+      gpu.destroy();
+      objectView.destroy();
       if (window.blitzView === view) delete window.blitzView;
     },
   };

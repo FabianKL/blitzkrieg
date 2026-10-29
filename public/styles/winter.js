@@ -1,10 +1,10 @@
-// Stijl winter (Ardennen, Leningrad) voor de gedeelde wereldweergave (world-view.js). Sneeuw,
-// bevroren aarde in de tunnels, dennen- of berkenbos, rotsblokken en water. Kaarten met fog: true
+// Stijl winter (Ardennen, Leningrad) voor de gedeelde wereldweergave (world-view.js): sneeuwlip
+// langs tunnels (surface), dennen- of berkenbos en rotsblokken, palissade. Kaarten met fog: true
 // beginnen in dichte mist die langzaam optrekt. De spelpagina (shell.js) start hem met start(game);
 // de opmaak van het zijpaneel staat in winter.css.
 import * as G from '/shared/game.js';
-import { startWorld, R } from '/world-view.js';
-import { clamp, shade, mix, rgb, hash, h01, vnoise, pack, drawEmblem, drawSpots, FIRE } from '/render-common.js';
+import { startWorld } from '/world-view.js';
+import { clamp, shade, mix, rgb, hash, h01, vnoise, drawEmblem, drawSpots, FIRE } from '/render-common.js';
 
 let ctx = null; // canvas waarop de basis getekend wordt (zie drawBase)
 
@@ -22,67 +22,6 @@ function teamLook(spec, i) {
   return { ...spec, hull, turret: mix(hull, '#ffffff', 0.12), mini: MINI[i] };
 }
 
-// ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
-// De dure ruiskleuren (sneeuw, bevroren aarde, water) worden per pixel onthouden;
-// opnieuw schilderen bij graven of vervagen is dan alleen nog opzoeken.
-const SNOW = 0, EARTH = 1, WATERC = 2; // cache-vakken
-// Helderheid van de sneeuw (x1000): grote zachte schaduwvlakken + kleine hobbels + korrel
-const snowShade = (X, Y) => {
-  const n = (hash(X, Y) & 1023) / 1023;
-  if (n > 0.988) return 1100; // glinstering
-  const lf = vnoise(X / 40, Y / 40), bump = vnoise(X / 7 + 300, Y / 7 + 300);
-  return Math.round(1000 + (lf - 0.5) * 104 + (bump - 0.5) * 60 + (n - 0.5) * 43);
-};
-// Bevroren aarde in een tunnel (x1000 op de tunnelkleur), met sneeuwplekken (bit 13)
-const earthShade = (X, Y) => {
-  const n = (hash(X, Y) & 1023) / 1023;
-  if (vnoise(X / 16 + 50, Y / 16 + 50) > 0.7) return 8192 + Math.round(168 + (n - 0.5) * 34); // sneeuwplek
-  const d = X % R === 0 || Y % R === 0 ? 0.78 : 1; // tegelvoegen
-  return Math.round((1 + (n - 0.5) * 0.3) * d * 1000);
-};
-
-// Sneeuw (ook onder bos en rotsblokken, die in de objectlaag staan), met een witte lip langs tunnels
-function snow(p) {
-  const { u, v } = p;
-  p.ground();
-  if ((v === 0 && p.nT === G.EMPTY) || (v === R - 1 && p.nB === G.EMPTY) || (u === 0 && p.nL === G.EMPTY) || (u === R - 1 && p.nR === G.EMPTY)) {
-    p.set(p.r + (255 - p.r) * 0.75, p.g + (255 - p.g) * 0.75, p.b + (255 - p.b) * 0.75);
-    return;
-  }
-  p.shade(p.cachedValue(SNOW, snowShade) / 1000);
-}
-function tunnel(p) {
-  // Bevroren aarde met een hobbelige sneeuwrand en schaduw eronder
-  const { u, v, h } = p;
-  const e = p.cachedValue(EARTH, earthShade);
-  if (e & 8192) { const s = e & 255; p.set(s - 4, s, s + 6); } else { p.tunnelBase(); p.shade(e / 1000); }
-  if (p.debris()) p.set(112, 80, 48); // splinters van een omgeschoten den
-  const snowT = p.nT !== G.EMPTY, snowL = p.nL !== G.EMPTY, snowR = p.nR !== G.EMPTY, snowB = p.nB !== G.EMPTY;
-  if ((v === 0 && snowT) || (u === 0 && snowL) || (u === R - 1 && snowR) || (v === R - 1 && snowB)) {
-    if ((h >>> 12) % 10 < 4) p.set(244, 248, 252);
-  } else if ((v === 1 && snowT) || (u === 1 && snowL)) {
-    p.tunnelBase(); p.shade(0.85);
-  }
-}
-function water(p) {
-  // Donker water met een besneeuwde oever
-  if (p.waterF() < p.waterThr + 0.09) { p.set(238, 244, 250); return; }
-  const water = view.colors.water;
-  p.cached(WATERC, (X, Y) => {
-    const lf = vnoise(X / 30, Y / 30), n = (hash(X, Y) & 1023) / 1023;
-    const k = Math.sin(X * 0.4 + Y * 0.15 + lf * 6) * 7 + (n - 0.5) * 6;
-    const [r, g, b] = rgb(water);
-    return pack(r + k, g + k, b + k);
-  });
-}
-function base(p) {
-  // Platgereden sneeuw in de basis, met bandensporen door de deur
-  const s = 222 + (p.n - 0.5) * 10;
-  p.set(s - 6, s - 1, s + 8);
-  const bs = p.bases[p.base];
-  if (bs && Math.abs(Math.abs(p.X / R - bs.dc) - 1.6) < 0.35) { p.r -= 22; p.g -= 20; p.b -= 16; }
-}
-// ---------- Bomen en rotsblokken (objectlaag boven de tanks, in celmaten) ----------
 function starPath(g, x, y, r, points, inner, rot) {
   g.beginPath();
   for (let k = 0; k < points * 2; k++) {
@@ -418,7 +357,6 @@ let view = null;
 export default function start(game) {
   view = startWorld({
     viewCells: 96, background: '#e9eef3', teams: TEAMS,
-    ground: snow, rock: snow, veg: snow, tunnel, water, base,
     // grondshader (view/ground-gpu.js): witte sneeuwlip langs tunnels, besneeuwde oever,
     // platgereden sneeuw in de basis met bandensporen; bomen staan in de objectlaag
     surface: {

@@ -100,6 +100,8 @@ export const DISPLAY = { minimap: true };
 //               (donkerte), rutOffset (afstand tot het midden) en rutWidth; smooth = afronding van
 //               binnenhoeken, junction = zo ver van een kruising heeft de weg weer een richting;
 //               curb = stoeprand in cellen (0 = geen) met curbColor; line = middenstreep (0..1)
+//   objects     bomen en rotsen als sprites (public/view/objects-view.js): rocks = op zo'n deel van de
+//               roosterpunten op rots staat een rotsblok (0 = alleen de rotstextuur)
 //   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout', 'steen', 'staal';
 //               public/assets/<stijl>/bridges/<soort>-begin|midden|eind|wrak.png), land = zo'n deel
 //               van het landhoofd ligt op de oever, height = hoe hoog boven het water (lengte van
@@ -113,6 +115,7 @@ export const LOOK = {
     smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0,
   },
   bridge: { kind: 'steen', land: 0.33, height: 1.6 },
+  objects: { rocks: 0.35 },
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },
@@ -121,6 +124,24 @@ export const LOOK = {
   vignette: 0.2, fogSoft: 0.15,
   iceShine: 0, shakeOnHit: 0.25,
   haze: 5, // hittewaas (als het weer heatHaze heeft): hoeveel pixels het beeld trilt
+};
+
+// Bomen, struiken, rotsen en kraters als sprites (public/view/objects-view.js), getekend op 32 px
+// per cel. step: rooster in cellen (op elk punt hoogstens één object, met vast toeval verschoven);
+// turn: zoveel radialen draaien ze hoogstens (de tekening heeft licht van linksboven); scale: grootte
+// per soort (x de getekende maat), van..tot; tall: soorten die boven de tanks uitsteken (kruinen);
+// height: hoe hoog voor de schaduw (cellen verschuiving per cel van look.light); craterSize: krater-
+// sprite x de straal van de krater. Welke soorten een kaart heeft: vegetation.sprites in het
+// kaartbestand ({soort: aandeel}), anders de soort bij vegetation.type; vegetation.palmCoast: tot zo
+// ver van het water wordt begroeiing een palm.
+export const OBJECTS = {
+  step: 2.5, turn: 0.3, craterSize: 1.2,
+  scale: {
+    den: [0.65, 0.95], berk: [0.62, 0.9], loof: [0.68, 0.98], palm: [0.7, 0.95],
+    heg: [0.7, 0.9], struik: [0.55, 0.85], cactus: [0.5, 0.8], rots: [0.5, 0.85],
+  },
+  tall: ['den', 'berk', 'loof', 'palm'],
+  height: { tall: 1.4, low: 0.5 },
 };
 
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)

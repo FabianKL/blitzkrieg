@@ -134,7 +134,6 @@ localhost, in de adresbalk):
 - `?kijk=0.5,0.45` zet de camera op die plek van de kaart (fractie van breedte en hoogte) in plaats
   van op je tank, om water, ijs of bruggen te bekijken zonder erheen te rijden (in de console:
   `blitzView.lookAt(0.5, 0.45)`, en `blitzView.lookAt()` terug naar je tank);
-- `?oud=1` (ook buiten localhost) tekent de grond met de oude kaartschilder op de CPU, om te vergelijken;
 - `blitzView.bench()` in de console tekent 120 beelden direct na elkaar en geeft de tijd per beeld,
   ook als het venster niet zichtbaar is (het kan niet sneller meten dan de verversing van het scherm);
 - `blitzView.assets()` in de console zegt welke texturen en sprites uit `public/assets/` komen.
@@ -157,6 +156,7 @@ De spelregels kijken er niet naar.
 | `water` | Water in de grondshader: `deep` (donkerte in het diepe), `depthCells` (zo ver van de kant is het diep), `shore` (lichter aan de kant), `shine` (glinstering), golven met `waveCells` (maat), `waveSpeed` en `waves` (sterkte). Ook de glans op moeras en doorwaadbare plekken. |
 | `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). |
 | `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur) en `vergeAmount` (berm), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
+| `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js). |
 | `bridge` | Bruggen als sprite: `kind` (`hout`, `steen`, `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
 
@@ -170,8 +170,9 @@ De spelregels kijken er niet naar.
 4. Herstart de server en bekijk de map met `?zoom=2` en `?fps=1`.
 
 Een heel ander soort vormen (bijvoorbeeld een stad in de sneeuw) betekent een nieuwe stijl in
-`public/styles/`: een tekenmodule `<naam>.js` (pixelkleuren, `drawTank`, `drawBase`, objecten; zie de
-uitleg bovenaan `public/world-view.js`) en een thema `<naam>.css` (kleuren en randen van het speelveld
+`public/styles/`: een tekenmodule `<naam>.js` (`surface` voor de grondshader, `drawTank`, `drawBase`,
+getekende objecten als er geen atlas is; zie de uitleg bovenaan `public/world-view.js`), een map
+`public/assets/<naam>/` met texturen en sprites (zie `public/assets/LEESMIJ.md`) en een thema `<naam>.css` (kleuren en randen van het speelveld
 en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema in `index.html`.
 
 ## Opbouw
@@ -198,7 +199,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `public/view/roads.js` | Wegenveld voor de shader: de middellijnen gladgemaakt (Chaikin) en per cel de afstand tot de dichtstbijzijnde en de op één na dichtstbijzijnde weg en de plek langs de weg. |
 | `public/assets.js`, `public/assets/` | Asset-loader en de sprites en texturen zelf (`manifest.json` zegt wat er is, `LEESMIJ.md` wat wat is). Wat ontbreekt, wordt procedureel of zoals vroeger getekend. |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
-| `public/render-common.js` | Oude kaartschilder (tegelcanvassen, alleen nog met `?oud=1`), camera, kleuren en ruis, gedeelde tekeningen. |
+| `public/view/objects-view.js` | Bomen, struiken, heggen, cactussen, palmen, rotsblokken en kraters als sprites uit de atlas van de stijl, per tegel en alleen in beeld; omgeschoten begroeiing als kapotte variant (of weg). |
+| `public/render-common.js` | Hulpjes (kleur, ruis, velden), tegelcanvassen voor de getekende objecten als er geen atlas is, camera, gedeelde tekeningen. |
 | `public/styles/` | De stijlen: `zomer.js`, `winter.js`, `woestijn.js` (tekenen) met hun thema `.css`, en `view.css` (opbouw van speelveld en zijpaneel). |
 | `public/touch.js`, `touch.css` | Touchbesturing (joystick, vuren, K) en de telefoonstand van het speelveld. |
 | `public/manifest.webmanifest`, `icon.svg` | Op het beginscherm zetten: volledig scherm, liggend. |
@@ -226,11 +228,9 @@ potnaam van retro.
   videokaart (celtype, klasse, sporen, randvelden); een shader rekent per schermpixel uit wat er ligt,
   dus scherp op elke zoomstand. Bij graven worden alleen de veranderde cellen geüpload. Instappen
   kost ~0,2 s in plaats van ~1,5 s (de oude schilder moest eerst alle tegels in beeld schilderen).
-- **Oude kaartschilder per tegel** (`?oud=1`): een tegel (32×32 cellen) is een eigen texture en wordt pas geschilderd als hij in beeld komt;
-  dure ruiskleuren worden per pixel onthouden, zodat graven/vervagen alleen nog opzoeken is. Pixels en
-  kleurgeheugen bestaan alleen voor de 48 laatst geziene tegels (`?tiles=8` in de adresbalk om dat te
-  testen). Een omgeschoten plant werkt alleen het stukje kaart eromheen bij; alleen die tegel gaat
-  opnieuw naar de videokaart.
+- **Objecten als sprites**: bomen en rotsen komen uit één atlas per stijl en staan per tegel van 32×32
+  cellen in een container; alleen tegels in beeld worden getekend. Een omgeschoten plant bouwt alleen
+  de tegels eromheen opnieuw op.
 - **Robuust**: berichten max. 4 KB, max. 60 berichten/s per speler, hartslag elke 5 s ruimt
   verbindingen van slapende laptops op, en een fout in één verbinding laat de server niet crashen.
 

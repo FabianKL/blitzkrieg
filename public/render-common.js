@@ -1,5 +1,5 @@
-// Gedeeld door de gedetailleerde weergaves (1944, 1943, 1942): hulpjes, kaartschilder,
-// camera, deeltjes en schermmeldingen. Elke weergave levert alleen zijn eigen stijl.
+// Gedeeld door de weergave (world-view.js en de stijlen): hulpjes voor kleur en ruis, velden,
+// tegelcanvassen voor de getekende objecten, camera, gedeelde tekeningen en schermmeldingen.
 import * as G from '/shared/game.js';
 import { trackMix, eraserInfo } from '/shared/client-sim.js';
 
@@ -31,59 +31,19 @@ export function vnoise(x, y) {
 // ---------- Kaart ----------
 export const cellAt = (map, x, y) => (G.inBounds(x, y) ? map[y * G.W + x] : G.ROCK);
 
-// ---------- Terrein en sporen ----------
-// Cel zoals de weergave hem ziet: een vage tunnel (spoor onder de helft) krijgt geen
-// randjes bij de buren, anders tekent een dun spoor op harde grond toch een dikke tunnel.
-export function seenCell(game, x, y) {
-  const c = cellAt(game.map, x, y);
-  return c === G.EMPTY && trackMix(game, y * G.W + x) < 0.5 ? G.DIRT : c;
-}
-
-// Water en begroeiing met afgeronde randen, net als rots: per pixel kijken of het vervaagde
-// veld boven de drempel komt. Valt een pixel van een water/plantcel erbuiten, dan neemt hij
-// het terrein van de buurcel aan die kant. fields = {water, veg} uit obstacleFields().
+// ---------- Velden ----------
+// Vervaagde velden van water en begroeiing (voor de ronde randen in de grondshader)
 export function obstacleFields(map) {
   return { water: blurField(map, (c) => c === G.WATER), veg: blurField(map, (c) => c === G.VEG) };
 }
 
 // Een plant is omgegaan (e.box = rechthoek van zijn cellen, zie client-sim): alleen daar het
-// plantveld bijwerken en de cellen opnieuw schilderen waarvan de ronde rand verandert.
-export function plantFelled(fields, map, painter, box) {
+// plantveld bijwerken en de grond eromheen opnieuw laten tekenen (ground.markRect)
+export function plantFelled(fields, map, ground, box) {
   const [x0, y0, x1, y1] = box;
   blurField(map, (c) => c === G.VEG, fields.veg, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
-  painter.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
+  ground.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
 }
-const isObstacle = (c) => c === G.ROCK || c === G.WATER || c === G.VEG;
-export function createObstacleSampler(R) {
-  const water = createFieldSampler(R), veg = createFieldSampler(R);
-  let own, nT, nB, nL, nR;
-  return {
-    water, veg,
-    load(fields, x, y, cell, t, b, l, r) {
-      water.load(fields.water, x, y, 0); veg.load(fields.veg, x, y, 0);
-      own = cell; nT = t; nB = b; nL = l; nR = r;
-    },
-    // celtype voor pixel (u, v) binnen de cel, gegeven wat er tot nu toe gekozen is (c)
-    pick(u, v, c) {
-      if (c === G.ROCK) return c;
-      if (water.sample(u, v) >= (own === G.WATER ? 0.34 : 0.5)) return G.WATER;
-      if (veg.sample(u, v) >= (own === G.VEG ? 0.34 : 0.5)) return G.VEG;
-      if (c === G.WATER || c === G.VEG) {
-        const side = u < R / 2 ? nL : nR, vert = v < R / 2 ? nT : nB;
-        return !isObstacle(side) ? side : !isObstacle(vert) ? vert : G.DIRT;
-      }
-      return c;
-    },
-  };
-}
-
-// Puin/stronken in het permanente gat van een weggeschoten plant (h = pixelhash)
-export const isDebris = (game, i, h) => game.world?.scar[i] === 1 && (h >>> 8) % 100 < 24;
-
-// Pixel van een tunnelcel: tunnelkleur of toch terrein? Hoe vager het spoor, hoe meer
-// pixels terrein blijven (h = pixelhash, mix = trackMix van de cel).
-export const showsTunnel = (h, mix) => ((h >>> 20) & 1023) / 1023 < mix;
-
 // Bases opzoeken (muurcellen per speler); bases[i] = {i, x0, y0, x1, y1, d0, d1, dc}
 export function findBases(map) {
   const bases = [];
@@ -118,34 +78,11 @@ export function blurField(map, test, f = new Float32Array(G.W * G.H), box = [0, 
   return f;
 }
 
-// Bilineair gemengde waarde van een veld rond cel (x, y) op subpixel (u, v); voor ronde randen.
-// Vul eerst load(field, x, y) aan, daarna sample(u, v) per pixel.
-export function createFieldSampler(R) {
-  const k = new Float32Array(9);
-  return {
-    load(field, x, y, outside = 1) {
-      for (let j = -1; j <= 1; j++) {
-        for (let i = -1; i <= 1; i++) {
-          const nx = x + i, ny = y + j;
-          k[(j + 1) * 3 + i + 1] = G.inBounds(nx, ny) ? field[ny * G.W + nx] : outside;
-        }
-      }
-    },
-    sample(u, v) {
-      const fx = (u + 0.5) / R - 0.5, fy = (v + 0.5) / R - 0.5;
-      const i0 = Math.floor(fx), j0 = Math.floor(fy), tx = fx - i0, ty = fy - j0;
-      const a = k[(j0 + 1) * 3 + i0 + 1], b = k[(j0 + 1) * 3 + i0 + 2];
-      const c = k[(j0 + 2) * 3 + i0 + 1], d = k[(j0 + 2) * 3 + i0 + 2];
-      return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-    },
-  };
-}
-
 // ---------- Tegelcanvassen ----------
-// Een kaartlaag in losse canvassen van TILE x TILE cellen (TP pixels per zijde). Eén groot
-// canvas kan op een grote kaart niet als textuur naar de videokaart (te groot), en zo hoeft
-// bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
-export const R = 6; // pixels per cel in de kaarttextuur
+// Een laag in losse canvassen van TILE x TILE cellen (TP pixels per zijde), voor de getekende
+// objecten (als er geen sprites zijn). Eén groot canvas kan op een grote kaart niet als textuur
+// naar de videokaart, en zo hoeft bij een wijziging alleen die ene tegel opnieuw geüpload te worden.
+export const R = 6; // pixels per cel in de tegelcanvassen
 export const TILE = 32;
 export function createTileCanvases(R) {
   const TP = TILE * R, TILES_X = Math.ceil(G.W / TILE), TILES_Y = Math.ceil(G.H / TILE);
@@ -181,126 +118,6 @@ export function createTileCanvases(R) {
   };
 }
 
-// ---------- Kaartschilder ----------
-// Tegels van 32x32 cellen met R pixels per cel, elk een eigen canvas (createTileCanvases).
-// - Een tegel wordt pas geschilderd als hij (bijna) in beeld komt: snel instappen.
-// - Bij graven worden alleen de geraakte cellen en hun buren opnieuw geschilderd.
-// - cache(slot, X, Y, fn) onthoudt dure pixelkleuren (ruis), zodat opnieuw schilderen
-//   alleen nog opzoeken is. fn(X, Y) geeft een kleur terug als 0xRRGGBB.
-// - Pixels en kleurgeheugen bestaan per tegel en alleen voor de MAX_TILES tegels die het
-//   laatst in beeld waren. Een opgeruimde tegel houdt zijn canvas; verandert er iets in, dan
-//   wordt hij helemaal opnieuw geschilderd zodra hij weer in beeld komt.
-// paintCell(x, y, setPx) schildert één cel; afterTile(tx, ty, setPx) mag er iets overheen zetten.
-// Gemaakt voor de kaartmaat van dat moment (G.W x G.H): bij een andere kaartgrootte een nieuwe.
-// ruim twee schermen vol; met ?tiles=8 in de adresbalk kun je het opruimen testen
-const MAX_TILES = Number(new URLSearchParams(location.search).get('tiles')) || 48;
-const UNPAINTED = 0, LIVE = 1, PARKED = 2; // PARKED: canvas bestaat, maar zonder pixels in het geheugen
-
-export function createMapPainter({ R, paintCell, afterTile, skipRepaint }) {
-  const layer = createTileCanvases(R);
-  const { TP, TILES_X, TILES_Y } = layer;
-  const state = new Uint8Array(TILES_X * TILES_Y);
-  const tiles = new Array(TILES_X * TILES_Y).fill(null); // {img, caches, used}
-  const dirtyCells = new Set();
-  const dirtyTiles = new Set();
-  let live = 0, clock = 0;
-
-  // De tegel waar pixel (X, Y) in valt; onthoudt de laatste, want een cel ligt in één tegel
-  let curT = -1, cur = null;
-  const tileAt = (X, Y) => {
-    const t = ((Y / TP) | 0) * TILES_X + ((X / TP) | 0);
-    if (t !== curT) {
-      curT = t;
-      cur = tiles[t];
-      if (!cur) { cur = tiles[t] = { img: new ImageData(TP, TP), caches: [], used: clock }; live++; }
-    }
-    return cur;
-  };
-  const setPx = (X, Y, r, g, b) => {
-    const d = tileAt(X, Y).img.data, i = ((Y % TP) * TP + (X % TP)) * 4;
-    d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
-  };
-  const putTile = (t) => { layer.get(t).getContext('2d').putImageData(tiles[t].img, 0, 0); layer.touch(t); };
-  function paintTile(tx, ty) {
-    for (let y = ty * TILE; y < Math.min(G.H, (ty + 1) * TILE); y++) {
-      for (let x = tx * TILE; x < Math.min(G.W, (tx + 1) * TILE); x++) paintCell(x, y, setPx);
-    }
-    afterTile?.(tx, ty, setPx);
-    state[ty * TILES_X + tx] = LIVE;
-    putTile(ty * TILES_X + tx);
-  }
-  // Te veel tegels in het geheugen: de langst niet geziene opruimen (niet die nu in beeld zijn)
-  function evict() {
-    while (live > MAX_TILES) {
-      let old = -1;
-      for (let t = 0; t < tiles.length; t++) if (tiles[t] && tiles[t].used < clock && (old < 0 || tiles[t].used < tiles[old].used)) old = t;
-      if (old < 0) return;
-      tiles[old] = null;
-      state[old] = PARKED;
-      live--;
-      if (curT === old) curT = -1;
-    }
-  }
-
-  return {
-    layer,
-    // Nieuwe kaart: alles vergeten
-    reset() {
-      state.fill(UNPAINTED);
-      tiles.fill(null);
-      live = 0; curT = -1;
-      dirtyCells.clear();
-      layer.reset();
-    },
-    // Cel is veranderd: hem en zijn buren (randjes) opnieuw schilderen
-    markDig(x, y) {
-      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (G.inBounds(nx, ny)) dirtyCells.add(ny * G.W + nx);
-      }
-    },
-    // Alle cellen in een rechthoek opnieuw schilderen (bv. rond een omgeschoten plant)
-    markRect(x0, y0, x1, y1) {
-      for (let y = Math.max(0, y0); y <= Math.min(G.H - 1, y1); y++) {
-        for (let x = Math.max(0, x0); x <= Math.min(G.W - 1, x1); x++) dirtyCells.add(y * G.W + x);
-      }
-    },
-    cache(slot, X, Y, fn) {
-      const caches = tileAt(X, Y).caches;
-      const c = caches[slot] || (caches[slot] = new Uint32Array(TP * TP));
-      const i = (Y % TP) * TP + (X % TP);
-      let v = c[i];
-      if (!v) v = c[i] = fn(X, Y) | 0x1000000; // bit 24 = "al berekend"
-      return v & 0xffffff;
-    },
-    // Tegels in beeld schilderen en gewijzigde cellen bijwerken; view in cellen
-    flush(view) {
-      clock++;
-      const tx0 = clamp(Math.floor((view.x - 4) / TILE), 0, TILES_X - 1), tx1 = clamp(Math.floor((view.x + view.w + 4) / TILE), 0, TILES_X - 1);
-      const ty0 = clamp(Math.floor((view.y - 4) / TILE), 0, TILES_Y - 1), ty1 = clamp(Math.floor((view.y + view.h + 4) / TILE), 0, TILES_Y - 1);
-      for (const idx of dirtyCells) {
-        const x = idx % G.W, y = (idx / G.W) | 0;
-        const t = ((y / TILE) | 0) * TILES_X + ((x / TILE) | 0);
-        if (state[t] === PARKED) state[t] = UNPAINTED; // geen pixels meer: straks helemaal opnieuw
-        if (state[t] !== LIVE) continue; // wordt helemaal geschilderd zodra hij in beeld komt
-        if (skipRepaint?.(x, y)) continue;
-        paintCell(x, y, setPx);
-        dirtyTiles.add(t);
-      }
-      dirtyCells.clear();
-      for (let ty = ty0; ty <= ty1; ty++) {
-        for (let tx = tx0; tx <= tx1; tx++) {
-          const t = ty * TILES_X + tx;
-          if (state[t] === UNPAINTED) { paintTile(tx, ty); dirtyTiles.delete(t); }
-          if (tiles[t]) tiles[t].used = clock;
-        }
-      }
-      for (const t of dirtyTiles) putTile(t);
-      dirtyTiles.clear();
-      evict();
-    },
-  };
-}
 export const unpack = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 export const pack = (r, g, b) => (clamp(Math.round(r), 0, 255) << 16) | (clamp(Math.round(g), 0, 255) << 8) | clamp(Math.round(b), 0, 255);
 

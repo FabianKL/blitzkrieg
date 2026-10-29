@@ -1,10 +1,9 @@
 // Stijl woestijn (El Alamein) voor de gedeelde wereldweergave (world-view.js): mijnenvelden,
-// struiken en zandstormen. Zand met duinribbels, loopgraven, rotsplateaus met lagen en (bijna
-// onzichtbare) mijnen. De spelpagina (shell.js) start hem met start(game); de opmaak van het
+// struiken en zandstormen, en (bijna onzichtbare) mijnen. De spelpagina (shell.js) start hem met start(game); de opmaak van het
 // zijpaneel staat in woestijn.css.
 import * as G from '/shared/game.js';
-import { startWorld, R } from '/world-view.js';
-import { shade, mix, rgb, hash, vnoise, pack, drawEmblem, FIRE, sandbagRow } from '/render-common.js';
+import { startWorld } from '/world-view.js';
+import { shade, mix, rgb, hash, drawEmblem, FIRE, sandbagRow } from '/render-common.js';
 
 // Uiterlijk per kaart (config: tanks, via teamLook); de herkenningspanelen en wimpels geven de
 // vaste kleur van de speler
@@ -20,75 +19,6 @@ function teamLook(spec, i) {
   return { ...spec, emblem: spec.mark, hull, turret: mix(hull, '#ffffff', 0.12), camo: spec.camo || shade(hull, 0.72), mark: SLOT[i], mini: SLOT[i] };
 }
 
-// ---------- Kaartkleuren (per pixel, zie world-view.js) ----------
-// De dure ruiskleuren (duinen, loopgraaf, rotslagen) worden per pixel onthouden;
-// opnieuw schilderen bij graven of vervagen is dan alleen opzoeken.
-// Het zijn helderheden (x1000) over de kaartkleur heen.
-const SAND = 0, TRENCH = 1, ROCKC = 2; // cache-vakken
-const sandShade = (X, Y) => {
-  const n = (hash(X, Y) & 1023) / 1023;
-  // duinribbels: schuine golfjes die een beetje meanderen
-  const ripple = Math.sin(X * 0.21 + Y * 0.07 + vnoise(X / 50, Y / 50) * 7);
-  const big = vnoise(X / 70 + 20, Y / 70 + 20);
-  return Math.round(1000 + ((big - 0.5) * 22 + ripple * 7 + (n - 0.5) * 12) * 4.5);
-};
-const trenchShade = (X, Y) => {
-  const n = (hash(X, Y) & 1023) / 1023;
-  return Math.round(1000 + ((n - 0.5) * 16 + (vnoise(X / 12, Y / 12) - 0.5) * 14) * 7);
-};
-const rockShade = (X, Y) => {
-  const n = (hash(X, Y) & 1023) / 1023;
-  return Math.round(1000 + (Math.sin(Y * 0.22 + vnoise(X / 25, Y / 25) * 5) * 13 + (n - 0.5) * 12) * 7); // horizontale lagen
-};
-
-function ground(p) {
-  p.ground();
-  p.shade(p.cachedValue(SAND, sandShade) / 1000);
-}
-function tunnel(p) {
-  // loopgraaf: aangestampt zand, schaduw onder de rand, lichte zandlip
-  // (randen alleen als de cel zelf loopgraaf is, niet in een afgeronde rotshoek)
-  const inside = p.own === G.EMPTY;
-  const top = inside ? p.nT : G.EMPTY, left = inside ? p.nL : G.EMPTY;
-  const right = inside ? p.nR : G.EMPTY, bot = inside ? p.nB : G.EMPTY;
-  const { u, v } = p;
-  p.tunnelBase();
-  p.shade(p.cachedValue(TRENCH, trenchShade) / 1000);
-  if ((v === 0 && top !== G.EMPTY) || (u === 0 && left !== G.EMPTY) || (u === R - 1 && right !== G.EMPTY) || (v === R - 1 && bot !== G.EMPTY)) {
-    if ((p.h >>> 12) % 10 < 5) { p.ground(); p.shade(1.1); } // lichte zandlip
-  } else if ((v <= 2 && top !== G.EMPTY) || (u <= 1 && left !== G.EMPTY)) {
-    p.r *= 0.72; p.g *= 0.72; p.b *= 0.72;
-  }
-  if (p.debris()) p.set(98, 76, 48); // takjes van een weggeschoten struik
-}
-function rock(p) {
-  // rotsplateau: donkere rand, lichte bovenkant, verder gelaagd gesteente
-  p.rockBase();
-  if (p.rockF < p.rockThr + 0.07) p.shade(0.55);
-  else if (p.rockAt(-2, -2) < p.rockThr) p.shade(1.3);
-  else p.shade(p.cachedValue(ROCKC, rockShade) / 1000);
-}
-function water(p) {
-  // zee: golfjes, natte zandrand
-  if (p.waterF() < p.waterThr + 0.08) { p.ground(); p.shade(0.8); return; }
-  const k = Math.sin(p.X * 0.35 + p.Y * 0.12 + vnoise(p.X / 40, p.Y / 40) * 6) * 7 + (p.n - 0.5) * 6;
-  p.waterBase();
-  p.r += k; p.g += k; p.b += k;
-}
-function veg(p) {
-  // dorre struik: zand met een kluwen olijfgroene en bruine takjes
-  ground(p);
-  const twig = vnoise(p.X / 1.7, p.Y / 1.7), edgeV = p.vegF();
-  if (twig > 0.5 && edgeV > 0.45) { if ((p.h >>> 14) & 1) p.vegBase(); else p.set(88, 66, 40); }
-  else if (edgeV > 0.62) { p.r *= 0.8; p.g *= 0.78; p.b *= 0.72; } // schaduw onder de struik
-}
-function base(p) {
-  // aangestampte basisvloer met bandensporen door de deur
-  const k = (p.n - 0.5) * 10;
-  p.set(210 + k, 182 + k, 128 + k);
-  const bs = p.bases[p.base];
-  if (bs && Math.abs(Math.abs(p.X / R - bs.dc) - 1.6) < 0.35) { p.r -= 26; p.g -= 24; p.b -= 18; }
-}
 // ---------- Struikjes op de rotsranden (objectlaag, in celmaten) ----------
 function drawObjects(g, x0, y0, x1, y1) {
   const at = view.at;
@@ -264,7 +194,6 @@ let view = null;
 export default function start(game) {
   view = startWorld({
     viewCells: 90, background: '#d9be86', teams: TEAMS, teamLook,
-    ground, tunnel, rock, water, veg, base,
     // grondshader (view/ground-gpu.js): lichte zandlip, schaduw in de loopgraaf, takjes, natte zandrand
     surface: {
       lip: { shade: 1.1, amount: 0.5, inner: 0.72 }, rock: { edge: 0.55, light: 1.3 }, veg: 'twigs',

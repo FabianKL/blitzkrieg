@@ -12,7 +12,8 @@ export default { // §10.3
   },
   rocks: { label: 'Rotsplateaus', color: '#9a9a96', size: [3.5, 6] },
   water: { label: 'Zee', color: '#2f5f7a' },
-  vegetation: { type: 'shrub', label: 'Dorre struiken', color: '#6e6a3c', groundAfter: 'soft' },
+  // sprites: struiken en cactussen, en palmen tot 12 cellen van de zee (alleen het plaatje)
+  vegetation: { type: 'shrub', label: 'Dorre struiken', color: '#6e6a3c', groundAfter: 'soft', sprites: { struik: 0.65, cactus: 0.35 }, palmCoast: 12 },
   noPonds: true,
   features: [
     { type: 'sea', side: 'north', depth: 0.13 }, // ~10% van het speelbare deel (zonder de rotsrand)
@@ -20,8 +21,8 @@ export default { // §10.3
   ],
   // per vak (T) zand +soft, op hard/verhard firm; boven danger armorPct% pantser per vak zand, bij 100 snelheid slow
   meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040', soft: 2, firm: -5, armorPct: 1, slow: 0.7 },
-  // kustweg: duidelijke rijsporen, weinig berm
-  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.2 } },
+  // kustweg: duidelijke rijsporen, weinig berm; rotsplateaus met hier en daar een rotsblok
+  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.2 }, objects: { rocks: 0.12 } },
   tunnelColor: '#6e5430',
   weather: [
     { label: 'Hitte', effect: { visibility: 10, heatHaze: true, mirages: true } },

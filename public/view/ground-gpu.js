@@ -64,7 +64,9 @@ const NOISE_SIZE = 256, NOISE_CYCLES = 8; // ruistextuur: 8 ruisvlekken per zijd
 const SURFACE = {
   lip: { color: null, shade: 0.6, amount: 1, inner: 1 }, // rand buiten (kleur of verdonkering) en binnen een tunnel
   rock: { edge: 0.5, light: 1.25 }, // donkere omlijning, licht randje linksboven
-  veg: 'ground', // 'ground' (alleen grond, bomen in de objectlaag), 'canopy' (bladerdek), 'twigs' (takjes)
+  veg: 'ground', // 'ground' (alleen grond, bomen in de objectlaag), 'canopy' (bladerdek), 'twigs' (takjes);
+  // met sprites (view/objects-view.js) altijd grond, onder dichte begroeiing vegFloor keer zo licht
+  vegFloor: 0.8,
   bank: { color: null, shade: 0.62 }, // oever: vaste kleur of de grond verdonkerd
   floor: { color: '#2c2119', grid: 0, tracks: 0, grain: 8 }, // basisvloer: voegen om de grid cellen, bandensporen (verdonkering)
   debris: '#70502e', twig: '#58422a', // splinters in een gat van een plant, takjes van een struik
@@ -104,7 +106,7 @@ uniform float uMaskOn;
 uniform vec4 uGround;     // cellen per textuur, tint, blend (overgang tussen klassen), contrast
 uniform vec4 uGrain;      // look.noise: schaal, sterkte, octaven, -
 uniform vec4 uMode;       // begroeiing (0 grond, 1 bladerdek, 2 takjes), oever (verdonkering of 0 = kleur), rotsrand, rotslicht
-uniform vec4 uLip;        // tunnelrand: hoeveel, verdonkering (0 = kleur uCol lip), binnenrand, -
+uniform vec4 uLip;        // tunnelrand: hoeveel, verdonkering (0 = kleur uCol lip), binnenrand; w = bosgrond (vegFloor)
 uniform vec4 uFloor;      // basisvloer: voegen (cellen), bandensporen, korrel, -
 uniform vec4 uDoor;       // midden van de deur per basis (cellen)
 uniform float uTime;      // seconden, voor de golven
@@ -315,6 +317,7 @@ vec3 marshAt(vec3 col, vec2 p, float tm) {
   return lit(col, waveNormal(p, uWaves.z * 0.5), uWater.w * (0.15 + 0.6 * wet));
 }
 vec3 vegAt(vec2 p, float f, float thr) {
+  if (uMode.x > 2.5) return groundAt(p) * mix(1.0, uLip.w, smoothstep(thr, thr + 0.3, f)); // bosgrond onder de sprites
   if (uMode.x < 0.5) return groundAt(p);
   vec3 v = uCol[${COL.veg}].rgb;
   if (uMode.x < 1.5) { // bladerdek: donkere rand, vlekken licht en donker groen
@@ -601,6 +604,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   let roads = null, roadTex = null; // wegenveld (roadField) en zijn texture
   // onder een brug: 1 = water, 2 = ijs; water = waterveld waarin het water onder de bruggen doorloopt
   let bridge = new Uint8Array(0), water = null;
+  let objectsOn = false, vanish = false; // begroeiing als sprites; die verdwijnt helemaal als hij omgaat
   const wet = (c, x, y) => c === G.WATER || bridge[y * G.W + x] > 0;
   let src = null; // { pal, fields, rockField, bridgeMask } van de kaart van nu
   let dirty = []; // rechthoeken [x0, y0, x1, y1] die nog naar de videokaart moeten
@@ -610,10 +614,12 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   // Gegevens van cel i in de texturen. Een spoor telt in een tunnel, en als rimpels op grond
   // waar geen tunnel komt (moeras, doorwaadbare plek)
   function fill(i) {
-    const c = game.map[i], k = i * 4, dug = c === G.EMPTY;
+    // weggeschoten plant zonder kapotte variant: daar is het gewoon grond, zonder gat of splinters
+    const gone = vanish && game.world.scar[i] === G.SCAR_PLANT;
+    const c = game.map[i], k = i * 4, dug = c === G.EMPTY && !gone;
     const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
     cells.data[k] = c; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
-    cells.data[k + 3] = (game.world.scar[i] & 3) | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0);
+    cells.data[k + 3] = (gone ? 0 : game.world.scar[i] & 3) | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0);
     fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
     fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
@@ -671,7 +677,8 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     col('debris', unit(surface.debris)); col('lip', unit(surface.lip.color || '#ffffff'));
     col('bank', unit(surface.bank.color || '#000000')); col('deep', unit(DEEP_ICE)); col('twig', unit(surface.twig));
     u.uMode.value.set([{ ground: 0, canopy: 1, twigs: 2 }[surface.veg] ?? 0, surface.bank.color ? 0 : surface.bank.shade, surface.rock.edge, surface.rock.light]);
-    u.uLip.value.set([surface.lip.amount, surface.lip.color ? 0 : surface.lip.shade, surface.lip.inner, 0]);
+    u.uLip.value.set([surface.lip.amount, surface.lip.color ? 0 : surface.lip.shade, surface.lip.inner, surface.vegFloor]);
+    if (objectsOn) u.uMode.value[0] = 3;
     u.uFloor.value.set([surface.floor.grid, surface.floor.tracks, surface.floor.grain, 0]);
     u.uDoor.value.set([0, 1, 2, 3].map((i) => bases[i]?.dc ?? 0));
   }
@@ -796,6 +803,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     }
   }
 
+  // Begroeiing als sprites (on) of getekend; vanishOnFell: omgeschoten begroeiing laat geen gat zien
+  function setObjects(on, vanishOnFell) {
+    objectsOn = on; vanish = on && vanishOnFell;
+    if (!cells || !src) return;
+    setColors(src.pal, src.bases);
+    markRect(0, 0, G.W - 1, G.H - 1);
+  }
+
   // Water of ijs veranderde (wak, brug): diepte opnieuw, en zo ver eromheen als hij kan veranderen
   function waterChanged([x0, y0, x1, y1]) {
     if (!cells) return;
@@ -851,7 +866,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   }
 
   return {
-    load, markRect, markCell: (x, y) => markRect(x, y, x, y), waterChanged, iceChanged, update, setMask, setLook, swatch, flushSwatches, destroy,
+    load, markRect, markCell: (x, y) => markRect(x, y, x, y), waterChanged, iceChanged, setObjects, update, setMask, setLook, swatch, flushSwatches, destroy,
     set onAtlas(fn) { onAtlas = fn; },
     get mesh() { return mesh; },
   };
