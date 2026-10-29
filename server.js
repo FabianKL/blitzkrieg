@@ -268,12 +268,24 @@ function sendInit(room, t) {
     lm: room.world.landmarks || [], // herkenningspunten (kerk) in dorpen
     // middellijnen van de wegen (alleen voor de weergave): punten op 0,1 cel, breedte, klasse
     rd: (room.world.roads || []).map((r) => ({ p: r.path.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), w: r.width, c: r.class })),
+    // bruggen (alleen voor de weergave): middellijn a..z, breedte, over ijs, en de cellen als reeksen [begin, lengte]
+    br: (room.world.bridges || []).filter((b) => b.a).map(bridgeMsg),
     m0: room.mapTick, r0: room.roundTick, wx: WEATHER_SCALE,
     hz: Hazards.snapshot(room), // depots, aangekondigde barrage
     game: gameState(room),
   };
   if (room.rules.mines) init.mines = [...room.mines]; // de velden zelf blijven geheim
   t.ws.send(JSON.stringify(init));
+}
+
+// Brug voor het instapbericht: getallen op 0,1 cel, cellen als reeksen opeenvolgende indexen
+function bridgeMsg(b) {
+  const r1 = (v) => Math.round(v * 10) / 10, runs = [];
+  for (const i of [...b.list].sort((p, q) => p - q)) {
+    const last = runs[runs.length - 1];
+    if (last && last[0] + last[1] === i) last[1]++; else runs.push([i, 1]);
+  }
+  return { a: b.a.map(r1), z: b.z.map(r1), w: r1(b.w), ice: b.ice, runs };
 }
 
 // Stand van het spel voor het instapbericht

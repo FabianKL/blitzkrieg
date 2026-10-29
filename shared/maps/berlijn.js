@@ -29,7 +29,7 @@ export default { // §10.10
   hazard: { type: 'facades', chancePerSecond: 0.05, armorLoss: 10, rammingLoss: 25, collapseAfterHits: 3, collapseSeconds: 3, collapseLoss: 25, dustSeconds: 10 },
   refill: { armor: false }, // pantser wordt tijdens een ronde niet hersteld
   // straten: stoeprand langs het rooster
-  look: { grade: { saturation: -0.3, contrast: 1.05, tint: '#e8e0d8', tintStrength: 0.1 }, weather: 'dust', amount: 5, vignette: 0.32 , road: { curb: 0.22 } },
+  look: { grade: { saturation: -0.3, contrast: 1.05, tint: '#e8e0d8', tintStrength: 0.1 }, weather: 'dust', amount: 5, vignette: 0.32, road: { curb: 0.22 } },
   tunnelColor: '#2a2420',
   weather: [
     { label: 'Rook boven de stad', untilRound: 1, effect: { visibility: 12 } },

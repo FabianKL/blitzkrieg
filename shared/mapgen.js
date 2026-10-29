@@ -171,10 +171,13 @@ function tryMap(seed, rules, players) {
     }
   }
   // wegen; over water komt een brug van minstens 3 T breed
-  const bridgeCells = new Uint8Array(N);
+  const bridgeCells = new Uint8Array(N), bridgeIce = new Uint8Array(N); // bridgeIce: de brug ligt over ijs
+  const bridgeLines = []; // richting van bruggen zonder weg (zie bridgeLine)
   const bridgeAt = (i) => {
     bridgeCells[i] = 1;
-    disk(i % W, (i / W) | 0, 1.5 * T, (j) => { if (map[j] === WATER || (terrain[j] === CLASS.ice && fixedClass[j])) { setPaved(j); bridgeCells[j] = 1; } });
+    disk(i % W, (i / W) | 0, 1.5 * T, (j) => {
+      if (map[j] === WATER || (terrain[j] === CLASS.ice && fixedClass[j])) { bridgeIce[j] = map[j] !== WATER ? 1 : 0; setPaved(j); bridgeCells[j] = 1; }
+    });
   };
   // middellijnen van de wegen, alleen voor de weergave (de cellen hieronder zijn de echte weg)
   const roads = [];
@@ -197,6 +200,7 @@ function tryMap(seed, rules, players) {
     for (const g of spread(rnd, Math.max(0, r.f.bridges - have), 0.15, 0.85)) {
       const s = Math.floor(g * pts.length), [px, py] = pts[s], [qx, qy] = pts[Math.min(pts.length - 1, s + 3)];
       const dx = qx - px, dy = qy - py, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, reach = r.f.width * T / 2 + 2 * T;
+      bridgeLines.push([[px - nx * reach, py - ny * reach], [px + nx * reach, py + ny * reach]]);
       stroke([[px - nx * reach, py - ny * reach], [px + nx * reach, py + ny * reach]], 1.5 * T, (i) => {
         if (!open(i)) return;
         if (map[i] === WATER) { setPaved(i); bridgeCells[i] = 1; } else if (map[i] === DIRT && rules.features.some((f) => f.type === 'city')) setPaved(i);
@@ -395,7 +399,8 @@ function tryMap(seed, rules, players) {
   };
   indexVeg(w);
   const result = {
-    ...w, bases, fields, mines, border, landmarks, bridges: components(bridgeCells), zone, rivers: riverCells.map((r) => r.path), roads,
+    ...w, bases, fields, mines, border, landmarks, zone, rivers: riverCells.map((r) => r.path), roads,
+    bridges: components(bridgeCells).map((b) => ({ ...b, ...bridgeLine(b, bridgeCells, bridgeIce, roads, bridgeLines) })),
     villages: villages.map((v) => ({ name: v.f.name, x: v.cx, y: v.cy, depot: v.f.depot }))
   };
   // Onvermijdelijke afwijking: kenmerken met een vaste breedte in T (§6.0) schalen niet mee met
@@ -612,6 +617,34 @@ function routePath(a, b, zone, margin, noise, salt, wiggle) {
     for (let k = 1; k < pts.length - 1; k++) pts[k] = [(pts[k - 1][0] + pts[k][0] * 2 + pts[k + 1][0]) / 4, (pts[k - 1][1] + pts[k][1] * 2 + pts[k + 1][1]) / 4];
   }
   return pts;
+}
+
+// Waar een brug ligt, alleen voor de weergave: middellijn van a naar z (cellen, over de hele brug),
+// breedte w en of hij over ijs ligt. De richting komt van de weg die eroverheen loopt, of (zonder
+// weg, Berlijn) van de lijn waarmee hij gelegd is; anders de lange kant van de brug.
+function bridgeLine(b, mask, iceMask, roads, lines) {
+  const inside = ([x, y]) => {
+    const cx = Math.round(x), cy = Math.round(y);
+    return cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1 && mask[cy * W + cx] === 1;
+  };
+  let dir = null;
+  for (const r of roads) {
+    const on = densify(r.path).filter(inside);
+    if (on.length >= 2) { dir = [on[on.length - 1][0] - on[0][0], on[on.length - 1][1] - on[0][1]]; break; }
+  }
+  const line = !dir && lines.find(([p, q]) => inside([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]));
+  if (line) dir = [line[1][0] - line[0][0], line[1][1] - line[0][1]];
+  if (!dir) dir = b.x1 - b.x0 >= b.y1 - b.y0 ? [1, 0] : [0, 1];
+  const L = Math.hypot(dir[0], dir[1]) || 1, dx = dir[0] / L, dy = dir[1] / L;
+  const ox = (b.x0 + b.x1) / 2, oy = (b.y0 + b.y1) / 2;
+  let s0 = Infinity, s1 = -Infinity, l0 = Infinity, l1 = -Infinity, ice = 0;
+  for (const i of b.list) {
+    const x = (i % W) - ox, y = ((i / W) | 0) - oy, s = x * dx + y * dy, l = -x * dy + y * dx;
+    s0 = Math.min(s0, s); s1 = Math.max(s1, s); l0 = Math.min(l0, l); l1 = Math.max(l1, l);
+    ice += iceMask[i];
+  }
+  const lc = (l0 + l1) / 2, at = (s) => [ox + dx * s - dy * lc, oy + dy * s + dx * lc];
+  return { a: at(s0 - 0.5), z: at(s1 + 0.5), w: l1 - l0 + 1, ice: ice * 2 > b.list.length };
 }
 
 // Alle cellen binnen r van de lijn door de punten

@@ -4,7 +4,8 @@
 //
 // De gamestate gaat als drie texturen van 1 pixel per cel naar de videokaart:
 //   cells  (nearest) r = celtype, g = terreinklasse, b = klasse + 1 van de dichtstbijzijnde weg
-//                    (0 = geen weg), a = kras (0..3) + 128 als het de brug is
+//                    (0 = geen weg), a = kras (0..3) + 128 onder een brug (+ 64 als daar ijs lag):
+//                    daar loopt het water onder de brugsprite door (view/bridges-view.js)
 //   fields (linear)  r = rots, g = water, b = begroeiing: de vervaagde velden (blurField) voor
 //                    ronde randen, bilineair zoals de oude createFieldSampler; a = diepte: afstand
 //                    tot de kant in water en ijs (DEPTH_MAX cellen = 1)
@@ -37,7 +38,7 @@
 import * as G from '/shared/game.js';
 import { Mesh, MeshGeometry, Shader, BufferImageSource, CanvasSource, Texture, Rectangle } from 'pixi.js';
 import { createNoise4D } from 'simplex-noise';
-import { trackMix, rgb } from '/render-common.js';
+import { trackMix, rgb, blurField } from '/render-common.js';
 import { roadField, ROAD_NEAR, ROAD_FAR } from '/view/roads.js';
 import { loadManifest, loadImage, terrainNames, terrainPath, report } from '/assets.js';
 
@@ -147,7 +148,6 @@ int clsAt(ivec2 q) {
   int under = int(texelFetch(uSolid, c, 0).a * 255.0 + 0.5);
   return under > 0 ? under - 1 : int(texelFetch(uCells, c, 0).g * 255.0 + 0.5);
 }
-bool bridgeAt(ivec2 q) { return (int(texelFetch(uCells, clampCell(q), 0).a * 255.0 + 0.5) & 128) != 0; }
 bool blocks(int c, bool rockOnly) { return rockOnly ? c == ROCK : (c == ROCK || c == WATER || c == VEG); }
 // afgeronde hoek van een rots-, water- of plantcel: neem het terrein van de buur aan die kant
 int fallback(ivec2 ip, vec2 fr, bool rockOnly) {
@@ -361,13 +361,10 @@ vec3 roofAt(vec2 p, ivec2 ip, vec2 fr) {
       (fr.y < e && cellAt(ip + ivec2(0, -1)) != BUILDING) || (fr.y > 1.0 - e && cellAt(ip + ivec2(0, 1)) != BUILDING)) return b * 0.5;
   return b * (fract(p.y * 2.0) < 0.33 ? 0.82 : 1.0) * (0.96 + hash(p * 6.0) * 0.08) * (fract(p.x / 1.5) < 0.11 ? 0.9 : 1.0);
 }
-// Brug die kan ontploffen (Market Garden): betonplaten met naden en een donkere rand
-vec3 bridgeCol(vec2 p, ivec2 ip, vec2 fr) {
-  vec3 b = uCol[${COL.bridge}].rgb;
-  float e = 1.0 / 6.0;
-  if ((fr.x < e && !bridgeAt(ip + ivec2(-1, 0))) || (fr.x > 1.0 - e && !bridgeAt(ip + ivec2(1, 0))) ||
-      (fr.y < e && !bridgeAt(ip + ivec2(0, -1))) || (fr.y > 1.0 - e && !bridgeAt(ip + ivec2(0, 1)))) return b * 0.55;
-  return b * ((fract(p.x / 2.0) < 0.08 || fract(p.y / 2.0) < 0.08) ? 0.82 : 1.0) * (0.95 + hash(p * 6.0) * 0.1);
+// Water onder een brug (de brug zelf is een sprite erboven): diep water zonder oever
+vec3 waterUnder(vec2 p, float depth) {
+  vec3 w = uCol[${COL.water}].rgb;
+  return lit(mix(w * (1.0 + uWater.z), w * uWater.x, smoothstep(0.0, 1.0, depth / uWater.y)), waveNormal(p, uWaves.z), uWater.w);
 }
 // Basisvloer en muur (de muur zelf wordt er los overheen getekend)
 vec3 floorAt(vec2 p, int c) {
@@ -414,7 +411,7 @@ void main() {
     col = iceAt(p, depthAt(uv), stress);
   }
   else if (cls == ICE && c == WATER) col = wakAt(p, f.g, thrW, depthAt(uv));
-  else if ((flags & 128) != 0 && c == DIRT) col = bridgeCol(p, ip, fr);
+  else if ((flags & 128) != 0 && c == DIRT) col = (flags & 64) != 0 ? iceAt(p, depthAt(uv), 0.0) : waterUnder(p, depthAt(uv));
   else if (cls == FORD && c == DIRT) col = fordAt(p, tm);
   else if (c == DIRT) {
     col = groundAt(p);
@@ -488,9 +485,9 @@ function waveTexture() {
 
 // Diepte: per water- of ijscel de afstand (in cellen, hoogstens DEPTH_MAX) tot de dichtstbijzijnde
 // cel die geen water of ijs is, in twee rondes over de kaart (afstand met schuine stappen van 1,4)
-function depthField(map, terrain) {
+function depthField(map, terrain, bridge) {
   const W = G.W, H = G.H, d = new Float32Array(W * H), ice = G.CLASS.ice;
-  for (let i = 0; i < W * H; i++) d[i] = map[i] === G.WATER || terrain[i] === ice ? DEPTH_MAX : 0;
+  for (let i = 0; i < W * H; i++) d[i] = map[i] === G.WATER || terrain[i] === ice || bridge[i] ? DEPTH_MAX : 0;
   const pass = (y, x, dx, dy) => {
     const i = y * W + x;
     if (!d[i]) return;
@@ -602,6 +599,9 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   let cells = null, fields = null, track = null, solid = null, mesh = null, atlas = null;
   let depth = null, iceTex = null; // diepteveld (depthField) en barststadium per ijsvak
   let roads = null, roadTex = null; // wegenveld (roadField) en zijn texture
+  // onder een brug: 1 = water, 2 = ijs; water = waterveld waarin het water onder de bruggen doorloopt
+  let bridge = new Uint8Array(0), water = null;
+  const wet = (c, x, y) => c === G.WATER || bridge[y * G.W + x] > 0;
   let src = null; // { pal, fields, rockField, bridgeMask } van de kaart van nu
   let dirty = []; // rechthoeken [x0, y0, x1, y1] die nog naar de videokaart moeten
   let atlasKey = '', loading = 0;
@@ -613,8 +613,8 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     const c = game.map[i], k = i * 4, dug = c === G.EMPTY;
     const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
     cells.data[k] = c; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
-    cells.data[k + 3] = (game.world.scar[i] & 3) | (src.bridgeMask?.[i] ? 128 : 0);
-    fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = src.fields.water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
+    cells.data[k + 3] = (game.world.scar[i] & 3) | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0);
+    fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
     fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
     track.data[k + 3] = game.terrain[i] === G.CLASS.ice && (dug || c === G.DIRT) ? 255 : 0;
@@ -744,7 +744,10 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
       mesh?.destroy();
       mesh = null;
     }
-    depth = depthField(game.map, game.terrain);
+    bridge = new Uint8Array(G.W * G.H);
+    for (const b of game.bridges || []) for (const [i, n] of b.runs) bridge.fill(b.ice ? 2 : 1, i, i + n);
+    water = blurField(game.map, wet);
+    depth = depthField(game.map, game.terrain, bridge);
     loadRoads(state.look.ground.cells);
     for (let i = 0; i < G.W * G.H; i++) fill(i);
     for (const t of [cells, fields, track, solid]) t.source.update();
@@ -796,7 +799,8 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   // Water of ijs veranderde (wak, brug): diepte opnieuw, en zo ver eromheen als hij kan veranderen
   function waterChanged([x0, y0, x1, y1]) {
     if (!cells) return;
-    depth = depthField(game.map, game.terrain);
+    blurField(game.map, wet, water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
+    depth = depthField(game.map, game.terrain, bridge);
     markRect(x0 - DEPTH_MAX - 2, y0 - DEPTH_MAX - 2, x1 + DEPTH_MAX + 2, y1 + DEPTH_MAX + 2);
   }
   // Een ijsvak kreeg een passage meer: het barststadium per vak opnieuw (klein: alles in één keer)

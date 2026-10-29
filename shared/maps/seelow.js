@@ -26,7 +26,8 @@ export default { // §10.9
     { type: 'road', from: [0.3, 0.72], to: [0.88, 0.72], width: 2 },
   ],
   hazard: { type: 'artillery', everySeconds: 60, area: 6, warningSeconds: 3, armorLoss: 30 },
-  look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32 },
+  // brug: staal over het kanaal
+  look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32, bridge: { kind: 'staal' } },
   tunnelColor: '#1a1410',
   weather: [
     { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 3, widthT: 4, sweepSeconds: 12, visibility: 12 } } },

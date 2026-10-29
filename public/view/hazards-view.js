@@ -1,6 +1,7 @@
 // Gevaren en schaarse middelen als ding op de kaart (§10): laadplekken, depots, barrage, kratten,
 // geschut, de opgeblazen brug, brand, stof, zoeklichten, luchtspiegelingen en herkenningspunten.
-// v = { game, at(x, y), Pixi-lagen en pools uit world-view.js, drawContour, visionRadius, pal }.
+// v = { game, at(x, y), Pixi-lagen en pools uit world-view.js, drawContour, visionRadius, pal,
+// bridgeSprites (true: de bruggen zijn sprites, ook het wrak) }.
 import * as G from '/shared/game.js';
 import { searchlightBeams, sightAt, contourAlpha } from '/shared/vision.js';
 import { pack, REFILL_COLORS } from '/render-common.js';
@@ -88,7 +89,7 @@ export function createHazardView(v) {
       marks.rect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5).fill(col);
       marks.restore();
     }
-    if (game.bridge?.blown) drawBridgeWreck(game.bridge.box);
+    if (game.bridge?.blown && !v.bridgeSprites) drawBridgeWreck(game.bridge.box); // met sprites tekent bridges-view het wrak
   }
   // Opgeblazen brug: brokken beton en geknakte liggers in het water, met water ertussen.
   // De vorm volgt uit een hash van de plek, zodat iedereen hetzelfde wrak ziet.

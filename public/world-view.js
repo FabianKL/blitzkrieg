@@ -51,6 +51,7 @@ import {
 import { createSidePanel } from '/view/side-panel.js';
 import { createHazardView } from '/view/hazards-view.js';
 import { createGroundGpu } from '/view/ground-gpu.js';
+import { createBridgeView } from '/view/bridges-view.js';
 import { report as assetReport } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
@@ -77,13 +78,14 @@ function makePalette(rules) {
   };
 }
 
-// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water, ice en road per veld)
+// Uiterlijk van een kaart: LOOK met wat de kaart overschrijft (grade, noise, light, ground, water, ice, road en bridge per veld)
 function lookFor(rules) {
   const own = rules?.look || {};
   return {
     ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
     light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground },
     water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice }, road: { ...LOOK.road, ...own.road },
+    bridge: { ...LOOK.bridge, ...own.bridge },
   };
 }
 // Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint
@@ -442,6 +444,7 @@ export function startWorld(style, game) {
       blurField(game.map, (c) => c === G.WATER, fields.water, [x0 - 1, y0 - 1, x1 + 1, y1 + 1]);
       bothPainters.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
       gpu?.waterChanged([x0, y0, x1, y1]);
+      bridgeView?.onBlast(e, seesSharp);
       if (e.blown) { particles.spawn('flash', e.x, e.y, 1, { life: 0.4, r0: 3, r1: 12 }); shake = Math.max(shake, 0.5); }
     }
     if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, bothPainters, e.box); buildObjects(e.box); }
@@ -493,7 +496,7 @@ export function startWorld(style, game) {
     fields = obstacleFields(map);
     bases = findBases(map);
     if (OLD) style.onMap?.(map); // alleen voor de oude kaartschilder (rotsbarsten bij zomer)
-    else gpu.load({ pal, look, fields, rockField, bases, get bridgeMask() { return bridgeMask; } });
+    else { gpu.load({ pal, look, fields, rockField, bases }); bridgeView.load(look); }
     side.loadMap();
     buildObjects();
     if (OLD) { groundTiles.use(painter.layer); cleanTiles.use(cleanPainter.layer); }
@@ -578,6 +581,16 @@ export function startWorld(style, game) {
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
+  // Bruggen als sprites (view/bridges-view.js), onder alles in de objectlaag; met ?oud=1 niet
+  const bridgeView = gpu ? createBridgeView({
+    layer: L.objects.addChildAt(new Container(), 0), shadowLayer: L.shadows.addChildAt(new Container(), 0),
+    game, particles, shadowColor: SHADOW.color,
+  }) : null;
+  // ziet de speler deze plek scherp? (effecten verraden niets)
+  const seesSharp = (x, y) => {
+    const me = eye();
+    return DEBUG || (!!me && sightAt(game.map, me, Math.round(x), Math.round(y), { radius: visionRadius(), view: view.cam, smokes: game.smokes }) === 'sharp');
+  };
   // zachte schaduwranden: de hele schaduwlaag in één keer vervaagd (goedkoper dan per sprite)
   const shadowBlur = new KawaseBlurFilter({ strength: 2, quality: 3 });
   L.shadows.filters = [shadowBlur];
@@ -672,6 +685,7 @@ export function startWorld(style, game) {
     vignette.alpha = look.vignette;
     shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
     gpu?.setLook(look);
+    bridgeView?.setLook(look);
     visionKey = '';
   }
 
@@ -789,7 +803,7 @@ export function startWorld(style, game) {
     const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);
-    if (gpu) gpu.update(now);
+    if (gpu) { gpu.update(now); bridgeView.update(); }
     else {
       flushPainter(painter, cam);
       groundTiles.sync(cam);
@@ -1187,7 +1201,7 @@ export function startWorld(style, game) {
   // ---------- Gevaren en schaarse middelen in beeld (view/hazards-view.js) ----------
   const hz = createHazardView({
     game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius,
-    get pal() { return pal; },
+    get pal() { return pal; }, get bridgeSprites() { return !!bridgeView?.active; },
   });
 
   // ---------- Ronde en score (§2) ----------

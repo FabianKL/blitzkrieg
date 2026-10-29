@@ -100,6 +100,10 @@ export const DISPLAY = { minimap: true };
 //               (donkerte), rutOffset (afstand tot het midden) en rutWidth; smooth = afronding van
 //               binnenhoeken, junction = zo ver van een kruising heeft de weg weer een richting;
 //               curb = stoeprand in cellen (0 = geen) met curbColor; line = middenstreep (0..1)
+//   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout', 'steen', 'staal';
+//               public/assets/<stijl>/bridges/<soort>-begin|midden|eind|wrak.png), land = zo'n deel
+//               van het landhoofd ligt op de oever, height = hoe hoog boven het water (lengte van
+//               de schaduw, in cellen per cel schaduwverschuiving)
 export const LOOK = {
   ground: { cells: 16, tint: 0.8, contrast: 0.65 },
   water: { deep: 0.6, depthCells: 5, shore: 0.22, shine: 0.3, waveCells: 7, waveSpeed: 0.06, waves: 0.3 },
@@ -108,6 +112,7 @@ export const LOOK = {
     verge: 1.4, vergeColor: null, vergeAmount: 0.35, ruts: 0.22, rutOffset: 1.8, rutWidth: 0.55,
     smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0,
   },
+  bridge: { kind: 'steen', land: 0.33, height: 1.6 },
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },

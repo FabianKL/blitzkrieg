@@ -25,7 +25,8 @@ export default { // §10.7
   hazard: { type: 'bridgeBlast', armorLoss: 40, chance: 0.1, chanceStep: 0.05 }, // kans per oversteek, +5% na elke oversteek
   scarce: { type: 'airDrops', everySeconds: 30, fuel: 0.4, ammo: 25 },
   refill: { fuel: false, ammo: false },
-  look: { noise: { strength: 0.08 } },
+  // brug: de stalen boogbrug van Arnhem
+  look: { noise: { strength: 0.08 }, bridge: { kind: 'staal' } },
   tunnelColor: '#4a3a22',
   weather: [
     { label: 'Helder', untilRound: 2, effect: { visibility: 12, drops: true, citySmoke: true } },

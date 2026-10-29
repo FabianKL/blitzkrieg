@@ -23,8 +23,8 @@ export default { // §10.4
   // per seconde warm (rijden of in de basis) of cool (stil of langzamer dan idleBelow van de topsnelheid);
   // bij 0 bevroren: in rampSeconds van rampFrom naar volle snelheid
   meter: { type: 'heat', label: 'Motorwarmte', start: 100, danger: 0, low: true, color: '#e08a40', warm: 10, cool: -5, idleBelow: 0.3, rampSeconds: 4, rampFrom: 0.1 },
-  // wegen: opgeschoven sneeuw in de berm
-  look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32, blur: 3 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3 , road: { vergeColor: '#f2f6fa', vergeAmount: 0.55 } },
+  // wegen: opgeschoven sneeuw in de berm; brug: hout
+  look: { light: { dx: 0.5, dy: 0.65, alpha: 0.32, blur: 3 }, grade: { saturation: -0.18, brightness: 0.97, contrast: 1.06, tint: '#d2e2ff', tintStrength: 0.18 }, noise: { scale: 6, strength: 0.3, octaves: 4 }, blend: 3.5, weather: 'snow', amount: 40, vignette: 0.28, fogSoft: 0.25, iceShine: 0.8, shakeOnHit: 0.3, road: { vergeColor: '#f2f6fa', vergeAmount: 0.55 }, bridge: { kind: 'hout' } },
   tunnelColor: '#3a2f27',
   weather: [
     { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },

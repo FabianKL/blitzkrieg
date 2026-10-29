@@ -61,7 +61,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   ziet; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
   echte weg) en de server stuurt ze in het instapbericht (`rd`). `public/view/roads.js` maakt er een
-  veld van voor de grondshader.
+  veld van voor de grondshader. Bruggen idem (`bridges` met middellijn, breedte en cellen; `br` in
+  het instapbericht): `public/view/bridges-view.js` legt er sprites op, het water loopt eronder door.
 - **Kaartmaker**: `shared/mapgen.js` plaatst eerst de bases, dan de vaste kenmerken, en vult daarna
   het terrein tot de percentages. Lukt een poging niet, dan probeert hij het opnieuw met een andere
   seed. Bij krappe kaarten worden de regels stap voor stap versoepeld: eerst de vensterregel, dan de
