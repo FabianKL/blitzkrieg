@@ -114,7 +114,7 @@ uniform vec4 uLight;      // richting naar het licht (x, y, z), -
 uniform vec4 uWater;      // look.water: donker in het diepe, diepte (cellen), lichter aan de kant, glans
 uniform vec4 uWaves;      // look.water: golfmaat (cellen), snelheid, sterkte, -
 uniform vec4 uIceLook;    // look.ice: diepte (cellen), donker diep ijs, ijzel, glans
-uniform vec4 uIceMore;    // look.ice: spanning (donkerder bij barsten), ijsvak (cellen), -, -
+uniform vec4 uIceMore;    // look.ice: spanning (donkerder bij barsten), ijsvak (cellen), textuurmaat, diepte op de textuur
 uniform vec4 uRoadA;      // look.road: halve breedte, berm (cellen), berm (hoeveel), afstand rijspoor tot het midden
 uniform vec4 uRoadB;      // look.road: afronding binnenhoeken (cellen), kruising (cellen), stoeprand (cellen), middenstreep
 uniform vec4 uRoadC;      // look.road: rijsporen (sterkte), breedte rijspoor, wegen aan (1/0), bereik van de afstand tot het midden
@@ -335,6 +335,14 @@ vec3 vegAt(vec2 p, float f, float thr) {
 vec3 iceAt(vec2 p, float depth, float stress) {
   vec3 ice = uTint[ICE].rgb, deepCol = uCol[${COL.deep}].rgb;
   float d = smoothstep(0.0, 1.0, depth / uIceLook.x);
+  if (uSlot[ICE].z > 0.0) { // ijstextuur (manifest): die heeft eigen kleur, ijzel en bellen
+    vec4 s = uSlot[ICE];
+    vec2 tc = p / (uGround.x * uIceMore.z) + vec2(0.37, 0.61);
+    vec3 col = textureGrad(uAtlas, s.xy + fract(tc) * s.zw, gX * s.zw / uIceMore.z, gY * s.zw / uIceMore.z).rgb;
+    col *= 1.0 - d * uIceMore.w; // dieper naar het midden
+    col = mix(col, deepCol * 1.15, stress * uIceMore.x);
+    return lit(col, vec3(0.0, 0.0, 1.0), uIceLook.w);
+  }
   float deep = 0.5 + 0.5 * ((nz(p / 18.0) * 2.0 - 1.0) * 0.7 + (nz(p / 7.8 + 40.0) * 2.0 - 1.0) * 0.3);
   float k = pow(1.0 - deep, 1.6) * uIceLook.y * mix(0.3, 1.2, d);
   vec3 col = mix(ice, deepCol, clamp(k, 0.0, 0.85));
@@ -690,7 +698,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     u.uWater.value.set([w.deep, w.depthCells, w.shore, w.shine]);
     u.uWaves.value.set([w.waveCells, w.waveSpeed, w.waves, 0]);
     u.uIceLook.value.set([ice.depthCells, ice.deep, ice.frost, ice.sheen]);
-    u.uIceMore.value.set([ice.stress, G.ICE_B, 0, 0]);
+    u.uIceMore.value.set([ice.stress, G.ICE_B, ice.texScale, ice.texDeep]);
     const rd = look.road, hw = (game.roads?.[0]?.w ?? 2 * G.T) / 2;
     u.uRoadA.value.set([hw, rd.verge, rd.vergeAmount, rd.rutOffset]);
     u.uRoadB.value.set([rd.smooth, rd.junction, rd.curb, rd.line]);
@@ -718,14 +726,14 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     const run = ++loading, m = await loadManifest();
     const names = { ...terrainNames(m, look, mapId), ...game.rules?.look?.ground?.textures }; // de kaart heeft het laatste woord
     const used = new Set([...new Set(game.terrain), ...Object.keys(game.rules?.classes || {}).map((n) => G.CLASS[n])]);
-    const want = [...G.CLASS_NAMES.map((n) => (n === 'ice' ? null : names[n] || null)), names.rock || 'rots', names.tunnel || 'aarde', names.rubble || 'puin'];
+    const want = [...G.CLASS_NAMES.map((n) => names[n] || null), names.rock || 'rots', names.tunnel || 'aarde', names.rubble || 'puin'];
     const imgs = await Promise.all(want.map((n) => (n && terrainPath(m, look, n) ? loadImage(m, terrainPath(m, look, n)) : null)));
     if (run !== loading || !mesh) return;
     report.terrain = {};
     const list = [], index = [];
     want.forEach((n, k) => {
-      // ijs is helemaal procedureel; klassen die op deze kaart niet (kunnen) liggen: effen kleur
-      if (k === G.CLASS.ice || (k < N_CLASS && !used.has(k))) { index.push(-1); return; }
+      // ijs zonder textuur is helemaal procedureel; klassen die op deze kaart niet (kunnen) liggen: effen kleur
+      if ((k === G.CLASS.ice && !imgs[k]) || (k < N_CLASS && !used.has(k))) { index.push(-1); return; }
       const name = k < N_CLASS ? G.CLASS_NAMES[k] : Object.keys(MAT).find((key) => MAT[key] === k);
       report.terrain[name] = imgs[k] ? terrainPath(m, look, n) : 'procedureel';
       index.push(list.length);

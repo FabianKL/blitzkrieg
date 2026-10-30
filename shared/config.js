@@ -94,7 +94,9 @@ export const DISPLAY = { minimap: true };
 //               waves (sterkte, 0 = vlak)
 //   ice         ijs: depthCells en deep (donker, diep ijs naar het midden), frost (witte ijzel),
 //               sheen (glans), stress (zoveel donkerder en natter in een vak dat bijna breekt);
-//               barsten: crackWidth (dikte) en crackGrow (zoveel dikker per barststadium)
+//               barsten: crackWidth (dikte) en crackGrow (zoveel dikker per barststadium);
+//               met een ijstextuur (manifest): texScale (zoveel groter dan de grondtextuur) en
+//               texDeep (zoveel donkerder naar het midden); frost en deep gelden dan niet
 //   road        wegen (middellijnen uit de kaartmaker): verge = breedte van de berm in cellen,
 //               vergeColor (null = de tunnelkleur: modder) en vergeAmount; rijsporen: ruts
 //               (donkerte), rutOffset (afstand tot het midden) en rutWidth; smooth = afronding van
@@ -112,7 +114,7 @@ export const DISPLAY = { minimap: true };
 export const LOOK = {
   ground: { cells: 16, tint: 0.8, contrast: 0.65 },
   water: { deep: 0.6, depthCells: 5, shore: 0.22, shine: 0.3, waveCells: 7, waveSpeed: 0.06, waves: 0.3 },
-  ice: { depthCells: 8, deep: 0.55, frost: 0.4, sheen: 0.25, stress: 0.35, crackWidth: 1, crackGrow: 0.45 },
+  ice: { depthCells: 8, deep: 0.55, frost: 0.4, sheen: 0.25, stress: 0.35, crackWidth: 1, crackGrow: 0.45, texScale: 1.5, texDeep: 0.2 },
   road: {
     verge: 1.4, vergeColor: null, vergeAmount: 0.35, ruts: 0.22, rutOffset: 1.8, rutWidth: 0.55,
     smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0,
