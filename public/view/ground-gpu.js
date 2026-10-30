@@ -4,7 +4,7 @@
 //
 // De gamestate gaat als drie texturen van 1 pixel per cel naar de videokaart:
 //   cells  (nearest) r = celtype, g = terreinklasse, b = klasse + 1 van de dichtstbijzijnde weg
-//                    (0 = geen weg), a = kras (0..3) + 128 onder een brug (+ 64 als daar ijs lag):
+//                    (0 = geen weg), a = kras (0..3) + 32 onder een gebouwsprite + 128 onder een brug (+ 64 als daar ijs lag):
 //                    daar loopt het water onder de brugsprite door (view/bridges-view.js)
 //   fields (linear)  r = rots, g = water, b = begroeiing: de vervaagde velden (blurField) voor
 //                    ronde randen, bilineair zoals de oude createFieldSampler; a = diepte: afstand
@@ -426,7 +426,7 @@ void main() {
   else if (c == ROCK) col = rockAt(p, f.r, thrR);
   else if (c == WATER) col = waterAt(p, f.g, thrW, depthAt(uv));
   else if (c == VEG) col = vegAt(p, f.b, thrV);
-  else if (c == BUILDING) col = roofAt(p, ip, fr);
+  else if (c == BUILDING) col = (flags & 32) != 0 ? groundAt(p) : roofAt(p, ip, fr); // met gebouwsprite: grond eronder
   else col = floorAt(p, c);
   if (c == DIRT && scar == 2) col = rubbleAt(col, p);
   finalColor = vec4(col, 1.0);
@@ -605,6 +605,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   // onder een brug: 1 = water, 2 = ijs; water = waterveld waarin het water onder de bruggen doorloopt
   let bridge = new Uint8Array(0), water = null;
   let objectsOn = false, vanish = false; // begroeiing als sprites; die verdwijnt helemaal als hij omgaat
+  let rubbleCover = new Uint8Array(0); // 1 = hier ligt een puinsprite (buildings-view): geen puinpatroon
   const wet = (c, x, y) => c === G.WATER || bridge[y * G.W + x] > 0;
   let src = null; // { pal, fields, rockField, bridgeMask } van de kaart van nu
   let dirty = []; // rechthoeken [x0, y0, x1, y1] die nog naar de videokaart moeten
@@ -619,7 +620,8 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     const c = game.map[i], k = i * 4, dug = c === G.EMPTY && !gone;
     const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
     cells.data[k] = c; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
-    cells.data[k + 3] = (gone ? 0 : game.world.scar[i] & 3) | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0);
+    const scar = gone || (rubbleCover[i] && game.world.scar[i] === G.SCAR_RUBBLE) ? 0 : game.world.scar[i] & 3;
+    cells.data[k + 3] = scar | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0) | (rubbleCover[i] ? 32 : 0);
     fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
     fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
@@ -752,6 +754,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
       mesh = null;
     }
     bridge = new Uint8Array(G.W * G.H);
+    if (rubbleCover.length !== G.W * G.H) rubbleCover = new Uint8Array(G.W * G.H);
     for (const b of game.bridges || []) for (const [i, n] of b.runs) bridge.fill(b.ice ? 2 : 1, i, i + n);
     water = blurField(game.map, wet);
     depth = depthField(game.map, game.terrain, bridge);
@@ -811,6 +814,12 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
     markRect(0, 0, G.W - 1, G.H - 1);
   }
 
+  // Cellen waar een gebouwsprite ligt; als die puin wordt, tekent de sprite het puin
+  function setRubbleCover(cover) {
+    rubbleCover = cover;
+    markRect(0, 0, G.W - 1, G.H - 1);
+  }
+
   // Water of ijs veranderde (wak, brug): diepte opnieuw, en zo ver eromheen als hij kan veranderen
   function waterChanged([x0, y0, x1, y1]) {
     if (!cells) return;
@@ -866,7 +875,7 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   }
 
   return {
-    load, markRect, markCell: (x, y) => markRect(x, y, x, y), waterChanged, iceChanged, setObjects, update, setMask, setLook, swatch, flushSwatches, destroy,
+    load, markRect, markCell: (x, y) => markRect(x, y, x, y), waterChanged, iceChanged, setObjects, setRubbleCover, update, setMask, setLook, swatch, flushSwatches, destroy,
     set onAtlas(fn) { onAtlas = fn; },
     get mesh() { return mesh; },
   };

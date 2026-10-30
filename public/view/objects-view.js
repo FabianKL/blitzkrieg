@@ -220,6 +220,7 @@ export function createObjectView({ under, over, shadows, craters, game, shadowCo
 
   return {
     load, rebuild, update, addCrater, drawRegion, destroy: clear,
+    texture: (name) => sheet?.textures[name] ?? null, // ook voor depots en kratten (hazards-view)
     get active() { return active; },
     // soorten die bij omschieten helemaal verdwijnen (geen kapotte variant): de grond toont dan geen gat
     get vanishOnFell() { return active && [...kinds, kinds.palm].filter(Boolean).every((k) => !k.kapot.length); },

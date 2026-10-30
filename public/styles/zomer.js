@@ -64,9 +64,13 @@ function drawBase(ctx, b) {
     sandbagRow(ctx, x0 + 2, d0, y, true, BAGS);
     sandbagRow(ctx, d1 + 1, x1 - 1, y, true, BAGS);
   }
+  baseLabel(ctx, b);
+}
+// Naam op de vloer (ook bij het bouwpakket van de basis, view/base-kit.js)
+function baseLabel(ctx, b) {
   ctx.fillStyle = 'rgba(214, 196, 150, 0.7)';
   ctx.font = '1.7px "Special Elite", monospace';
-  ctx.fillText(`BASIS ${BASE_NAMES[b.i]}`, x0 + 2.8, y0 + 4.2);
+  ctx.fillText(`BASIS ${BASE_NAMES[b.i]}`, b.x0 + 2.8, b.y0 + 4.2);
 }
 
 // ---------- Tanks ----------
@@ -122,7 +126,7 @@ export default function start(game) {
       bank: { shade: 0.62 }, floor: { color: '#2c2119', grid: 3, grain: 8 }, debris: '#70502e',
     },
     clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
-    onEvent, drawBase, drawTank, teamLook,
+    onEvent, drawBase, baseLabel, drawTank, teamLook,
     shadow: { color: 0x000000, alpha: 0.38 },
     eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },
     label: () => TEAMS[view.game.me]?.ploeg ?? '', // je ploeg rechtsboven in het speelveld

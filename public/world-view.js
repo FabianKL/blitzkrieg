@@ -36,7 +36,7 @@
 //   eraser                     stijl van de storm (zie drawEraser)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
@@ -51,6 +51,8 @@ import { createHazardView } from '/view/hazards-view.js';
 import { createGroundGpu } from '/view/ground-gpu.js';
 import { createBridgeView } from '/view/bridges-view.js';
 import { createObjectView } from '/view/objects-view.js';
+import { createBuildingView } from '/view/buildings-view.js';
+import { loadBaseKit, drawBaseKit } from '/view/base-kit.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
@@ -283,6 +285,7 @@ export function startWorld(style, game) {
       shake = Math.max(shake, 0.3);
     }
     hintFor(e);
+    hz.onEvent(e);
     if (e.t === 'k') {
       objectView.addCrater(e.x, e.y, e.r ?? G.DEATH_DIG_R);
       const self = game.tanks.get(game.me);
@@ -325,6 +328,8 @@ export function startWorld(style, game) {
       side.buildLegend();
     });
     buildBases();
+    loadBaseKit(game.rules?.style || 'zomer').then((kit) => { if (alive && game.map === map && kit) { baseKit = kit; buildBases(); } });
+    buildingView.load(look, gpu);
     clearTankTextures();
     side.buildLegend();
   }
@@ -407,6 +412,11 @@ export function startWorld(style, game) {
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
+  // Gebouwen in drie stadia (view/buildings-view.js), in de objectlaag
+  const buildingView = createBuildingView({
+    layer: L.objects.addChildAt(new Container(), 0), shadows: L.shadows.addChild(new Container()),
+    game, particles, shadowColor: SHADOW.color,
+  });
   // Bruggen als sprites (view/bridges-view.js), onder alles in de objectlaag
   const bridgeView = createBridgeView({
     layer: L.objects.addChildAt(new Container(), 0), shadowLayer: L.shadows.addChildAt(new Container(), 0),
@@ -579,15 +589,20 @@ export function startWorld(style, game) {
 
   // Bases: per kaart één keer getekend (de stijl tekent ze in celmaten), met schaduw
   const BASE_PX = 12, BASE_PAD = 5;
+  let baseKit = null; // bouwpakket van de stijl (view/base-kit.js), of null: dan tekent de stijl de basis
   function buildBases() {
     for (const s of baseShadows.removeChildren()) s.destroy();
     for (const s of baseLayer.removeChildren()) s.destroy(true);
     for (const b of bases) {
       if (!b) continue;
       const x0 = b.x0 - BASE_PAD, y0 = b.y0 - BASE_PAD, w = b.x1 - b.x0 + 1 + 2 * BASE_PAD, h = b.y1 - b.y0 + 1 + 2 * BASE_PAD;
-      const tex = drawnTexture(w * BASE_PX, h * BASE_PX, (g) => { g.scale(BASE_PX, BASE_PX); g.translate(-x0, -y0); style.drawBase(g, b); });
+      const px = baseKit ? BASE_KIT.px : BASE_PX;
+      const tex = drawnTexture(w * px, h * px, (g) => {
+        g.scale(px, px); g.translate(-x0, -y0);
+        if (baseKit) { drawBaseKit(g, b, baseKit); style.baseLabel?.(g, b); } else style.drawBase(g, b);
+      });
       const body = baseLayer.addChild(new Sprite(tex)), shadow = baseShadows.addChild(new Sprite(tex));
-      body.scale.set(1 / BASE_PX); shadow.scale.set(1 / BASE_PX);
+      body.scale.set(1 / px); shadow.scale.set(1 / px);
       body.position.set(x0, y0);
       shadow.position.set(x0 + SHADOW.dx * 0.6, y0 + SHADOW.dy * 0.6); // laag: kortere schaduw
       shadow.tint = SHADOW.color; shadow.alpha = SHADOW.alpha * 0.7;
@@ -667,6 +682,7 @@ export function startWorld(style, game) {
     gpu.update(now);
     bridgeView.update();
     objectView.update(cam);
+    buildingView.update(seesSharp);
     objTiles.sync(cam);
 
     marks.clear();
@@ -1059,6 +1075,7 @@ export function startWorld(style, game) {
   const hz = createHazardView({
     game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius,
     get pal() { return pal; }, get bridgeSprites() { return bridgeView.active; },
+    texture: (name) => objectView.texture(name), props: L.marks.addChild(new Container()), seesSharp,
   });
 
   // ---------- Ronde en score (§2) ----------
@@ -1116,6 +1133,7 @@ export function startWorld(style, game) {
       stage.destroy({ children: true });
       gpu.destroy();
       objectView.destroy();
+      buildingView.destroy();
       if (window.blitzView === view) delete window.blitzView;
     },
   };

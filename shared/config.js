@@ -156,6 +156,23 @@ export const TANK_ART = {
   },
 };
 
+// De basis als bouwpakket (public/view/base-kit.js), in cellen: wall = dikte van de muur, corner,
+// post en item = maat van hoekpaal, deurpost en spullen, items = zoveel spullen binnen langs de muren
+export const BASE_KIT = { px: 32, wall: 2, corner: 3, post: 3, item: 3, items: 4 };
+
+// Gebouwen in drie stadia (public/view/buildings-view.js): footprints = grondvlak (cellen) van elk
+// getekend gebouw, stages = vanaf zoveel treffers-nog-over is het heel, half, puin (BUILDING.hp = 4),
+// height = hoogte voor de schaduw, px = pixels per cel in de tekening
+export const BUILDINGS = {
+  px: 32, height: 1.6, stages: [3, 1, 0],
+  footprints: { kerk: [8, 15], boerderij: [11, 10], 'huis-woon': [6, 6], 'huis-rij': [12, 5] },
+};
+
+// Dingen van gevaren en schaarse middelen als sprite (public/view/hazards-view.js): px = pixels per
+// cel; parachute = waar de parachute naast een volle krat ligt (cellen); dropMs = zo lang zakt hij
+// neer bij een nieuwe dropping
+export const PROPS = { px: 32, parachute: [2.4, -2.2], dropMs: 500 };
+
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)
 // moet je duim schuiven voor de tank rijdt, zodat een rustende duim niet kruipt. stickRadius in
 // CSS-pixels: verder slepen telt niet meer (de voet schuift mee). selfDestructMs: zo lang

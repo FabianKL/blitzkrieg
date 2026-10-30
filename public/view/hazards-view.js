@@ -1,13 +1,28 @@
 // Gevaren en schaarse middelen als ding op de kaart (§10): laadplekken, depots, barrage, kratten,
 // geschut, de opgeblazen brug, brand, stof, zoeklichten, luchtspiegelingen en herkenningspunten.
 // v = { game, at(x, y), Pixi-lagen en pools uit world-view.js, drawContour, visionRadius, pal,
-// bridgeSprites (true: de bruggen zijn sprites, ook het wrak) }.
+// bridgeSprites (true: de bruggen zijn sprites, ook het wrak), texture(naam) (sprite uit de atlas
+// van de stijl, of null), props (container voor die sprites), seesSharp(x, y) }.
+// Depots, het munitiedepot, kratten en parachutes zijn sprites als de atlas ze heeft (PROPS),
+// anders getekend.
 import * as G from '/shared/game.js';
 import { searchlightBeams, sightAt, contourAlpha } from '/shared/vision.js';
 import { pack, REFILL_COLORS } from '/render-common.js';
+import { PROPS } from '/shared/config.js';
+import { spritePool } from '/pixi-scene.js';
 
 export function createHazardView(v) {
   const { game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius } = v;
+  const props = spritePool(v.props, undefined, (s) => s.anchor.set(0.5));
+  // sprite uit de atlas op (x, y), size = schaal (1 = getekende maat), of false als die er niet is
+  function prop(name, x, y, size = 1, alpha = 1, rot = 0) {
+    const tex = v.texture(name);
+    if (!tex) return false;
+    const s = props.next();
+    s.texture = tex; s.position.set(x, y); s.scale.set(size / PROPS.px); s.alpha = alpha; s.rotation = rot;
+    return true;
+  }
+  const dropped = new Map(); // krat -> tijd waarop hij in beeld neerkwam (parachute zakt)
 
   // Waar je brandstof of munitie laadt: een badge met B of M en een zacht pulserende ring.
   // Alleen volle plekken; de mist erboven verbergt ze buiten je zicht, net als het ding zelf.
@@ -29,7 +44,9 @@ export function createHazardView(v) {
   }
   // Brandstofdepot: een stapel jerrycans; leeg = grijs en omgevallen
   function drawDepots() {
+    props.begin();
     for (const [x, y, full] of game.depots) {
+      if (prop(full ? 'brandstof-vol' : 'brandstof-leeg', x, y)) continue;
       for (let k = 0; k < 4; k++) {
         const cx = x - 1.6 + (k % 2) * 1.9, cy = y - 1.4 + Math.floor(k / 2) * 2.1;
         marks.save(); marks.translateTransform(cx, cy);
@@ -65,23 +82,31 @@ export function createHazardView(v) {
 
   // Gevaren en schaarse middelen die als ding op de kaart staan
   function drawObjectsOfHazards() {
-    if (game.ammoDepot) { // munitiekisten (Grebbeberg)
+    if (game.ammoDepot && !prop('munitie-depot', game.ammoDepot[0], game.ammoDepot[1])) { // munitiekisten (Grebbeberg)
       const [x, y] = game.ammoDepot;
       for (let k = 0; k < 3; k++) {
         marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 1.4).fill(0x6a5a2a);
         marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 0.35).fill(0xc9a43a);
       }
     }
-    for (const c of game.crates) { // krat aan een parachute (Market Garden)
-      if (!c) continue;
+    const now = performance.now();
+    game.crates.forEach((c, k) => { // krat aan een parachute (Market Garden)
+      if (!c) return;
       const [x, y, kind, full] = c;
+      if (prop(full ? (kind === 'fuel' ? 'krat-brandstof' : 'krat-munitie') : 'krat-leeg', x, y)) {
+        if (!full) return;
+        const p = Math.min(1, (now - (dropped.get(k) ?? 0)) / PROPS.dropMs); // zakt neer: van groot en vaag naar normaal
+        prop('parachute', x + PROPS.parachute[0], y + PROPS.parachute[1], 1.6 - 0.6 * p, p);
+        return;
+      }
       if (full) {
         // eerst moveTo: anders trekt Pixi een lijn vanaf het eind van het vorige pad (witte strepen)
         marks.moveTo(x - 2.2, y - 2.5).arc(x, y - 2.5, 2.2, Math.PI, 0).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
         marks.moveTo(x - 2.2, y - 2.5).lineTo(x, y).lineTo(x + 2.2, y - 2.5).stroke({ color: 0xf0f0e6, alpha: 0.8, width: 0.2 });
       }
       marks.rect(x - 1.2, y - 1, 2.4, 2).fill(full ? (kind === 'fuel' ? 0x4e6b2a : 0x8a6a2a) : 0x6a6a64);
-    }
+    });
+    props.end();
     for (const g of game.guns) { // antitankgeschut (Carentan), zichtbaar na het eerste schot
       const col = g.hp > 0 ? 0x4a4a3a : 0x2a2a26;
       marks.save(); marks.translateTransform(g.x, g.y); marks.rotateTransform(g.ang);
@@ -192,5 +217,12 @@ export function createHazardView(v) {
     }
   }
 
-  return { drawRefillMarkers, drawDepots, drawBarrage, drawObjects: drawObjectsOfHazards, drawFires, drawDust, drawSearchlights, drawMirages, drawLandmarks };
+  // Nieuwe dropping (parachute zakt, alleen in beeld) en een laadplek die leeg raakt (stofwolkje)
+  function onEvent(e) {
+    if (e.t === 'drop' && e.c && v.seesSharp(e.c[0], e.c[1])) dropped.set(e.k, performance.now());
+    const spot = e.t === 'depu' ? game.depots[e.k] : e.t === 'dropu' ? game.crates[e.k] : null;
+    if (spot && v.seesSharp(spot[0], spot[1])) particles.spawn('smoke', spot[0], spot[1], 6, { speed: 3, life: 1.2, r0: 0.8, r1: 3.5 });
+  }
+
+  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawObjects: drawObjectsOfHazards, drawFires, drawDust, drawSearchlights, drawMirages, drawLandmarks };
 }

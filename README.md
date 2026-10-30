@@ -194,9 +194,11 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
-| `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld). |
+| `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld: depots, kratten met parachute en het munitiedepot als sprite uit de atlas, anders getekend). |
 | `public/view/ground-gpu.js` | De grond op de videokaart: één mesh met een eigen shader (terreinklassen met texturen, tunnels, rots, water, ijs, puin, schone kaart buiten je zicht). |
 | `public/view/bridges-view.js` | Bruggen als sprite (begin, herhaald middenstuk, eind) in de richting van de weg, met schaduw; het wrak als de brug bij Arnhem ontploft. |
+| `public/view/base-kit.js` | De basis als bouwpakket: muurstukken, hoekpalen, deurposten en spullen uit `public/assets/<stijl>/bases/` op de echte cellen van de basis (maten in `BASE_KIT`). |
+| `public/view/buildings-view.js` | Gebouwen in drie stadia (heel, half, puin) als sprite, als hun grondvlak past bij een getekend gebouw (`BUILDINGS` in config.js); anders het dak uit de grondshader. |
 | `public/view/roads.js` | Wegenveld voor de shader: de middellijnen gladgemaakt (Chaikin) en per cel de afstand tot de dichtstbijzijnde en de op één na dichtstbijzijnde weg en de plek langs de weg. |
 | `public/assets.js`, `public/assets/` | Asset-loader en de sprites en texturen zelf (`manifest.json` zegt wat er is, `LEESMIJ.md` wat wat is). Wat ontbreekt, wordt procedureel of zoals vroeger getekend. |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |
