@@ -36,14 +36,14 @@
 //   eraser                     stijl van de storm (zie drawEraser)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
-  hash, rgb, cellAt, obstacleFields, plantFelled, eraserInfo, findBases, blurField, createTileCanvases, TILE, camera,
+  hash, rgb, cellAt, obstacleFields, plantFelled, eraserInfo, findBases, blurField, createTileCanvases, TILE, camera, drawEmblem,
   smoothTankAngles, createOverlay, statusOverlay, showBandwidth, R, paintRefillIcon,
 } from '/render-common.js';
 import { createSidePanel } from '/view/side-panel.js';
@@ -51,7 +51,7 @@ import { createHazardView } from '/view/hazards-view.js';
 import { createGroundGpu } from '/view/ground-gpu.js';
 import { createBridgeView } from '/view/bridges-view.js';
 import { createObjectView } from '/view/objects-view.js';
-import { report as assetReport } from '/assets.js';
+import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
@@ -301,6 +301,7 @@ export function startWorld(style, game) {
       style.onTeams?.();
     clearTankTextures();
     }
+    loadTankArt();
     pal = makePalette(game.rules);
     makeBridgeMask();
     applyLook(lookFor(game.rules));
@@ -535,11 +536,41 @@ export function startWorld(style, game) {
     tankTex.clear();
   }
   const tankSprites = new Map(); // id -> {body, shadow}
+  // Tanksprites (TANK_ART, config.js): per ploeg de tekening uit public/assets/tanks/<sprite>/, met
+  // mipmaps zodat een draaiende tank niet flikkert, en het embleem of nummer als eigen sprite die
+  // meedraait. Zonder bestand: de getekende tank van de stijl (tankTexture).
+  let tankArt = []; // per ploeg {tex, markTex, mark: [x, y, straal], tint} of undefined
+  let tankArtKey = '';
+  async function loadTankArt() {
+    const specs = G.teamsFor(game.rules) || [], key = `${game.mapId}|${specs.map((t) => `${t.sprite}-${t.paint}`).join()}`;
+    if (key === tankArtKey) return;
+    tankArtKey = key;
+    const m = await loadManifest(), out = [], tex = new Map();
+    assetReport.tanks = {};
+    for (let id = 0; id < specs.length; id++) {
+      const spec = specs[id];
+      if (!spec?.sprite) continue;
+      const paint = `tanks/${spec.sprite}/tank-${spec.paint}.png`, plain = `tanks/${spec.sprite}/tank.png`;
+      const path = spec.paint && has(m, paint) ? paint : plain;
+      if (!tex.has(path)) {
+        const img = has(m, path) ? await loadImage(m, path) : null;
+        tex.set(path, img && new Texture({ source: new ImageSource({ resource: img, autoGenerateMipmaps: true, scaleMode: 'linear', mipmapFilter: 'linear' }) }));
+      }
+      if (!tex.get(path)) continue;
+      // embleem (de woestijnstijl zet de spelerskleur in mark en het embleem in emblem)
+      const team = style.teams[id], mark = TANK_ART.mark[spec.sprite] || TANK_ART.mark.default, r = mark[2], size = Math.ceil(r * 2.6 * TANK_ART.px);
+      const markTex = drawnTexture(size, size, (g) => { g.scale(TANK_ART.px, TANK_ART.px); drawEmblem(g, { ...team, mark: team.emblem ?? team.mark }, size / 2 / TANK_ART.px, size / 2 / TANK_ART.px, r); });
+      out[id] = { tex: tex.get(path), markTex, mark, tint: spec.variant ? TANK_ART.variantTint : 0xffffff };
+      assetReport.tanks['ABCD'[id]] = path;
+    }
+    if (tankArtKey === key) tankArt = out;
+  }
+
   function tankSprite(id) {
     let s = tankSprites.get(id);
     if (!s) {
-      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()) };
-      for (const k of [s.body, s.shadow]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
+      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()), mark: tankLayer.addChild(new Sprite()) };
+      for (const k of [s.body, s.shadow, s.mark]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
       s.shadow.tint = SHADOW.color; s.shadow.alpha = SHADOW.alpha;
       tankSprites.set(id, s);
     }
@@ -595,7 +626,7 @@ export function startWorld(style, game) {
     const opts = { radius, view: cam, smokes: game.smokes };
     contours.begin();
     buried.clear();
-    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = false;
+    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = s.mark.visible = false;
     for (const [id, t] of game.tanks) {
       if (!t.a || t.rx === undefined || t.ang === undefined) { t.seen = null; continue; }
       const x = Math.round(t.rx), y = Math.round(t.ry);
@@ -603,10 +634,16 @@ export function startWorld(style, game) {
       t.seen = seen;
       if (id === game.me && t.b) drawBuried(t);
       else if (seen === 'sharp') {
-        const s = tankSprite(id), tex = tankTexture(id, now);
-        for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; }
+        const s = tankSprite(id), art = tankArt[id], tex = art?.tex ?? tankTexture(id, now), px = art ? TANK_ART.px : TANK_PX;
+        for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; k.scale.set(1 / px); }
         s.body.position.set(t.rx + 0.5, t.ry + 0.5);
+        s.body.tint = art?.tint ?? 0xffffff;
         s.shadow.position.set(t.rx + 0.5 + SHADOW.dx, t.ry + 0.5 + SHADOW.dy);
+        if (art) { // embleem: op zijn plek op de tank, draait mee
+          const [mx, my] = art.mark, c = Math.cos(t.ang), sn = Math.sin(t.ang);
+          s.mark.texture = art.markTex; s.mark.scale.set(1 / TANK_ART.px); s.mark.rotation = t.ang; s.mark.visible = true;
+          s.mark.position.set(t.rx + 0.5 + mx * c - my * sn, t.ry + 0.5 + mx * sn + my * c);
+        }
       } else if (seen === 'contour') drawContour(contours, t.rx + 0.5, t.ry + 0.5, t.ang, contourAlpha(Math.hypot(x - me.x, y - me.y), radius, far));
     }
     contours.end();

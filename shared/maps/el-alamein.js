@@ -3,7 +3,7 @@ import { storm } from './common.js';
 
 export default { // §10.3
   name: 'El Alamein 1942', style: 'woestijn', header: 'LIGHTFOOT — EL ALAMEIN · OKTOBER 1942',
-  tanks: { A: { name: 'CRUSADER', hull: '#c9b07a', mark: 'roundel', camo: '#7d8a8e' }, B: { name: 'PANZER III', hull: '#c2ac72', mark: 'number', number: '412' } },
+  tanks: { A: { name: 'CRUSADER', hull: '#c9b07a', mark: 'roundel', camo: '#7d8a8e', sprite: 'crusader' }, B: { name: 'PANZER III', hull: '#c2ac72', mark: 'number', number: '412', sprite: 'panzer3', paint: 'woestijn' } },
   terrainPercent: { soft: 50, hard: 20, paved: 5, rock: 10, water: 10, vegetation: 5 },
   classes: {
     paved: { label: 'Kustweg', color: '#a89c84' },

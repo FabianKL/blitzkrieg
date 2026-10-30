@@ -2,7 +2,7 @@
 
 export default { // §10.7
   name: 'Arnhem 1944', style: 'zomer', header: 'MARKET GARDEN — ARNHEM · SEPTEMBER 1944',
-  tanks: { A: { name: 'CROMWELL', hull: '#55602f', mark: 'star' }, B: { name: 'PANZER IV', hull: '#5a5e60', mark: 'number', number: '722' } },
+  tanks: { A: { name: 'CROMWELL', hull: '#55602f', mark: 'star', sprite: 'cromwell' }, B: { name: 'PANZER IV', hull: '#5a5e60', mark: 'number', number: '722', sprite: 'panzer4' } },
   terrainPercent: { normal: 40, soft: 12, hard: 10, water: 12, paved: 8, vegetation: 10, marsh: 5, rock: 3 },
   classes: {
     paved: { label: 'Wegen, brug en stad', color: '#8a7a6a' },

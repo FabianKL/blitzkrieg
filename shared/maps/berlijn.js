@@ -3,7 +3,7 @@ import { T_T34 } from './common.js';
 
 export default { // §10.10
   name: 'Berlijn 1945', style: 'zomer', header: 'VAL VAN BERLIJN — BERLIJN · APRIL 1945',
-  tanks: { A: T_T34, B: { name: 'PANZER IV', hull: '#5a5e60', mark: 'number', number: '503' } },
+  tanks: { A: T_T34, B: { name: 'PANZER IV', hull: '#5a5e60', mark: 'number', number: '503', sprite: 'panzer4' } },
   terrainPercent: { paved: 30, building: 30, soft: 15, normal: 8, vegetation: 5, water: 7, rock: 5 },
   classes: {
     paved: { label: 'Straten en pleinen', color: '#7a7670' },

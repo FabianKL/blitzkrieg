@@ -3,7 +3,7 @@ import { T_T34 } from './common.js';
 
 export default { // §10.5
   name: 'Koersk 1943', style: 'zomer', header: 'ZITADELLE — KOERSK · JULI 1943',
-  tanks: { A: T_T34, B: { name: 'TIGER', hull: '#b8a066', mark: 'number', number: '121', camo: '#6b5a3a' } },
+  tanks: { A: T_T34, B: { name: 'TIGER', hull: '#b8a066', mark: 'number', number: '121', camo: '#6b5a3a', sprite: 'tiger' } },
   terrainPercent: { normal: 45, hard: 15, soft: 12, paved: 6, rock: 8, vegetation: 8, water: 6 },
   classes: {
     paved: { label: 'Zandweg', color: '#7a6448' },

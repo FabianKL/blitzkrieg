@@ -3,7 +3,7 @@ import { T_T34 } from './common.js';
 
 export default { // §10.9
   name: 'Oder-front 1945', style: 'zomer', header: 'SEELOWER HOOGTEN — ODER-FRONT · APRIL 1945',
-  tanks: { A: T_T34, B: { name: 'PANTHER', hull: '#5a5e60', mark: 'number', number: '401' } },
+  tanks: { A: T_T34, B: { name: 'PANTHER', hull: '#5a5e60', mark: 'number', number: '401', sprite: 'panther' } },
   terrainPercent: { soft: 30, marsh: 15, hard: 20, normal: 10, rock: 10, vegetation: 5, water: 6, paved: 4 },
   classes: {
     paved: { label: 'Wegen', color: '#5a5650' },

@@ -144,6 +144,18 @@ export const OBJECTS = {
   height: { tall: 1.4, low: 0.5 },
 };
 
+// Tanks als sprite (public/world-view.js): public/assets/tanks/<sprite>/tank[-<paint>].png, 448 x 448
+// px, px pixels per cel, neus naar rechts, draaipunt in het midden. Het embleem of nummer tekent de
+// code erop, op mark[sprite] = [x, y, straal] in cellen vanaf het midden (neus naar rechts; anders
+// mark.default). Ploeg C en D (variant van A en B) krijgen variantTint: iets donkerder.
+export const TANK_ART = {
+  px: 32, variantTint: 0xb8b8b8,
+  mark: {
+    default: [-0.3, 0, 0.6], t34: [0.45, 0, 0.55], panzer4: [-0.25, 0, 0.55], sherman: [-0.2, 0, 0.6],
+    tiger: [-0.2, 0, 0.6], koenigstiger: [-0.4, 0, 0.6], panther: [-0.3, 0, 0.6],
+  },
+};
+
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)
 // moet je duim schuiven voor de tank rijdt, zodat een rustende duim niet kruipt. stickRadius in
 // CSS-pixels: verder slepen telt niet meer (de voet schuift mee). selfDestructMs: zo lang

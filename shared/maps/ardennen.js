@@ -3,7 +3,7 @@ import { storm, T_SHERMAN } from './common.js';
 
 export default { // §10.8
   name: 'Ardennen 1944', style: 'winter', header: 'WACHT AM RHEIN — ARDENNEN · DECEMBER 1944',
-  tanks: { A: { ...T_SHERMAN, winter: true }, B: { name: 'KÖNIGSTIGER', hull: '#d8d6cc', mark: 'number', number: '332' } },
+  tanks: { A: { ...T_SHERMAN, winter: true, paint: 'winter' }, B: { name: 'KÖNIGSTIGER', hull: '#d8d6cc', mark: 'number', number: '332', sprite: 'koenigstiger' } },
   terrainPercent: { soft: 52, hard: 12, vegetation: 18, paved: 8, rock: 6, water: 4 },
   tolerance: { klein: 1, default: 0 }, // klein: wegen (vaste breedte) zijn ~14% verhard, dat gaat van de sneeuw af
   classes: {

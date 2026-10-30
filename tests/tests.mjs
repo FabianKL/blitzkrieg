@@ -487,7 +487,7 @@ export const tests = [
   {
     name: 'tanks: per kaart alleen een ander uiterlijk, 4 varianten, eigenschappen overal gelijk',
     async run() {
-      const LOOK = new Set(['name', 'hull', 'mark', 'number', 'camo', 'winter']); // alleen uiterlijk
+      const LOOK = new Set(['name', 'hull', 'mark', 'number', 'camo', 'winter', 'sprite', 'paint']); // alleen uiterlijk (sprite, paint: tekening)
       const out = [];
       for (const [id, rules] of Object.entries(G.MAPS)) {
         if (id === 'retro') continue;

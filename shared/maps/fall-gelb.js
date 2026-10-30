@@ -2,7 +2,7 @@
 
 export default { // §10.1
   name: 'Grebbeberg 1940', style: 'zomer', header: 'FALL GELB — GREBBEBERG · MEI 1940',
-  tanks: { A: { name: 'LANDSVERK', hull: '#6a7158', mark: 'triangle' }, B: { name: 'PANZER II', hull: '#4f5356', mark: 'number', number: '211' } },
+  tanks: { A: { name: 'LANDSVERK', hull: '#6a7158', mark: 'triangle', sprite: 'landsverk' }, B: { name: 'PANZER II', hull: '#4f5356', mark: 'number', number: '211', sprite: 'panzer2' } },
   terrainPercent: { normal: 39, soft: 17, hard: 10, vegetation: 15, marsh: 7, rock: 4, paved: 8 },
   classes: {
     paved: { label: 'Wegen en het dorp', color: '#c8b48a' },

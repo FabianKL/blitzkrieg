@@ -5,7 +5,8 @@
 //
 // Kaarten (SPEC-terrein §6). Elke kaart is een eigen potje. Per kaart:
 //   name        naam in beeld; header: titelregel (na 'BLITZKRIEG — '); style: welke weergave
-//               (zomer, winter, woestijn); tanks: {A, B} uiterlijk van de ploegen (zie common.js)
+//               (zomer, winter, woestijn); tanks: {A, B} uiterlijk van de ploegen (zie common.js),
+//               met sprite en paint voor de tekening uit public/assets/tanks/
 //   terrainPercent  {klasse | rock | water | vegetation | building: procent van het speelbare deel}
 //   features    vaste kenmerken voor de kaartmaker (mapgen.js): village, road, river, area, ...
 //   classes     per terreinklasse {label, color}: naam en kleur in de legenda
