@@ -139,7 +139,8 @@ localhost, in de adresbalk):
   `blitzView.lookAt(0.5, 0.45)`, en `blitzView.lookAt()` terug naar je tank);
 - `blitzView.bench()` in de console tekent 120 beelden direct na elkaar en geeft de tijd per beeld,
   ook als het venster niet zichtbaar is (het kan niet sneller meten dan de verversing van het scherm);
-- `blitzView.assets()` in de console zegt welke texturen en sprites uit `public/assets/` komen.
+- `blitzView.assets()` in de console zegt welke texturen en sprites uit `public/assets/` komen;
+  `blitzView.play('explosie', x, y, { size: 14 })` speelt een effect af om het te bekijken.
 
 ## Uiterlijk per map (`look`)
 Alle maps gebruiken dezelfde weergave (PixiJS); alleen de instellingen verschillen. Die staan in
@@ -161,6 +162,8 @@ De spelregels kijken er niet naar.
 | `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur) en `vergeAmount` (berm), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
 | `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js). |
 | tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: `sprite` (map in `public/assets/tanks/`) en `paint` (andere schildering, `tank-<paint>.png`). Waar het embleem of nummer op de tank komt en hoe donker ploeg C/D is: `TANK_ART` in config.js. Zonder bestand tekent de stijl de tank. |
+| `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit) en `width` (breedte van de strook langs de oever). |
+| `grain` | Korrel over het beeld (0..1); samen met `grade` en `vignette` in één nabewerkingsfilter. |
 | `bridge` | Bruggen als sprite: `kind` (`hout`, `steen`, `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
 
@@ -202,6 +205,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `public/view/bridges-view.js` | Bruggen als sprite (begin, herhaald middenstuk, eind) in de richting van de weg, met schaduw; het wrak als de brug bij Arnhem ontploft. |
 | `public/view/base-kit.js` | De basis als bouwpakket: muurstukken, hoekpalen, deurposten en spullen uit `public/assets/<stijl>/bases/` op de echte cellen van de basis (maten in `BASE_KIT`). |
 | `public/view/buildings-view.js` | Gebouwen in drie stadia (heel, half, puin) als sprite, als hun grondvlak past bij een getekend gebouw (`BUILDINGS` in config.js); anders het dak uit de grondshader. |
+| `public/view/plants-view.js` | Waterplanten langs de oever (zomer: waterlelies en oeverplanten, winter: ijsbladeren en riet); alleen decoratie. |
+| `public/view/effects-view.js` | Flipbook-effecten (explosie, rook, mondingsvuur, inslagen) uit `public/assets/effects/` en lichtvlekjes bij schoten en explosies. |
 | `public/view/roads.js` | Wegenveld voor de shader: de middellijnen gladgemaakt (Chaikin) en per cel de afstand tot de dichtstbijzijnde en de op één na dichtstbijzijnde weg en de plek langs de weg. |
 | `public/assets.js`, `public/assets/` | Asset-loader en de sprites en texturen zelf (`manifest.json` zegt wat er is, `LEESMIJ.md` wat wat is). Wat ontbreekt, wordt procedureel of zoals vroeger getekend. |
 | `public/pixi-scene.js` | Pixi-hulpjes: vaste texturen, tegelsprites, deeltjes, labels. |

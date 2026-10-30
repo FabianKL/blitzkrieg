@@ -36,10 +36,10 @@
 //   eraser                     stijl van de storm (zie drawEraser)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT, FX } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, ColorMatrixFilter, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
@@ -53,6 +53,8 @@ import { createBridgeView } from '/view/bridges-view.js';
 import { createObjectView } from '/view/objects-view.js';
 import { createBuildingView } from '/view/buildings-view.js';
 import { loadBaseKit, drawBaseKit } from '/view/base-kit.js';
+import { createPlantView } from '/view/plants-view.js';
+import { createEffectView } from '/view/effects-view.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
@@ -83,10 +85,11 @@ function lookFor(rules) {
     ...LOOK, ...own, grade: { ...LOOK.grade, ...own.grade }, noise: { ...LOOK.noise, ...own.noise },
     light: { ...LOOK.light, ...own.light }, ground: { ...LOOK.ground, ...own.ground }, objects: { ...LOOK.objects, ...own.objects },
     water: { ...LOOK.water, ...own.water }, ice: { ...LOOK.ice, ...own.ice }, road: { ...LOOK.road, ...own.road },
+    waterPlants: { ...LOOK.waterPlants, ...own.waterPlants },
     bridge: { ...LOOK.bridge, ...own.bridge },
   };
 }
-// Kleurfilter als 5x4-matrix (Pixi ColorMatrixFilter): verzadiging, contrast, helderheid, tint
+// Kleurfilter als 5x4-matrix (rijen, zoals Pixi's ColorMatrixFilter): verzadiging, contrast, helderheid, tint
 function gradeMatrix({ saturation, brightness, contrast, tint, tintStrength }) {
   const s = 1 + saturation, lum = [0.3086, 0.6094, 0.082], t = rgb(tint).map((v) => 1 - tintStrength + (tintStrength * v) / 255);
   const m = [];
@@ -98,7 +101,6 @@ function gradeMatrix({ saturation, brightness, contrast, tint, tintStrength }) {
   m.push(0, 0, 0, 1, 0);
   return m;
 }
-const isNeutral = (g) => !g.saturation && g.brightness === 1 && g.contrast === 1 && !g.tintStrength;
 
 // Barsten in een ijsvak: per vak vaste grillige lijnen (in cellen), per stadium twee meer.
 // Elke barst loopt vanuit een punt bij het midden twee kanten op, met een knik per stuk en
@@ -219,6 +221,25 @@ export function startWorld(style, game) {
     particles.spawn('spark', x, y, 6, { speed: 26, life: 0.18, dir, spread: 0.6, cols: ['#ffd27a', '#ffb347', '#fff0c0'] });
     const cloud = style.clouds?.smoke ? 'smoke' : Object.keys(style.clouds || {})[0];
     if (cloud) particles.spawn(cloud, x + ux, y + uy, 3, { speed: 4, life: 1.1, dir, spread: 0.9, r0: 0.6, r1: 2.6 });
+    fx.play('mondingsvuur', x + ux * 0.4, y + uy * 0.4, { size: FX.muzzle, rot: dir, add: true, speed: FX.speed * 1.5 });
+    fx.light(x, y, 4);
+  }
+  // Flipbook-effecten bij treffers en ontploffingen, alleen als je de plek scherp ziet (of het je eigen kogel is)
+  function flipbooks(e) {
+    if (e.t === 'x' && !e.veg && (e.o === game.me || seesSharp(e.x, e.y))) {
+      if (e.building || at(e.x, e.y) === G.ROCK) fx.play(FX.impact[game.rules?.style] || 'inslag-aarde', e.x + 0.5, e.y + 0.5, { size: FX.impactSize });
+      else { fx.play('explosie', e.x + 0.5, e.y + 0.5, { size: FX.hit, add: true }); fx.light(e.x + 0.5, e.y + 0.5, 4); }
+    }
+    if (e.t === 'k' && seesSharp(e.x, e.y)) {
+      fx.play('explosie', e.x + 0.5, e.y + 0.5, { size: FX.death, add: true });
+      fx.play('rook', e.x + 0.5, e.y + 0.5, { size: FX.death * 1.2, delay: 250, speed: FX.speed * 0.5 });
+      fx.light(e.x + 0.5, e.y + 0.5, 10, FX.lightColor, FX.lightLife * 3);
+    }
+    if (e.t === 'bridge' && e.blown && seesSharp(e.x, e.y)) {
+      fx.play('explosie', e.x, e.y, { size: FX.bridge, add: true });
+      fx.light(e.x, e.y, 12, FX.lightColor, FX.lightLife * 3);
+    }
+    if (e.t === 'zb' && e.craters) for (const [x, y] of e.craters) if (seesSharp(x, y)) { fx.play('explosie', x + 0.5, y + 0.5, { size: FX.hit * 1.5, add: true }); fx.light(x + 0.5, y + 0.5, 6); }
   }
   let shake = 0;
   function onEvent(e) {
@@ -242,6 +263,7 @@ export function startWorld(style, game) {
       gpu.markRect(x0 - 2, y0 - 2, x1 + 2, y1 + 2);
       gpu.waterChanged(e.box);
       gpu.iceChanged();
+      plantView.rebuild(e.box);
       crackGrow.delete(e.b);
       const cx = (e.b % G.ICE_BW) * G.ICE_B + G.ICE_B / 2, cy = ((e.b / G.ICE_BW) | 0) * G.ICE_B + G.ICE_B / 2;
       particles.spawn('chunk', cx, cy, 30, { speed: 14, life: 0.9, cols: ICE_BITS });
@@ -286,6 +308,7 @@ export function startWorld(style, game) {
     }
     hintFor(e);
     hz.onEvent(e);
+    flipbooks(e);
     if (e.t === 'k') {
       objectView.addCrater(e.x, e.y, e.r ?? G.DEATH_DIG_R);
       const self = game.tanks.get(game.me);
@@ -325,6 +348,7 @@ export function startWorld(style, game) {
       if (!alive || game.map !== map) return;
       if (!sprites) { makeObjects(); buildObjects(); objTiles.use(objects); }
       gpu.setObjects(sprites, objectView.vanishOnFell);
+      plantView.load(look);
       side.buildLegend();
     });
     buildBases();
@@ -339,6 +363,7 @@ export function startWorld(style, game) {
     onDig: (x, y) => {
       side.paintMini(x, y); mapVersion++;
       gpu.markCell(x, y);
+      plantView.cellChanged(x, y);
     },
     onEvent,
     onStatus: statusOverlay(setOverlay, style.fullText || 'alle vier de tanks zijn al bemand'),
@@ -377,6 +402,15 @@ export function startWorld(style, game) {
   });
   const crackMask = crackLayer.addChild(new Sprite());
   crackLayer.setMask({ mask: crackMask, inverse: true });
+  // Waterplanten (view/plants-view.js) onder alles in de markeringslaag; planten op gegraven cellen in
+  // een laag met het gewone zichtmasker (alleen te zien waar je geen zicht hebt)
+  const plantLayer = L.marks.addChildAt(new Container(), 0), plantHidden = L.marks.addChildAt(new Container(), 1);
+  const plantMask = plantHidden.addChild(new Sprite());
+  plantHidden.mask = plantMask;
+  const plantView = createPlantView({ layer: plantLayer, hidden: plantHidden, game, texture: (name) => objectView.texture(name) });
+  // Flipbook-effecten en lichtvlekjes (view/effects-view.js); lichtvlekjes op de grond, onder de tanks
+  const fx = createEffectView({ layer: L.effects.addChild(new Container()), lights: L.marks.addChild(new Container()), soft: TEX.soft });
+  fx.load();
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
@@ -430,7 +464,48 @@ export function startWorld(style, game) {
   // zachte schaduwranden: de hele schaduwlaag in één keer vervaagd (goedkoper dan per sprite)
   const shadowBlur = new KawaseBlurFilter({ strength: 2, quality: 3 });
   L.shadows.filters = [shadowBlur];
-  const gradeFilter = new ColorMatrixFilter();
+  // Nabewerking in één pass: kleurfilter (look.grade), vignet en korrel (look.vignette, look.grain)
+  const postFilter = new Filter({
+    glProgram: GlProgram.from({
+      vertex: defaultFilterVert,
+      fragment: `
+        in vec2 vTextureCoord;
+        out vec4 finalColor;
+        uniform sampler2D uTexture;
+        uniform highp vec4 uInputSize;
+        uniform highp vec4 uOutputFrame;
+        uniform mat3 uGrade;    // kleurmatrix (rgb)
+        uniform vec3 uOffset;   // en verschuiving
+        uniform vec4 uScreen;   // breedte, hoogte (schermpixels), vignet, korrel
+        uniform float uSeed;    // korrel beweegt per beeld
+        void main(void) {
+          vec4 c = texture(uTexture, vTextureCoord);
+          vec3 rgb = c.a > 0.0 ? c.rgb / c.a : c.rgb;
+          rgb = uGrade * rgb + uOffset;
+          vec2 px = vTextureCoord * uInputSize.xy + uOutputFrame.xy;
+          vec2 q = px / uScreen.xy - 0.5;
+          float r = length(q * vec2(uScreen.x / uScreen.y, 1.0)) / 0.75;
+          rgb *= 1.0 - uScreen.z * smoothstep(0.35, 1.0, r);
+          float n = fract(sin(dot(floor(px) + uSeed, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+          rgb += n * uScreen.w;
+          finalColor = vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);
+        }`,
+      name: 'post',
+    }),
+    resources: {
+      postUniforms: {
+        uGrade: { value: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), type: 'mat3x3<f32>' },
+        uOffset: { value: new Float32Array(3), type: 'vec3<f32>' },
+        uScreen: { value: new Float32Array([1, 1, 0, 0]), type: 'vec4<f32>' },
+        uSeed: { value: 0, type: 'f32' },
+      },
+    },
+  });
+  // kleurmatrix van gradeMatrix (5 x 4, rijen) naar de shader (mat3 in kolommen + verschuiving)
+  function setGrade(grade) {
+    const m = gradeMatrix(grade), u = postFilter.resources.postUniforms.uniforms;
+    for (let r = 0; r < 3; r++) { for (let c = 0; c < 3; c++) u.uGrade[c * 3 + r] = m[r * 5 + c]; u.uOffset[r] = m[r * 5 + 4]; }
+  }
   // Hittewaas (weer heatHaze): het beeld trilt licht via een verschuivingskaart van ruis die
   // langzaam meedrijft. Alleen aan als het weer het zegt; anders kost hij niets.
   const hazeTex = drawnTexture(256, 256, (g) => {
@@ -481,15 +556,17 @@ export function startWorld(style, game) {
     resources: { visionUniforms: { uCenter: { value: new Float32Array(2), type: 'vec2<f32>' }, uBlur: { value: new Float32Array(3), type: 'vec3<f32>' } } },
   });
   let filterKey = '';
-  // Filters op de wereld: kleurfilter (look.grade), hittewaas (weer) en de vervaging buiten je
-  // zichtcirkel (alleen als je zicht hebt en het zichtveld in beeld staat), alleen als ze iets doen
+  // Filters op de wereld: nabewerking (kleurfilter, vignet, korrel: altijd, één pass), hittewaas
+  // (weer) en de vervaging buiten je zichtcirkel (alleen als je zicht hebt en het zichtveld in beeld
+  // staat). De vervaging rekent op volle resolutie: op halve resolutie werd ook het scherpe midden
+  // van het beeld zacht (de filter werkt op de hele wereld).
   function updateFilters(now) {
     const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
     const blur = !DEBUG && !!eye() && game.visionOverlay !== false && FOG.blur > 0;
-    const key = `${isNeutral(look.grade)},${haze},${blur}`;
+    const key = `${haze},${blur}`;
     if (key !== filterKey) {
       filterKey = key;
-      world.filters = [...(isNeutral(look.grade) ? [] : [gradeFilter]), ...(haze ? [hazeFilter] : []), ...(blur ? [visionBlur] : [])];
+      world.filters = [postFilter, ...(haze ? [hazeFilter] : []), ...(blur ? [visionBlur] : [])];
     }
     if (blur) {
       const me = eye(), cam = view.cam, u = visionBlur.resources.visionUniforms.uniforms, r = visionRadius();
@@ -504,20 +581,13 @@ export function startWorld(style, game) {
       hazeSprite.position.set((now * 0.012 * s) % (256 * 3 * s), (now * 0.03 * s) % (256 * 3 * s)); // drijft omhoog en opzij
     }
   }
-  const vignette = L.ui.addChild(new Sprite(drawnTexture(256, 256, (g) => {
-    const r = g.createRadialGradient(128, 128, 60, 128, 128, 182);
-    r.addColorStop(0, 'rgba(0,0,0,0)'); r.addColorStop(1, 'rgba(0,0,0,1)');
-    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
-  })));
-  L.ui.setChildIndex(vignette, 0); // onder de hints en labels
   function applyLook(next) {
     look = next;
     Object.assign(SHADOW, { dx: look.light.dx, dy: look.light.dy, alpha: look.light.alpha });
     objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
     for (const s of tankSprites.values()) s.shadow.alpha = SHADOW.alpha;
-    gradeFilter.matrix = gradeMatrix(look.grade);
+    setGrade(look.grade);
     filterKey = '';
-    vignette.alpha = look.vignette;
     shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
     gpu.setLook(look);
     bridgeView.setLook(look);
@@ -683,6 +753,7 @@ export function startWorld(style, game) {
     bridgeView.update();
     objectView.update(cam);
     buildingView.update(seesSharp);
+    fx.update(now);
     objTiles.sync(cam);
 
     marks.clear();
@@ -703,7 +774,7 @@ export function startWorld(style, game) {
     drawSmokes(now);
     drawWeather(cam, now, dt);
     sightSprite.visible = visionSprite.visible = overlayOn;
-    if (!sightOn) { crackMask.texture = Texture.EMPTY; gpu.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
+    if (!sightOn) { crackMask.texture = plantMask.texture = Texture.EMPTY; gpu.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
     if (sightOn) { drawSight(me, cam); hz.drawMirages(me, cam, now); }
     if (overlayOn) drawFog(me, cam);
@@ -711,7 +782,9 @@ export function startWorld(style, game) {
     hz.drawSearchlights();
     drawStyleOverlay(cam, now);
     updateFilters(now);
-    vignette.width = canvas.width; vignette.height = canvas.height;
+    const pu = postFilter.resources.postUniforms.uniforms;
+    pu.uScreen[0] = canvas.width; pu.uScreen[1] = canvas.height; pu.uScreen[2] = look.vignette; pu.uScreen[3] = look.grain;
+    pu.uSeed = (now * 0.06) % 1000;
     drawEraser(now);
     drawHints(now);
   }
@@ -944,9 +1017,9 @@ export function startWorld(style, game) {
       maskTex = cleanMask.texture;
       // één pixel per SH cellen (schaal in plaats van breedte: het masker van de barsten wisselt
       // van texture, zie drawWorld)
-      for (const s of [sightSprite, cleanMask, crackMask]) { s.position.set(x0 - SH / 2, y0 - SH / 2); s.scale.set(SH); }
+      for (const s of [sightSprite, cleanMask, crackMask, plantMask]) { s.position.set(x0 - SH / 2, y0 - SH / 2); s.scale.set(SH); }
     }
-    if (maskTex) crackMask.texture = maskTex; // zelfde masker, omgekeerd (zie crackLayer)
+    if (maskTex) crackMask.texture = plantMask.texture = maskTex; // zelfde masker (barsten: omgekeerd, zie crackLayer)
     // de grondshader leest hetzelfde masker: daar de schone kaart
     if (maskTex) gpu.setMask(maskTex, cleanMask.x, cleanMask.y, maskTex.width * SH, maskTex.height * SH);
   }
@@ -1124,6 +1197,8 @@ export function startWorld(style, game) {
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
     lookAt: (fx, fy) => { if (DEBUG_HOST) FOCUS = fx === undefined ? null : [fx, fy]; },
+    // effect afspelen om te bekijken (localhost): blitzView.play('explosie', x, y, {size: 14, add: true})
+    play: (name, x, y, o) => DEBUG_HOST && fx.play(name, x, y, o),
     assets: () => assetReport, // welke texturen en sprites er gebruikt worden (de rest is procedureel of de oude tekening)
     // Opruimen bij een kaart met een andere stijl: beeldlus stoppen, videokaart vrijgeven
     destroy() {

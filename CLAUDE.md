@@ -58,8 +58,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
   tekent de weergave het procedureel of zoals vroeger. De opdracht voor de graphics staat in
   `docs/opdracht-claude-code-graphics.md` (fases 0–8).
-- **Effecten verraden niets**: mondingsvuur, splinters en kogels van anderen alleen als je ze scherp
-  ziet; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
+- **Effecten verraden niets**: mondingsvuur, splinters, flipbook-effecten, lichtvlekjes en kogels van
+  anderen alleen als je ze scherp ziet; waterplanten die op een tunnel verdwijnen alleen waar je zicht hebt; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
   echte weg) en de server stuurt ze in het instapbericht (`rd`). `public/view/roads.js` maakt er een
   veld van voor de grondshader. Bruggen idem (`bridges` met middellijn, breedte en cellen; `br` in

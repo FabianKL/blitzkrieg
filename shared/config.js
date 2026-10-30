@@ -100,6 +100,9 @@ export const DISPLAY = { minimap: true };
 //               (donkerte), rutOffset (afstand tot het midden) en rutWidth; smooth = afronding van
 //               binnenhoeken, junction = zo ver van een kruising heeft de weg weer een richting;
 //               curb = stoeprand in cellen (0 = geen) met curbColor; line = middenstreep (0..1)
+//   waterPlants waterplanten langs de oever (public/view/plants-view.js): density = kans per
+//               roosterpunt, width = breedte van de strook in cellen (density 0 = uit)
+//   grain       korrel over het beeld (0..1), in het nabewerkingsfilter samen met grade en vignette
 //   objects     bomen en rotsen als sprites (public/view/objects-view.js): rocks = op zo'n deel van de
 //               roosterpunten op rots staat een rotsblok (0 = alleen de rotstextuur)
 //   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout', 'steen', 'staal';
@@ -116,6 +119,8 @@ export const LOOK = {
   },
   bridge: { kind: 'steen', land: 0.33, height: 1.6 },
   objects: { rocks: 0.35 },
+  waterPlants: { density: 0.35, width: 3 },
+  grain: 0.035,
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
   noise: { scale: 9, strength: 0, octaves: 3 },
@@ -174,6 +179,28 @@ export const BUILDINGS = {
 // cel; parachute = waar de parachute naast een volle krat ligt (cellen); dropMs = zo lang zakt hij
 // neer bij een nieuwe dropping
 export const PROPS = { px: 32, parachute: [2.4, -2.2], dropMs: 500 };
+
+// Waterplanten (public/view/plants-view.js): rooster in cellen, grootte (x de getekende maat), px =
+// pixels per cel in de tekening; kinds per stijl: soort op het water of ijs en soort op de oever
+// (onWater: ook op open water, anders alleen op ijs). De woestijn heeft er geen.
+export const WATER_PLANTS = {
+  step: 2, scale: [0.6, 0.95], px: 32,
+  kinds: {
+    zomer: { water: 'waterlelie', bank: 'oeverplant', onWater: true },
+    winter: { water: 'ijsblad', bank: 'oeverriet', onWater: false },
+  },
+};
+
+// Flipbook-effecten (public/view/effects-view.js): sheets = bladen in public/assets/effects/;
+// grootte in cellen van een treffer op een tank, een ontploffende tank, de brug en een inslag;
+// speed = beelden per tick van Pixi (60/s); impact = inslagblad per stijl; light* = lichtvlekje
+// bij schoten en explosies (kleur, dekking, seconden)
+export const FX = {
+  sheets: ['explosie', 'rook', 'mondingsvuur', 'inslag-aarde', 'inslag-sneeuw', 'inslag-zand'],
+  speed: 0.4, muzzle: 3, hit: 4, death: 14, bridge: 18, impactSize: 3.5,
+  impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand' },
+  lightColor: 0xffc070, lightAlpha: 0.55, lightLife: 0.25,
+};
 
 // Touchbesturing (tablet/telefoon, public/touch.js). deadZone: zo ver (fractie van stickRadius)
 // moet je duim schuiven voor de tank rijdt, zodat een rustende duim niet kruipt. stickRadius in
