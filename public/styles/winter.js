@@ -227,7 +227,6 @@ function drawTank(g, team, x, y, ang) {
   g.beginPath(); g.roundRect(-1.65, -1.15, 2.4, 0.7, 0.35); g.fill();
   g.strokeStyle = shade(tur, 0.5); g.lineWidth = 0.18;
   g.beginPath(); g.roundRect(-1.85, -1.3, 3.1, 2.6, 0.8); g.stroke();
-  drawEmblem(g, team, -0.35, 0.05, 0.8);
   g.restore();
 }
 
@@ -360,7 +359,7 @@ export default function start(game) {
     // grondshader (view/ground-gpu.js): witte sneeuwlip langs tunnels, besneeuwde oever,
     // platgereden sneeuw in de basis met bandensporen; bomen staan in de objectlaag
     surface: {
-      lip: { color: '#f4f8fc', amount: 0.75, inner: 0.85 }, rock: { edge: 0.62, light: 1.18 }, veg: 'ground',
+      lip: { color: '#f4f8fc', amount: 0.75, inner: 0.85 }, rock: { edge: 0.82, light: 1.1 }, veg: 'ground',
       bank: { color: '#eef4fa' }, floor: { color: '#d8dde6', tracks: 0.9, grain: 10 }, debris: '#705030',
     },
     // minikaart (world-view.js): zolang de mist hangt, ligt die ook over de minikaart
@@ -372,7 +371,7 @@ export default function start(game) {
       },
     },
     objects: { draw: drawObjects, over: true },
-    clouds: { puff: '245, 248, 252', smoke: '62, 64, 66' }, cloudAlpha: { puff: 0.7, smoke: 0.45 },
+    clouds: { puff: '245, 248, 252', smoke: '62, 64, 66' }, cloudAlpha: { puff: 0.7, smoke: 0.45 }, burialColor: '#eef3f8',
     onEvent, overlay: drawFog, teamLook, drawBase, drawTank,
     shadow: { color: 0x283755, alpha: 0.35 },
     tracer: ['rgba(255, 170, 60, 0)', 'rgba(255, 210, 110, 1)'],

@@ -919,6 +919,37 @@ export const tests = [
     },
   },
   {
+    name: 'rand van de kaart: geen rotsrand, terrein loopt door, tank en kogel komen niet in de onbegaanbare strook',
+    async run() {
+      const rules = G.MAPS.carentan, band = G.edgeBand(rules);
+      check(band > 0, 'kaart met features zonder onbegaanbare rand');
+      const w = G.generateMap(4242, rules);
+      // geen rotsrand meer: in de strook ligt hetzelfde soort terrein als ernaast, geen muur van rots
+      let rock = 0, cells = 0;
+      for (let y = 0; y < G.H; y++) for (let x = 0; x < band; x++) { cells++; if (w.map[y * G.W + x] === G.ROCK) rock++; }
+      check(rock / cells < 0.5, `strook links is ${Math.round((100 * rock) / cells)}% rots`);
+      check(w.border[0] === 1 && w.border[band * G.W + band] === 0, 'border is niet de strook');
+      G.setMapSize(G.W, G.H, band);
+      try {
+        // een tunnel tot vlak bij de rand: de tank rijdt naar links tot hij niet verder kan
+        const y = Math.round(G.H / 2), t = { x: band + 30, y, dir: G.dirIndex(-1, 0), mv: 0, fuel: 1e6, input: { dx: -1, dy: 0 } };
+        for (let x = 0; x < band + 40; x++) for (let j = -4; j <= 4; j++) { const i = (y + j) * G.W + x; w.map[i] = G.EMPTY; }
+        for (let k = 0; k < 2000; k++) G.moveTank(t, w, []);
+        const minX = Math.min(...G.MASKS[t.dir].map((c) => t.x + c.x));
+        check(minX >= band, `tank kwam in de strook (x = ${minX}, strook tot ${band})`);
+        check(minX <= band + 1, `tank stopte te vroeg (x = ${minX})`);
+        // een kogel naar links stopt aan de binnenrand van de strook
+        const b = { x: band + 10, y, d: G.dirIndex(-1, 0), fresh: false };
+        let hit = null;
+        for (let k = 0; k < 200 && !hit; k++) hit = G.stepBullet(b, w.map, []);
+        check(hit?.kind === 'solid' && b.x >= band - G.BULLET_SPEED, `kogel vloog de strook in (x = ${b.x})`);
+        // bereikbaarheid telt de strook niet mee
+        check(!G.reachable(w.map, { x: band + 20, y })[y * G.W + band], 'routecontrole gaat door de strook');
+        return `strook van ${band} cellen, ${Math.round((100 * rock) / cells)}% rots erin; tank stopt op x = ${minX}`;
+      } finally { G.setMapSize(G.W, G.H); }
+    },
+  },
+  {
     name: 'sporenwisser: klok, sneller vervagen op zacht/normaal, tunnels lopen dicht, rest onveranderd',
     async run() {
       const cfg = G.MAPS.ardennen.weather.find((r) => r.every);

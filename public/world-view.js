@@ -34,16 +34,17 @@
 //   shadow: {color, alpha, dx, dy}   schaduw van tanks en bases (licht van linksboven)
 //   tracer: [kleur staart, kleur kop]
 //   eraser                     stijl van de storm (zie drawEraser)
+//   burialColor                kleur van de hoop sneeuw, zand of stof op je ingesneeuwde tank (BURIAL)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT, FX } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
-  hash, rgb, cellAt, obstacleFields, plantFelled, eraserInfo, findBases, blurField, createTileCanvases, TILE, camera, drawEmblem,
+  hash, rgb, cellAt, obstacleFields, plantFelled, eraserInfo, findBases, blurField, createTileCanvases, TILE, camera,
   smoothTankAngles, createOverlay, statusOverlay, showBandwidth, R, paintRefillIcon,
 } from '/render-common.js';
 import { createSidePanel } from '/view/side-panel.js';
@@ -56,7 +57,7 @@ import { loadBaseKit, drawBaseKit } from '/view/base-kit.js';
 import { createPlantView } from '/view/plants-view.js';
 import { createEffectView } from '/view/effects-view.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
-import { TEX, textureOf, drawnTexture, tintOf, rgba, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
+import { TEX, textureOf, drawnTexture, tintOf, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
 const ICE_CLS = G.CLASS.ice;
@@ -150,6 +151,32 @@ export function startWorld(style, game) {
   const L = {};
   for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
+  // Rand van de kaart (EDGE, G.BAND): over alles in de onbegaanbare strook een verloop van helder
+  // (binnenrand, zacht begin: geen lijn) naar zwart (buitenrand), en zwart buiten de kaart. Zo lijkt
+  // het land door te lopen. Onder de mist, zodat die er gewoon overheen ligt.
+  const edgeLayer = world.addChildAt(new Container(), world.getChildIndex(L.fog));
+  const edgeTex = drawnTexture(256, 1, (g) => {
+    const img = g.createImageData(256, 1);
+    for (let x = 0; x < 256; x++) { // x = 0: buitenrand (zwart), x = 255: binnenrand (helder)
+      const t = x / 255, s = t * t * (3 - 2 * t);
+      img.data[x * 4 + 3] = Math.round(255 * Math.pow(1 - s, 1 / EDGE.curve));
+    }
+    g.putImageData(img, 0, 0);
+  });
+  function layoutEdge() {
+    for (const s of edgeLayer.removeChildren()) s.destroy();
+    const B = G.BAND, OUT = 400; // zwart buiten de kaart: ruim genoeg voor elke camera
+    if (!B) return;
+    // [x, y, lengte, draaiing]: het verloop staat langs x, de lengte langs y
+    for (const [x, y, len, rot] of [[0, 0, G.H, 0], [G.W, G.H, G.H, Math.PI], [G.W, 0, G.W, Math.PI / 2], [0, G.H, G.W, -Math.PI / 2]]) {
+      const s = edgeLayer.addChild(new Sprite(edgeTex));
+      s.tint = 0x000000; s.position.set(x, y); s.rotation = rot; s.scale.set(B / 256, len);
+    }
+    for (const [x, y, w, h] of [[-OUT, -OUT, G.W + 2 * OUT, OUT], [-OUT, G.H, G.W + 2 * OUT, OUT], [-OUT, 0, OUT, G.H], [G.W, 0, OUT, G.H]]) {
+      const s = edgeLayer.addChild(new Sprite(Texture.WHITE));
+      s.tint = 0x000000; s.position.set(x, y); s.width = w; s.height = h;
+    }
+  }
   // De grond tekent de videokaart (view/ground-gpu.js)
   const gpu = createGroundGpu({ container: L.ground, game, style, getRenderer: () => renderer });
   let bases = [], rockField = null, fields = null;
@@ -320,7 +347,8 @@ export function startWorld(style, game) {
   // ---------- Verbinding ----------
   const setOverlay = createOverlay($('overlay'));
   function loadMap(map) {
-    G.setMapSize(game.mapW, game.mapH); // deze module kan een eigen kopie van game.js hebben (iframe)
+    G.setMapSize(game.mapW, game.mapH, G.edgeBand(game.rules)); // deze module kan een eigen kopie van game.js hebben (iframe)
+    layoutEdge();
     const specs = G.teamsFor(game.rules);
     if (specs && style.teamLook) {
       specs.forEach((spec, i) => { style.teams[i] = style.teamLook(spec, i); });
@@ -391,11 +419,13 @@ export function startWorld(style, game) {
   }));
   const badges = spritePool(L.effects.addChild(new Container()), badgeTex.fuel);
   const badgeRings = L.effects.addChild(new Graphics());
-  // IJsbarsten verraden waar iemand reed: alleen waar je zicht hebt (omgekeerd masker, drawSight)
-  const crackLayer = L.marks.addChild(new Container()), craterLayer = crackLayer.addChild(new Container());
+  // Kraters blijven altijd te zien, ook zonder zicht (keuze van de eigenaar): een inslag of een
+  // ontplofte tank hoort iedereen toch al. IJsbarsten verraden waar iemand reed: alleen waar je
+  // zicht hebt (omgekeerd masker, drawSight)
+  const craterLayer = L.marks.addChild(new Container()), crackLayer = L.marks.addChild(new Container());
   const crackG = crackLayer.addChild(new Graphics());
   // Bomen, rotsen en kraters als sprites (view/objects-view.js); zonder atlas de getekende objecten
-  // bij objTiles. Kraters in de laag van de ijsbarsten: alleen te zien waar je zicht hebt.
+  // bij objTiles.
   const objectView = createObjectView({
     under: objectsUnder, over: L.canopy.addChild(new Container()), shadows: L.shadows.addChild(new Container()),
     craters: craterLayer, game, shadowColor: style.shadow?.color ?? 0x000000,
@@ -407,7 +437,7 @@ export function startWorld(style, game) {
   const plantLayer = L.marks.addChildAt(new Container(), 0), plantHidden = L.marks.addChildAt(new Container(), 1);
   const plantMask = plantHidden.addChild(new Sprite());
   plantHidden.mask = plantMask;
-  const plantView = createPlantView({ layer: plantLayer, hidden: plantHidden, game, texture: (name) => objectView.texture(name) });
+  const plantView = createPlantView({ layer: plantLayer, hidden: plantHidden, game, texture: (name) => objectView.texture(name), shore: (x, y) => gpu.shoreAt(x, y) });
   // Flipbook-effecten en lichtvlekjes (view/effects-view.js); lichtvlekjes op de grond, onder de tanks
   const fx = createEffectView({ layer: L.effects.addChild(new Container()), lights: L.marks.addChild(new Container()), soft: TEX.soft });
   fx.load();
@@ -427,7 +457,8 @@ export function startWorld(style, game) {
   const contourSetup = (s) => { s.anchor.set(0.5); s.scale.set(1 / 16); s.tint = 0x0c0c0e; };
   const contours = spritePool(contourLayer, contourTex, contourSetup);
   const mirageSprites = spritePool(contourLayer, contourTex, contourSetup); // valse contouren (El Alamein)
-  const buried = L.tanks.addChild(new Graphics());
+  const drift = L.tanks.addChild(new Sprite(driftTexture())); // hoop sneeuw op je ingesneeuwde tank
+  drift.anchor.set(0.5); drift.visible = false;
   const effects = L.effects.addChild(new Graphics());
   L.effects.addChild(particles.layer);
   const smokes = spritePool(L.effects.addChild(new Container()), TEX.soft);
@@ -619,7 +650,7 @@ export function startWorld(style, game) {
   // Tanksprites (TANK_ART, config.js): per ploeg de tekening uit public/assets/tanks/<sprite>/, met
   // mipmaps zodat een draaiende tank niet flikkert, en het embleem of nummer als eigen sprite die
   // meedraait. Zonder bestand: de getekende tank van de stijl (tankTexture).
-  let tankArt = []; // per ploeg {tex, markTex, mark: [x, y, straal], tint} of undefined
+  let tankArt = []; // per ploeg {tex, tint} of undefined (geen embleem of nummer: keuze van de eigenaar)
   let tankArtKey = '';
   async function loadTankArt() {
     const specs = G.teamsFor(game.rules) || [], key = `${game.mapId}|${specs.map((t) => `${t.sprite}-${t.paint}`).join()}`;
@@ -637,10 +668,7 @@ export function startWorld(style, game) {
         tex.set(path, img && new Texture({ source: new ImageSource({ resource: img, autoGenerateMipmaps: true, scaleMode: 'linear', mipmapFilter: 'linear' }) }));
       }
       if (!tex.get(path)) continue;
-      // embleem (de woestijnstijl zet de spelerskleur in mark en het embleem in emblem)
-      const team = style.teams[id], mark = TANK_ART.mark[spec.sprite] || TANK_ART.mark.default, r = mark[2], size = Math.ceil(r * 2.6 * TANK_ART.px);
-      const markTex = drawnTexture(size, size, (g) => { g.scale(TANK_ART.px, TANK_ART.px); drawEmblem(g, { ...team, mark: team.emblem ?? team.mark }, size / 2 / TANK_ART.px, size / 2 / TANK_ART.px, r); });
-      out[id] = { tex: tex.get(path), markTex, mark, tint: spec.variant ? TANK_ART.variantTint : 0xffffff };
+      out[id] = { tex: tex.get(path), tint: spec.variant ? TANK_ART.variantTint : 0xffffff };
       assetReport.tanks['ABCD'[id]] = path;
     }
     if (tankArtKey === key) tankArt = out;
@@ -649,8 +677,8 @@ export function startWorld(style, game) {
   function tankSprite(id) {
     let s = tankSprites.get(id);
     if (!s) {
-      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()), mark: tankLayer.addChild(new Sprite()) };
-      for (const k of [s.body, s.shadow, s.mark]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
+      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()) };
+      for (const k of [s.body, s.shadow]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
       s.shadow.tint = SHADOW.color; s.shadow.alpha = SHADOW.alpha;
       tankSprites.set(id, s);
     }
@@ -710,25 +738,20 @@ export function startWorld(style, game) {
     const me = eye(), radius = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
     const opts = { radius, view: cam, smokes: game.smokes };
     contours.begin();
-    buried.clear();
-    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = s.mark.visible = false;
+    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = false;
+    drift.visible = false;
     for (const [id, t] of game.tanks) {
       if (!t.a || t.rx === undefined || t.ang === undefined) { t.seen = null; continue; }
       const x = Math.round(t.rx), y = Math.round(t.ry);
       const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x, y, buried: t.b }, opts);
       t.seen = seen;
-      if (id === game.me && t.b) drawBuried(t);
-      else if (seen === 'sharp') {
+      if (seen === 'sharp') {
         const s = tankSprite(id), art = tankArt[id], tex = art?.tex ?? tankTexture(id, now), px = art ? TANK_ART.px : TANK_PX;
         for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; k.scale.set(1 / px); }
         s.body.position.set(t.rx + 0.5, t.ry + 0.5);
         s.body.tint = art?.tint ?? 0xffffff;
         s.shadow.position.set(t.rx + 0.5 + SHADOW.dx, t.ry + 0.5 + SHADOW.dy);
-        if (art) { // embleem: op zijn plek op de tank, draait mee
-          const [mx, my] = art.mark, c = Math.cos(t.ang), sn = Math.sin(t.ang);
-          s.mark.texture = art.markTex; s.mark.scale.set(1 / TANK_ART.px); s.mark.rotation = t.ang; s.mark.visible = true;
-          s.mark.position.set(t.rx + 0.5 + mx * c - my * sn, t.ry + 0.5 + mx * sn + my * c);
-        }
+        if (id === game.me) drawBuried(t, s, now);
       } else if (seen === 'contour') drawContour(contours, t.rx + 0.5, t.ry + 0.5, t.ang, contourAlpha(Math.hypot(x - me.x, y - me.y), radius, far));
     }
     contours.end();
@@ -943,14 +966,58 @@ export function startWorld(style, game) {
     const s = pool.next();
     s.position.set(x, y); s.rotation = ang || 0; s.alpha = alpha;
   }
-  // Eigen bedekte tank: een hoopje sneeuw of zand met een vage omtrek
-  const burial = rgba(style.burialColor || 'rgba(236, 232, 220, 0.9)');
-  function drawBuried(t) {
-    const x = t.rx + 0.5, y = t.ry + 0.5;
-    buried.ellipse(x, y, 4, 3.2).fill(burial);
-    buried.save(); buried.translateTransform(x, y); buried.rotateTransform(t.ang || 0);
-    buried.ellipse(0, 0, 3.4, 2.4).stroke({ color: 0x282828, alpha: 0.35, width: 0.25 });
-    buried.restore();
+  // Eigen bedekte tank (storm): de tank blijft eronder te zien, verbleekt, met een hoop sneeuw, zand
+  // of stof erover in de vorm van de tank. De hoop groeit aan (BURIAL.growMs) en valt eraf als je
+  // weer gaat rijden of schiet. De loop steekt eruit, de toren schemert erdoor.
+  function driftTexture() {
+    const { px, length: len, width: wid, turret } = BURIAL, w = Math.ceil(len * px), h = Math.ceil(wid * px);
+    const [r, g, b] = rgb(style.burialColor || '#ece8dc');
+    return drawnTexture(w, h, (ctx) => {
+      const rnd = G.mulberry32(4242), soft = 0.45 * px;
+      // hoop: de vorm van de romp, met een zachte rand en een paar bulten langs de kant
+      ctx.filter = `blur(${soft}px)`;
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.beginPath(); ctx.roundRect(1.3 * soft, 1.3 * soft, w - 2.6 * soft, h - 2.6 * soft, 1.6 * px); ctx.fill();
+      for (let k = 0; k < 9; k++) {
+        const side = k % 2 ? 1 : -1, u = 0.15 + rnd() * 0.7;
+        ctx.beginPath(); ctx.ellipse(u * w, h / 2 + side * (h / 2 - 1.6 * soft), (0.5 + rnd() * 0.6) * px, (0.3 + rnd() * 0.4) * px, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.filter = 'none';
+      // licht van linksboven, schaduw rechtsonder: een hoop, geen plakje
+      ctx.globalCompositeOperation = 'source-atop';
+      const lg = ctx.createLinearGradient(0, 0, w, h);
+      lg.addColorStop(0, 'rgba(255, 255, 255, 0.35)'); lg.addColorStop(0.5, 'rgba(255, 255, 255, 0)'); lg.addColorStop(1, 'rgba(40, 46, 60, 0.3)');
+      ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
+      // de toren schemert erdoor (iets voor het midden: het midden van de hoop ligt achter de toren)
+      ctx.globalCompositeOperation = 'destination-out';
+      const tx = w / 2 + BURIAL.turretAt * px, tg = ctx.createRadialGradient(tx, h / 2, 0, tx, h / 2, 1.4 * px);
+      tg.addColorStop(0, `rgba(0, 0, 0, ${turret})`); tg.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = tg; ctx.fillRect(0, 0, w, h);
+    });
+  }
+  const burialTint = rgb(style.burialColor || '#ece8dc');
+  const puff = style.clouds?.puff ? 'puff' : style.clouds?.dust ? 'dust' : Object.keys(style.clouds || { smoke: 1 })[0];
+  let buriedSince = 0, wasBuried = false;
+  // s: de tanksprite (body, shadow), t: je tank
+  function drawBuried(t, s, now) {
+    if (!t.b) {
+      if (wasBuried) { // de hoop valt eraf
+        particles.spawn(puff, t.rx, t.ry, BURIAL.puff, { speed: 5, life: 1.1, r0: 1, r1: 3.5 });
+        wasBuried = false;
+      }
+      drift.visible = false;
+      return;
+    }
+    if (!wasBuried) { buriedSince = now; wasBuried = true; }
+    const k = Math.min(1, (now - buriedSince) / BURIAL.growMs), c = Math.cos(t.ang), sn = Math.sin(t.ang);
+    const base = s.body.tint, mix = (sh) => Math.round(((base >> sh) & 255) + (burialTint[2 - sh / 8] - ((base >> sh) & 255)) * BURIAL.fade * k);
+    s.body.tint = (mix(16) << 16) | (mix(8) << 8) | mix(0);
+    s.shadow.visible = k < 0.5;
+    drift.visible = true;
+    drift.position.set(t.rx + 0.5 + BURIAL.at * c, t.ry + 0.5 + BURIAL.at * sn);
+    drift.rotation = t.ang;
+    drift.scale.set((0.6 + 0.4 * k) / BURIAL.px);
+    drift.alpha = k;
   }
   // Buiten de zichtstraal steeds vager en donkerder naar de rand van het venster. Het verloop
   // staat op een canvas dat alleen opnieuw getekend wordt als de verhouding verandert.

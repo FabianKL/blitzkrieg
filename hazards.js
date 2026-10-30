@@ -93,7 +93,7 @@ const fuelDepots = {
 function freeSpot(w, x, y, r) {
   for (let j = -r; j <= r; j++) {
     for (let i = -r; i <= r; i++) {
-      if (!G.inBounds(x + i, y + j)) return false;
+      if (!G.playable(x + i, y + j)) return false; // niet in de onbegaanbare rand
       const k = (y + j) * G.W + x + i, v = w.map[k];
       if ((v !== G.DIRT && v !== G.EMPTY) || w.zone?.[k]) return false;
     }

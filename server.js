@@ -133,7 +133,7 @@ function stopGame(room, t) {
 // Alles wat met de kaart van een potje rekent, zet eerst de kaartmaat van dat potje
 function useRoom(room) {
   const { w, h } = G.sizeDims(room.size);
-  G.setMapSize(w, h);
+  G.setMapSize(w, h, G.edgeBand(room.rules));
 }
 
 // Een nieuwe kaart voor dit potje: { world, seed }, of null als de bases niet passen (te veel

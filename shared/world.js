@@ -1,7 +1,7 @@
 // De wereld waar alle regels mee rekenen: kaartmaat, celtypes, terreinklassen, de tankvorm en
 // deterministisch toeval. Geen spelregels; die staan in terrain.js en movement.js.
 // Draait identiek op de server en in de browser.
-import { BULLETS, DEFAULT_SIZE, DISPLAY, GAME, ICE, MAP_SIZES, MINES, NET, T, TANK, TERRAIN, TRACK_ERASER, TUNNEL, VISION, BUILDING as BUILDING_CFG } from './config.js';
+import { BULLETS, DEFAULT_SIZE, DISPLAY, EDGE, GAME, ICE, MAP_SIZES, MINES, NET, T, TANK, TERRAIN, TRACK_ERASER, TUNNEL, VISION, BUILDING as BUILDING_CFG } from './config.js';
 
 // ---------- Kaartmaat ----------
 // W en H zijn de maat van de kaart waar nu mee gerekend wordt. Ze veranderen met setMapSize:
@@ -15,10 +15,16 @@ export function sizeDims(size) {
   const f = (MAP_SIZES[size] || MAP_SIZES[DEFAULT_SIZE]).factor;
   return { w: Math.round(BASE_W_CELLS * f), h: Math.round(BASE_H_CELLS * f) };
 }
-export function setMapSize(w, h) {
-  W = w; H = h;
+// band: breedte van de onbegaanbare rand (EDGE.band; 0 = de hele kaart, retro met zijn rotsrand)
+export function setMapSize(w, h, band = 0) {
+  W = w; H = h; BAND = band;
   ICE_BW = Math.ceil(W / ICE_B); ICE_BH = Math.ceil(H / ICE_B);
 }
+// Rand van de kaart (§9 van docs/spec-grafische-reparaties.md): het terrein loopt door tot de rand,
+// maar een strook van BAND cellen is onbegaanbaar; tanks, kogels en gevaren blijven erbuiten.
+export let BAND = 0;
+export const edgeBand = (rules) => (rules?.features ? EDGE.band : 0);
+export const playable = (x, y) => x >= BAND && y >= BAND && x < W - BAND && y < H - BAND;
 
 // Zichtcirkel in cellen: de halve hoogte van het beeld (viewH in cellen), kleiner gemaakt door
 // het weer (inT, in T zoals de spec; VISION.defaultT = vol), nooit kleiner dan minRadius
@@ -155,7 +161,9 @@ export function makeNoise(seed) {
 
 // Welke cellen kan een tank vanaf from bereiken? Rots, water en muren blokkeren, begroeiing en
 // gebouwen niet (die kun je wegschieten). Geeft een Uint8Array met 1 voor elke bereikbare cel.
-export function reachable(map, from) {
+// band: zoveel cellen langs de rand zijn onbegaanbaar (standaard die van dit potje, BAND; de
+// kaartmaker geeft hem zelf mee, zodat dezelfde seed overal dezelfde kaart geeft)
+export function reachable(map, from, band = BAND) {
   const blocked = new Int32Array((W + 1) * (H + 1)); // optelsom van blokkerende cellen
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -165,7 +173,8 @@ export function reachable(map, from) {
     }
   }
   const fits = (x, y) => {
-    if (x < TANK_R || y < TANK_R || x >= W - TANK_R || y >= H - TANK_R) return false;
+    const m = band + TANK_R;
+    if (x < m || y < m || x >= W - m || y >= H - m) return false;
     const x0 = x - TANK_R, y0 = y - TANK_R, x1 = x + TANK_R + 1, y1 = y + TANK_R + 1;
     return blocked[y1 * (W + 1) + x1] - blocked[y0 * (W + 1) + x1] - blocked[y1 * (W + 1) + x0] + blocked[y0 * (W + 1) + x0] === 0;
   };

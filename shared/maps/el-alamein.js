@@ -22,7 +22,7 @@ export default { // §10.3
   // per vak (T) zand +soft, op hard/verhard firm; boven danger armorPct% pantser per vak zand, bij 100 snelheid slow
   meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040', soft: 2, firm: -5, armorPct: 1, slow: 0.7 },
   // kustweg: duidelijke rijsporen, weinig berm; rotsplateaus met hier en daar een rotsblok
-  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.2 }, objects: { rocks: 0.12 } },
+  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.25, vergeColor: '#a8875a' } },
   tunnelColor: '#6e5430',
   weather: [
     { label: 'Hitte', effect: { visibility: 10, heatHaze: true, mirages: true } },

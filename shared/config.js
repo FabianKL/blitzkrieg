@@ -91,7 +91,9 @@ export const DISPLAY = { minimap: true };
 //   water       water in de grondshader: deep = donkerte in het diepe (x de waterkleur), depthCells =
 //               zoveel cellen van de kant is het diep, shore = zoveel lichter aan de kant, shine =
 //               glinstering; golven: waveCells (maat in cellen), waveSpeed (vlekken per seconde),
-//               waves (sterkte, 0 = vlak)
+//               waves (sterkte, 0 = vlak); grillige waterlijn (ook ijs): edgeNoise = hoe ver de lijn
+//               hoogstens verschuift (cellen, 0 = glad zoals de cellen), edgeScale = maat van de
+//               inhammen (cellen), edgeFine = aandeel van de fijne, rafelige ruis (0..1)
 //   ice         ijs: depthCells en deep (donker, diep ijs naar het midden), frost (witte ijzel),
 //               sheen (glans), stress (zoveel donkerder en natter in een vak dat bijna breekt);
 //               barsten: crackWidth (dikte) en crackGrow (zoveel dikker per barststadium);
@@ -101,27 +103,38 @@ export const DISPLAY = { minimap: true };
 //               vergeColor (null = de tunnelkleur: modder) en vergeAmount; rijsporen: ruts
 //               (donkerte), rutOffset (afstand tot het midden) en rutWidth; smooth = afronding van
 //               binnenhoeken, junction = zo ver van een kruising heeft de weg weer een richting;
-//               curb = stoeprand in cellen (0 = geen) met curbColor; line = middenstreep (0..1)
+//               curb = stoeprand in cellen (0 = geen) met curbColor; line = middenstreep (0..1);
+//               vergeInside = zoveel cellen loopt de berm de rijbaan op (zachte overgang), edgeNoise
+//               = zoveel cellen schuift de rand van de rijbaan heen en weer (rafelig)
 //   waterPlants waterplanten langs de oever (public/view/plants-view.js): density = kans per
-//               roosterpunt, width = breedte van de strook in cellen (density 0 = uit)
+//               roosterpunt, width = tot zoveel cellen van de waterlijn een waterplant (lelie, ijsblad),
+//               reach = tot zo ver zoekt een oeverplant de waterlijn, offset = [van, tot] cellen van de
+//               lijn naar de kant (negatief = met de voet in het water), clump = maat van de groepjes
+//               (cellen; daartussen open stukken)
 //   grain       korrel over het beeld (0..1), in het nabewerkingsfilter samen met grade en vignette
 //   objects     bomen en rotsen als sprites (public/view/objects-view.js): rocks = op zo'n deel van de
-//               roosterpunten op rots staat een rotsblok (0 = alleen de rotstextuur)
+//               roosterpunten op rots staat een rotsblok (0 = alleen de rotstextuur); rockGround = de
+//               blokken liggen op de gewone grond (gras, sneeuw, zand) in plaats van op een grijze
+//               rotsplaat (dan rocks 1, zodat het hele rotsveld vol blokken ligt), rockShade = zoveel
+//               donkerder is de grond midden in een rotsveld
 //   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout', 'steen', 'staal';
 //               public/assets/<stijl>/bridges/<soort>-begin|midden|eind|wrak.png), land = zo'n deel
 //               van het landhoofd ligt op de oever, height = hoe hoog boven het water (lengte van
 //               de schaduw, in cellen per cel schaduwverschuiving)
 export const LOOK = {
   ground: { cells: 16, tint: 0.8, contrast: 0.65 },
-  water: { deep: 0.6, depthCells: 5, shore: 0.22, shine: 0.3, waveCells: 7, waveSpeed: 0.06, waves: 0.3 },
+  water: {
+    deep: 0.6, depthCells: 5, shore: 0.22, shine: 0.3, waveCells: 7, waveSpeed: 0.06, waves: 0.3,
+    edgeNoise: 1, edgeScale: 6, edgeFine: 0.3,
+  },
   ice: { depthCells: 8, deep: 0.55, frost: 0.4, sheen: 0.25, stress: 0.35, crackWidth: 1, crackGrow: 0.45, texScale: 1.5, texDeep: 0.2 },
   road: {
-    verge: 1.4, vergeColor: null, vergeAmount: 0.35, ruts: 0.22, rutOffset: 1.8, rutWidth: 0.55,
-    smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0,
+    verge: 2.2, vergeColor: null, vergeAmount: 0.3, ruts: 0.22, rutOffset: 1.8, rutWidth: 0.55,
+    smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0, vergeInside: 0.6, edgeNoise: 0.3,
   },
   bridge: { kind: 'steen', land: 0.33, height: 1.6 },
-  objects: { rocks: 0.35 },
-  waterPlants: { density: 0.35, width: 3 },
+  objects: { rocks: 1, rockGround: true, rockShade: 0.88 },
+  waterPlants: { density: 0.55, width: 2, reach: 3, offset: [-0.3, 0.7], clump: 7 },
   grain: 0.035,
   light: { dx: 0.45, dy: 0.6, alpha: 0.36, blur: 2 },
   grade: { saturation: 0, brightness: 1, contrast: 1, tint: '#ffffff', tintStrength: 0 },
@@ -134,34 +147,30 @@ export const LOOK = {
 };
 
 // Bomen, struiken, rotsen en kraters als sprites (public/view/objects-view.js), getekend op 32 px
-// per cel. step: rooster in cellen (op elk punt hoogstens één object, met vast toeval verschoven);
+// per cel. step: rooster in cellen (op elk punt hoogstens één object, met vast toeval verschoven;
+// lowStep op een kaart met alleen lage begroeiing, zoals heggen; rockStep voor rotsblokken op de grond);
 // turn: zoveel radialen draaien ze hoogstens (de tekening heeft licht van linksboven); scale: grootte
 // per soort (x de getekende maat), van..tot; tall: soorten die boven de tanks uitsteken (kruinen);
 // height: hoe hoog voor de schaduw (cellen verschuiving per cel van look.light); craterSize: krater-
-// sprite x de straal van de krater. Welke soorten een kaart heeft: vegetation.sprites in het
+// sprite x de straal van de krater (0,55: ongeveer zo groot als een tank, kleiner dan het gegraven gat). Een tank is ~6,6 cellen: een boomkruin 7–10, een rotsblok 4–6.
+// overhang: zoveel cellen mag een kruin of rotsblok over de rand van zijn bos of rotsveld hangen (aan
+// de rand worden ze kleiner, hoogstens tot minScale); crown: zo'n deel van de sprite is echt kruin. Welke soorten een kaart heeft: vegetation.sprites in het
 // kaartbestand ({soort: aandeel}), anders de soort bij vegetation.type; vegetation.palmCoast: tot zo
 // ver van het water wordt begroeiing een palm.
 export const OBJECTS = {
-  step: 2.5, turn: 0.3, craterSize: 1.2,
+  step: 3, lowStep: 2, rockStep: 2, turn: 0.3, craterSize: 0.55, overhang: 1, minScale: 0.45, crown: 0.85,
   scale: {
-    den: [0.65, 0.95], berk: [0.62, 0.9], loof: [0.68, 0.98], palm: [0.7, 0.95],
-    heg: [0.7, 0.9], struik: [0.55, 0.85], cactus: [0.5, 0.8], rots: [0.5, 0.85],
+    den: [1.15, 1.6], berk: [1.05, 1.45], loof: [1.2, 1.65], palm: [1.1, 1.5],
+    heg: [0.8, 1.15], struik: [0.8, 1.2], cactus: [0.75, 1.1], rots: [0.8, 1.2],
   },
   tall: ['den', 'berk', 'loof', 'palm'],
-  height: { tall: 1.4, low: 0.5 },
+  height: { tall: 2.2, low: 0.6 },
 };
 
 // Tanks als sprite (public/world-view.js): public/assets/tanks/<sprite>/tank[-<paint>].png, 448 x 448
-// px, px pixels per cel, neus naar rechts, draaipunt in het midden. Het embleem of nummer tekent de
-// code erop, op mark[sprite] = [x, y, straal] in cellen vanaf het midden (neus naar rechts; anders
-// mark.default). Ploeg C en D (variant van A en B) krijgen variantTint: iets donkerder.
-export const TANK_ART = {
-  px: 32, variantTint: 0xb8b8b8,
-  mark: {
-    default: [-0.3, 0, 0.6], t34: [0.45, 0, 0.55], panzer4: [-0.25, 0, 0.55], sherman: [-0.2, 0, 0.6],
-    tiger: [-0.2, 0, 0.6], koenigstiger: [-0.4, 0, 0.6], panther: [-0.3, 0, 0.6],
-  },
-};
+// px, px pixels per cel, neus naar rechts, draaipunt in het midden. Geen embleem of nummer op de tank
+// (keuze van de eigenaar). Ploeg C en D (variant van A en B) krijgen variantTint: iets donkerder.
+export const TANK_ART = { px: 32, variantTint: 0xb8b8b8 };
 
 // De basis als bouwpakket (public/view/base-kit.js), in cellen: wall = dikte van de muur, corner,
 // post en item = maat van hoekpaal, deurpost en spullen, items = zoveel spullen binnen langs de muren
@@ -169,12 +178,13 @@ export const BASE_KIT = { px: 32, wall: 2, corner: 3, post: 3, item: 3, items: 4
 
 // Gebouwen in drie stadia (public/view/buildings-view.js): footprints = grondvlak (cellen) van elk
 // getekend gebouw, stages = vanaf zoveel treffers-nog-over is het heel, half, puin (BUILDING.hp = 4),
-// height = hoogte voor de schaduw, px = pixels per cel in de tekening. De kaartmaker gebruikt dezelfde
+// height = hoogte voor de schaduw, px = pixels per cel waarvoor de tekening gemaakt is (de sprite wordt
+// op het grondvlak geschaald: ~1,7 x de tekening, zodat een huis groter is dan een tank). De kaartmaker gebruikt dezelfde
 // grondvlakken voor kerken, boerderijen en dorpshuizen; houses = aandeel woonhuizen en rijhuizen
 // (een rijhuis ligt de helft van de keren gedraaid)
 export const BUILDINGS = {
-  px: 32, height: 1.6, stages: [3, 1, 0], houses: { 'huis-woon': 0.6, 'huis-rij': 0.4 },
-  footprints: { kerk: [8, 15], boerderij: [11, 10], 'huis-woon': [6, 6], 'huis-rij': [12, 5] },
+  px: 32, height: 2.7, stages: [3, 1, 0], houses: { 'huis-woon': 0.6, 'huis-rij': 0.4 },
+  footprints: { kerk: [14, 26], boerderij: [19, 17], 'huis-woon': [10, 10], 'huis-rij': [20, 8] },
 };
 
 // Dingen van gevaren en schaarse middelen als sprite (public/view/hazards-view.js): px = pixels per
@@ -186,12 +196,26 @@ export const PROPS = { px: 32, parachute: [2.4, -2.2], dropMs: 500 };
 // pixels per cel in de tekening; kinds per stijl: soort op het water of ijs en soort op de oever
 // (onWater: ook op open water, anders alleen op ijs). De woestijn heeft er geen.
 export const WATER_PLANTS = {
-  step: 2, scale: [0.6, 0.95], px: 32,
+  step: 1.5, scale: [0.6, 0.95], px: 32,
   kinds: {
     zomer: { water: 'waterlelie', bank: 'oeverplant', onWater: true },
     winter: { water: 'ijsblad', bank: 'oeverriet', onWater: false },
   },
 };
+
+// Rand van de kaart (geen rotsrand meer): band = zoveel cellen langs elke rand zijn onbegaanbaar (2
+// tankbreedtes; een tank is 2 x TANK_WID = 5,2 breed). Het terrein loopt erin door en wordt naar buiten
+// donkerder: curve = hoe snel (1 = gelijkmatig, hoger = sneller donker), helemaal zwart aan de rand.
+// Alleen op kaarten met features; de retrokaart houdt zijn rotsrand.
+export const EDGE = { band: 11, curve: 1.8 };
+
+// Ingesneeuwde (of ondergestoven) eigen tank (public/world-view.js, drawBuried): een hoop over de
+// tank. px = pixels per cel in de getekende hoop; length en width = maat in cellen (de tank is ~6,6 x
+// 5,2); at = zoveel cellen ligt het midden achter het midden van de tank (de loop steekt eruit);
+// turretAt = plek van de toren t.o.v. het midden van de hoop, turret = zoveel schemert hij erdoor
+// (0..1); fade = zoveel verbleekt de tank naar de kleur van de hoop; growMs = zo lang groeit hij aan;
+// puff = zoveel wolkjes als hij eraf valt
+export const BURIAL = { px: 24, length: 7.2, width: 6.2, at: -0.4, turretAt: 0.2, turret: 0.45, fade: 0.55, growMs: 900, puff: 14 };
 
 // Flipbook-effecten (public/view/effects-view.js): sheets = bladen in public/assets/effects/;
 // grootte in cellen van een treffer op een tank, een ontploffende tank, de brug en een inslag;

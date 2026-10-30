@@ -57,7 +57,9 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - **Assets**: sprites en texturen staan in `public/assets/` (`manifest.json` is de bron, `LEESMIJ.md`
   zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
   tekent de weergave het procedureel of zoals vroeger. De opdracht voor de graphics staat in
-  `docs/opdracht-claude-code-graphics.md` (fases 0–8).
+  `docs/opdracht-claude-code-graphics.md` (fases 0–8). Reparaties en wensen daarna (mist en rook,
+  rotsrand, berm, waterlijn, ingesneeuwde tank, maten van huizen en bomen, rand van de kaart) staan in
+  `docs/spec-grafische-reparaties.md` (§1–§9).
 - **Effecten verraden niets**: mondingsvuur, splinters, flipbook-effecten, lichtvlekjes en kogels van
   anderen alleen als je ze scherp ziet; waterplanten die op een tunnel verdwijnen alleen waar je zicht hebt; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
@@ -88,7 +90,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
     achter een hoek zie je); naast en achter je niet, en daar zie je het obstakel zelf ook niet;
   - buiten de cirkel zie je alleen in de kijkboog iets: een vage contour zonder kleur (geen schim);
   - de donkere schaduw volgt precies dezelfde regel (`visibleCell`);
-  - waar je geen zicht hebt, zie je geen tunnels, sporen, kraters of ijsbarsten: daar ligt de
+  - bomkraters (van artillerie of een ontplofte tank) zie je altijd, ook zonder zicht;
+  - waar je geen zicht hebt, zie je geen tunnels, sporen of ijsbarsten: daar ligt de
     schone kaart (`L.clean`, met masker) over de grond;
   - de knop ZICHT AAN/UIT in de bovenste balk (`blitz.visionOverlay`) zet mist, schaduw en
     vervaging uit; de zichtregel blijft gelden;
@@ -100,6 +103,11 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - **Geen loopgraven bij Koersk** (en geen zigzag-optie in de kaartmaker): één zandweg met de brug.
 - **Geen metrotunnels in Berlijn.** Geen aparte pagina's per map: alles via de spelpagina.
 - Een weggeschoten plant ruimt alles binnen 4 cellen op (`FELL.clearRadius`), zodat een tank erdoor past.
+- **Geen rotsrand om de kaart.** Langs de rand ligt een onbegaanbare strook van 2 tankbreedtes
+  (`EDGE.band`): het terrein loopt erin door (spiegelbeeld) en wordt naar buiten zwart. Regel:
+  `playable` in `world.js`; niet voor de retrokaart.
+- Huizen zijn groter dan een tank (`BUILDINGS.footprints`, ~1,7 × de tekening); bomen 7–10 cellen,
+  kruinen hangen hoogstens `OBJECTS.overhang` cel over open grond.
 - K = zelfvernietiging: dood, telt voor niemand als kill.
 - De minikaart staat aan via `DISPLAY.minimap` (per map te overschrijven). Er staat alleen je eigen
   tank, je eigen basis, het terrein en brandstof/munitie op: geen tunnels, sporen, andere bases of

@@ -61,7 +61,7 @@ export function createBuildingView({ layer, shadows, game, particles, shadowColo
         s.anchor.set(0.5);
         s.position.set((b.x0 + b.x1 + 1) / 2, (b.y0 + b.y1 + 1) / 2);
         s.rotation = fit.turned ? Math.PI / 2 : 0;
-        s.scale.set(1 / BUILDINGS.px);
+        [s.width, s.height] = BUILDINGS.footprints[fit.name]; // op het grondvlak geschaald (de tekening kan kleiner zijn)
         return s;
       };
       const body = make(layer), shadow = make(shadows);

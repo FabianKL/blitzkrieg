@@ -117,7 +117,8 @@ export function createParticles(clouds, cloudAlpha = {}) {
   }
   const texOf = { chunk: TEX.white, ring: TEX.ring, fire: TEX.disc, spark: TEX.white, flash: TEX.flash };
   function sprite(kind) {
-    const s = pools[kind].pop() || groups[kind].addChild(new Sprite(texOf[kind] || TEX.disc));
+    // wolken met een zachte rand: een volle cirkel geeft zichtbare ronde schijven
+    const s = pools[kind].pop() || groups[kind].addChild(new Sprite(texOf[kind] || (kind in clouds ? TEX.soft : TEX.disc)));
     s.visible = true;
     if (LIGHT.has(kind)) s.blendMode = 'add';
     if (kind === 'spark') s.anchor.set(0, 0.5); else s.anchor.set(0.5);
@@ -153,7 +154,8 @@ export function createParticles(clouds, cloudAlpha = {}) {
         list[w++] = p;
         const k = p.ttl / p.max, r = p.r1 + (p.r0 - p.r1) * k, s = p.s; // k: 1 -> 0
         s.position.set(p.x, p.y);
-        if (p.kind in clouds) { s.width = s.height = 2 * r; s.alpha = (cloudAlpha[p.kind] ?? 0.45) * k; }
+        // zachte vlek: groter en wat dekkender, zodat hij even groot en zwaar oogt als de oude schijf
+        if (p.kind in clouds) { s.width = s.height = 2.8 * r; s.alpha = Math.min(1, (cloudAlpha[p.kind] ?? 0.45) * 1.4) * k; }
         else if (p.kind === 'chunk') { s.width = 0.7; s.height = 0.5; s.rotation = p.rot + (1 - k) * 4; s.alpha = 1; }
         else if (p.kind === 'ring') { s.width = s.height = 2 * r; s.alpha = 0.8 * k; }
         else if (p.kind === 'spark') {

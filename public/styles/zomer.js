@@ -111,7 +111,6 @@ function drawTank(ctx, team, x, y, ang) {
   ctx.beginPath(); ctx.arc(-0.2, 0, 1.45, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = team.dark; ctx.lineWidth = 0.2; ctx.stroke();
 
-  drawEmblem(ctx, team, -0.2, 0, 0.9);
   ctx.restore();
 }
 
@@ -122,10 +121,10 @@ export default function start(game) {
     fullText: 'alle vier de ploegen zijn al bemand',
     // grondshader (view/ground-gpu.js): donkere rand langs tunnels, bladerdek, modderige oever
     surface: {
-      lip: { shade: 0.6, amount: 1, inner: 1 }, rock: { edge: 0.44, light: 1.27 }, veg: 'canopy',
+      lip: { shade: 0.6, amount: 1, inner: 1 }, rock: { edge: 0.72, light: 1.15 }, veg: 'canopy',
       bank: { shade: 0.62 }, floor: { color: '#2c2119', grid: 3, grain: 8 }, debris: '#70502e',
     },
-    clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 },
+    clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 }, burialColor: '#a39274', // stof van de storm
     onEvent, drawBase, baseLabel, drawTank, teamLook,
     shadow: { color: 0x000000, alpha: 0.38 },
     eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },

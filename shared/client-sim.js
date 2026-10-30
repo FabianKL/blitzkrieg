@@ -69,7 +69,7 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.me = msg.you;
   state.mapW = msg.w ?? G.BASE_W_CELLS;
   state.mapH = msg.h ?? G.BASE_H_CELLS;
-  G.setMapSize(state.mapW, state.mapH); // kaartgrootte van dit potje
+  G.setMapSize(state.mapW, state.mapH, G.edgeBand(G.MAPS[msg.mapId ?? msg.room])); // kaartgrootte (en onbegaanbare rand) van dit potje
   state.size = msg.size;
   state.mapId = msg.mapId ?? msg.room;
   state.lobby = !!msg.lobby;

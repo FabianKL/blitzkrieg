@@ -19,7 +19,7 @@ export default { // §10.7
   features: [
     { type: 'river', from: [0, 0.4], to: [1, 0.4], width: 5, bridges: 'atRoads', wiggle: 0.03, fords: { klein: 1, middel: 2, groot: 3, extragroot: 3 }, dikes: { floodplain: 1, width: 2 } },
     { type: 'road', from: [0.5, 0], to: [0.5, 1], width: 2 },
-    { type: 'village', at: [0.5, 0.24], size: 0.05, name: 'Arnhem', buildings: [5, 8], landmark: 'kerk' },
+    { type: 'village', at: [0.5, 0.24], size: { klein: 0.14, middel: 0.09 }, name: 'Arnhem', buildings: [4, 8], landmark: 'kerk' },
     { type: 'ditches', rect: [0, 0.56, 1, 1], spacing: 24, damsEvery: 1 },
   ],
   hazard: { type: 'bridgeBlast', armorLoss: 40, chance: 0.1, chanceStep: 0.05 }, // kans per oversteek, +5% na elke oversteek

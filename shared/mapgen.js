@@ -5,7 +5,7 @@
 import {
   W, H, EMPTY as EMPTY_CELL, DIRT, ROCK, WATER, VEG, BUILDING, WALL, BASE, CLASS, CLASSES, BUILDING_HP, BASE_W, BASE_H,
   BASE_W_CELLS, BASE_H_CELLS, DOOR_CLEAR, DOOR_HALF, ICE_BW, ICE_BH, MAX_PLAYERS, sizeDims, inBounds, mulberry32, makeNoise,
-  indexVeg, reachable,
+  indexVeg, reachable, edgeBand,
 } from './world.js';
 import { applyTerrainChange } from './terrain.js';
 import { T, VEGETATION, MAP_SIZES, VIEW_CELLS, BUILDINGS } from './config.js';
@@ -61,9 +61,14 @@ function tryMap(seed, rules, players) {
   const veg = new Uint16Array(N);
   const vegHp = [];
   const fixedClass = new Uint8Array(N); // 1 = klasse gezet door een kenmerk (weg, ijs, dijk, ...)
-  const isBorder = makeBorder(map, noise);
+  // Geen rotsrand: een strook van edgeBand cellen langs de rand is onbegaanbaar (playable in
+  // world.js). De kaartmaker werkt alleen binnen de strook (border, zoals vroeger de rotsrand) en
+  // vult hem op het eind met het spiegelbeeld van het terrein ernaast (mirrorEdge), zodat het land
+  // doorloopt en de percentages over het speelbare deel kloppen.
+  const band = edgeBand(rules);
+  const isBorder = (x, y) => !inBounds(x, y) || x < band || y < band || x >= W - band || y >= H - band;
   const border = new Uint8Array(N);
-  for (let i = 0; i < N; i++) if (map[i] === ROCK) border[i] = 1;
+  for (let i = 0; i < N; i++) if (isBorder(i % W, (i / W) | 0)) border[i] = 1;
   const features = rules.features || [];
   const of = (type) => features.filter((f) => f.type === type);
   const pt = (f) => [Math.round(f[0] * (W - 1)), Math.round(f[1] * (H - 1))];
@@ -281,13 +286,16 @@ function tryMap(seed, rules, players) {
     // kerk (herkenningspunt) aan een schuine kant van het plein, niet op een straat; grondvlak van
     // de getekende kerk (BUILDINGS.footprints)
     let church = false;
-    const [cw, ch] = BUILDINGS.footprints.kerk;
-    for (const [sx, sy, off] of [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([a, b]) => [a, b, Math.round(1.6 * T) + 2 + (k - 1) * T]))) {
-      if (church) break;
-      const x0 = sx > 0 ? v.cx + off : v.cx - off - cw, y0 = sy > 0 ? v.cy + off : v.cy - off - ch;
-      if (placeBuilding(x0, y0, cw, ch)) {
-        landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + cw / 2, y: y0 + ch / 2 });
-        church = true;
+    const [kw, kh] = BUILDINGS.footprints.kerk;
+    // rechtop, en anders dwars (een krap dorp: de kerk is lang)
+    for (const [cw, ch] of [[kw, kh], [kh, kw]]) {
+      for (const [sx, sy, off] of [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([a, b]) => [a, b, Math.round(1.6 * T) + 2 + (k - 1) * T]))) {
+        if (church) break;
+        const x0 = sx > 0 ? v.cx + off : v.cx - off - cw, y0 = sy > 0 ? v.cy + off : v.cy - off - ch;
+        if (placeBuilding(x0, y0, cw, ch)) {
+          landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + cw / 2, y: y0 + ch / 2 });
+          church = true;
+        }
       }
     }
     const want = lo + Math.floor(rnd() * (hi - lo + 1)) - (church ? 1 : 0);
@@ -393,9 +401,10 @@ function tryMap(seed, rules, players) {
 
   // ---------- 4. Bases tekenen, verbinden en objecten ----------
   drawBases(map, veg, bases, isBorder, noise);
-  connectBases(map, bases, isBorder);
+  connectBases(map, bases, isBorder, band);
   ensureWeatherRoutes(map, terrain, bases, isBorder, rules);
   const { fields, mines } = rules.mines ? addMines(map, bases, rnd, Math.max(2, Math.round((8 * W * H) / 100000))) : { fields: [], mines: [] };
+  mirrorEdge(map, terrain, veg, band);
 
   const w = {
     map, terrain, track: new Uint16Array(N), veg, vegHp: Uint8Array.from(vegHp), scar: new Uint8Array(N),
@@ -442,7 +451,7 @@ function misplaced(w, rules) {
       if (!cells.length || w.map[cells[0]] !== BUILDING) continue;
       n++; sx += cells[0] % W; sy += (cells[0] / W) | 0;
     }
-    const r = Math.sqrt(f.size) / 2, [lo, hi] = f.buildings || [0, Infinity];
+    const r = Math.sqrt(villageSize(f)) / 2, [lo, hi] = f.buildings || [0, Infinity];
     if (n < lo || n > hi || Math.abs(sx / n / W - f.at[0]) >= r || Math.abs(sy / n / H - f.at[1]) >= r) return true;
   }
   return false;
@@ -475,7 +484,7 @@ function densify(path) {
 // kunnen bereiken. Op een kopie alle veranderingen doen; lukt het niet, dan wordt de doorgang
 // die connectBases graaft een dam van harde grond.
 function ensureWeatherRoutes(map, terrain, bases, isBorder, rules) {
-  ensureThawRoute(map, terrain, bases, isBorder);
+  ensureThawRoute(map, terrain, bases, isBorder, edgeBand(rules));
   // alle rondes nadoen (de inundatie stijgt elke ronde verder); de dooi doet ensureThawRoute
   const w = { map: map.slice(), terrain: terrain.slice(), track: new Uint16Array(map.length), scar: new Uint8Array(map.length), veg: new Uint16Array(map.length) };
   let any = false;
@@ -488,7 +497,7 @@ function ensureWeatherRoutes(map, terrain, bases, isBorder, rules) {
   }
   if (!any) return;
   const before = w.map.slice();
-  connectBases(w.map, bases, isBorder);
+  connectBases(w.map, bases, isBorder, edgeBand(rules));
   for (let i = 0; i < map.length; i++) {
     if (w.map[i] === before[i]) continue;
     if (map[i] === ROCK || map[i] === WATER) map[i] = DIRT;
@@ -566,9 +575,12 @@ function protectedZone(bases) {
 }
 
 // ---------- Kenmerken ----------
+// Maat van een dorp: een deel van de kaart, of per kaartgrootte ({ klein, middel, ... }): de huizen
+// hebben een vaste maat, dus op een kleine kaart moet het dorp naar verhouding groter
+export const villageSize = (f) => (typeof f.size === 'object' ? f.size[sizeName()] ?? f.size.middel : f.size);
 function villageRect(f, rnd) {
   const cx = Math.round((f.at[0] + (rnd() - 0.5) * 0.04) * (W - 1)), cy = Math.round((f.at[1] + (rnd() - 0.5) * 0.04) * (H - 1));
-  const hx = Math.round((Math.sqrt(f.size) * W) / 2), hy = Math.round((Math.sqrt(f.size) * H) / 2);
+  const hx = Math.round((Math.sqrt(villageSize(f)) * W) / 2), hy = Math.round((Math.sqrt(villageSize(f)) * H) / 2);
   return { f, cx, cy, x0: cx - hx, y0: cy - hy, x1: cx + hx, y1: cy + hy };
 }
 function countIn(v, test) {
@@ -828,6 +840,24 @@ function fillClasses(map, terrain, fixedClass, border, classes, pct, P, seed, in
 
 const BASE_SPOTS = [[0.18, 0.25], [0.82, 0.75], [0.82, 0.25], [0.18, 0.75]];
 
+// De onbegaanbare rand vullen met het spiegelbeeld van het terrein ernaast (gespiegeld in de
+// binnenrand van de strook): rivieren, wegen, bos en rots lopen door zonder strepen. Gebouwen niet
+// (die worden grond); een plant houdt zijn nummer, zodat hij als geheel omgaat.
+function mirrorEdge(map, terrain, veg, band) {
+  if (!band) return;
+  const m = (v, n) => (v < band ? 2 * band - 1 - v : v >= n - band ? 2 * (n - band) - 1 - v : v);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const sx = m(x, W), sy = m(y, H);
+      if (sx === x && sy === y) continue;
+      const i = y * W + x, j = sy * W + sx, c = map[j];
+      terrain[i] = terrain[j];
+      map[i] = c === BUILDING || c >= WALL ? DIRT : c;
+      veg[i] = c === VEG ? veg[j] : 0;
+    }
+  }
+}
+
 // ---------- Retrokaart en bouwstenen voor de kaartmakers ----------
 // Kaart maken. players = aantal bases (zoveel spelers als de kaartgrootte toelaat).
 // Kaarten met features (het formaat uit §11) gaan via de kaartmaker in mapgen.js; zonder features
@@ -921,10 +951,10 @@ export function drawBases(map, veg, bases, isBorder, noise) {
 
 // Bevroren rivier: de bases moeten elkaar ook na de dooi nog kunnen bereiken (via de brug).
 // Lukt dat niet, dan wordt de doorgang die connectBases graaft een dam van harde grond.
-export function ensureThawRoute(map, terrain, bases, isBorder) {
+export function ensureThawRoute(map, terrain, bases, isBorder, band = 0) {
   if (CLASS.ice !== undefined && terrain.includes(CLASS.ice)) {
     const thawed = Uint8Array.from(map, (v, i) => (v === DIRT && terrain[i] === CLASS.ice ? WATER : v));
-    connectBases(thawed, bases, isBorder);
+    connectBases(thawed, bases, isBorder, band);
     for (let i = 0; i < map.length; i++) {
       if (thawed[i] !== DIRT) continue;
       if (map[i] === ROCK || map[i] === WATER) map[i] = DIRT;
@@ -964,9 +994,9 @@ export function addMines(map, bases, rnd, count) {
   return { fields, mines };
 }
 
-export function connectBases(map, bases, isBorder) {
+export function connectBases(map, bases, isBorder, band = 0) {
   for (let tries = 0; tries < 4; tries++) {
-    const seen = reachable(map, bases[0]);
+    const seen = reachable(map, bases[0], band);
     const lost = bases.filter((b) => !seen[b.y * W + b.x]);
     if (!lost.length) return;
     for (const b of lost) {

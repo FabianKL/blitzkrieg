@@ -135,8 +135,7 @@ function drawTank(g, team, x, y, ang, now) {
   g.beginPath(); g.roundRect(-1.5, -1.15, 2.3, 0.6, 0.3); g.fill();
   g.strokeStyle = shade(tur, 0.5); g.lineWidth = 0.18;
   g.beginPath(); g.roundRect(-1.7, -1.3, 3.0, 2.6, 0.55); g.stroke();
-  if (team.emblem) drawEmblem(g, { ...team, mark: team.emblem }, -0.35, 0.05, 0.7);
-  else { g.fillStyle = shade(tur, 0.7); g.beginPath(); g.arc(-0.55, 0.4, 0.45, 0, Math.PI * 2); g.fill(); }
+  { g.fillStyle = shade(tur, 0.7); g.beginPath(); g.arc(-0.55, 0.4, 0.45, 0, Math.PI * 2); g.fill(); }
 
   // antenne met wapperende wimpel in de ploegkleur
   const wave = Math.sin(now / 120 + x) * 0.25;
@@ -196,7 +195,7 @@ export default function start(game) {
     viewCells: 90, background: '#d9be86', teams: TEAMS, teamLook,
     // grondshader (view/ground-gpu.js): lichte zandlip, schaduw in de loopgraaf, takjes, natte zandrand
     surface: {
-      lip: { shade: 1.1, amount: 0.5, inner: 0.72 }, rock: { edge: 0.55, light: 1.3 }, veg: 'twigs',
+      lip: { shade: 1.1, amount: 0.5, inner: 0.72 }, rock: { edge: 0.75, light: 1.15 }, veg: 'twigs',
       bank: { shade: 0.8 }, floor: { color: '#d2b680', tracks: 0.88, grain: 10 }, debris: '#624c30', twig: '#58422a',
     },
     // minikaart (world-view.js): tijdens een zandstorm waait er stof over de hele kaart
@@ -205,7 +204,7 @@ export default function start(game) {
       overlay: (g) => { if (view.eraserInfo()?.active) { g.fillStyle = 'rgba(196, 150, 90, 0.4)'; g.fillRect(0, 0, G.W, G.H); } },
     },
     objects: { draw: drawObjects, over: false },
-    clouds: { dust: '226, 200, 150', smoke: '64, 56, 46' }, cloudAlpha: { dust: 0.6, smoke: 0.45 },
+    clouds: { dust: '226, 200, 150', smoke: '64, 56, 46' }, cloudAlpha: { dust: 0.6, smoke: 0.45 }, burialColor: '#d9be8a',
     onEvent, drawUnder: drawMines, drawBase, drawTank,
     tankFrames: 8, tankPeriod: 754, // één golf van de wimpel (sin(now / 120))
     shadow: { color: 0x50321a, alpha: 0.35, dx: 0.5, dy: 0.65 },

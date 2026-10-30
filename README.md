@@ -110,9 +110,19 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
 - **Plassen en rotsen** worden niet afgekapt door de rechthoekige zones (rond de bases, het dorp, een
   park, een gebied): komt een blob daaraan, dan wordt hij kleiner of komt hij ergens anders.
 - **Dorpshuizen** tellen niet mee in de percentages; ze gaan van de andere klassen af (ruimere marge).
-- **Maten van gebouwen**: de kaartmaker gebruikt de grondvlakken van de getekende gebouwen
-  (`BUILDINGS` in config.js): kerk 8×15 (spec: 2T×3T), boerderij 11×10, dorpshuizen 60% woonhuis 6×6
-  en 40% rijhuis 12×5 (de helft gedraaid) in plaats van een willekeurige maat van T tot 2T.
+- **Maten van gebouwen**: de kaartmaker gebruikt vaste grondvlakken (`BUILDINGS` in config.js), ongeveer
+  1,7 keer de getekende gebouwen, zodat een huis groter is dan een tank (~6,6 × 5,2): kerk 14×26
+  (spec: 2T×3T; in een krap dorp dwars), boerderij 19×17, dorpshuizen 60% woonhuis 10×10 en 40%
+  rijhuis 20×8 (de helft gedraaid) in plaats van een willekeurige maat van T tot 2T. Een dorp kan per
+  kaartgrootte een eigen maat hebben (`size: { klein, middel }`): Arnhem is op klein naar verhouding
+  groter, anders passen de huizen niet.
+- **Rand van de kaart**: geen rotsrand meer. Langs de rand ligt een onbegaanbare strook van 2
+  tankbreedtes (`EDGE.band`, 11 cellen) waarin het terrein doorloopt (het spiegelbeeld van het terrein
+  ernaast) en naar buiten toe zwart wordt. Tanks, kogels, gebouwen, bases en gevaren blijven erbuiten
+  (`playable` in world.js); de percentages gelden voor het speelbare deel. De retrokaart houdt zijn
+  rotsrand. Een kogel stopt dus aan de binnenrand van de strook, niet aan de kaartrand (spec §5.8).
+- **Bedekte tank** (spec §5.7): je eigen tank blijft onder een hoop sneeuw, zand of stof te zien
+  (verbleekt, de loop steekt eruit, `BURIAL` in config.js); de hoop valt eraf als je rijdt of schiet.
 - **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen. Er zijn **geen
   loopgraven** (op verzoek): verhard is één zandweg met de brug over de Psel, aangevuld met
   zijwegen vanaf de rand, samen nog steeds ~6%.
@@ -157,12 +167,12 @@ De spelregels kijken er niet naar.
 | `light` | Eén lichtbron voor alle schaduwen: verschuiving `dx`, `dy` (cellen), `alpha`, `blur` (zachte rand). |
 | `weather`, `amount` | Deeltjes in beeld: `'snow'`, `'dust'`, `'rain'` of `null`, en hoeveel per 100×100 cellen (in een storm `stormFactor` keer zoveel). |
 | `vignette`, `fogSoft` | Donkere hoeken; hoe zacht de rand van je zichtveld inloopt. |
-| `water` | Water in de grondshader: `deep` (donkerte in het diepe), `depthCells` (zo ver van de kant is het diep), `shore` (lichter aan de kant), `shine` (glinstering), golven met `waveCells` (maat), `waveSpeed` en `waves` (sterkte). Ook de glans op moeras en doorwaadbare plekken. |
+| `water` | Water in de grondshader: `deep` (donkerte in het diepe), `depthCells` (zo ver van de kant is het diep), `shore` (lichter aan de kant), `shine` (glinstering), golven met `waveCells` (maat), `waveSpeed` en `waves` (sterkte). Ook de glans op moeras en doorwaadbare plekken. Grillige waterlijn (ook ijs, alleen weergave): `edgeNoise` (zoveel cellen schuift de lijn hoogstens), `edgeScale` (maat van de inhammen), `edgeFine` (aandeel rafelige ruis). |
 | `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). Met een ijstextuur in het manifest (`ice` per stijl of kaart): `texScale` (maat t.o.v. de grondtextuur) en `texDeep` (donkerder naar het midden). |
-| `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur) en `vergeAmount` (berm), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
-| `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js). |
+| `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur), `vergeAmount` en `vergeInside` (berm; hij begint al op de rijbaan, zodat er geen lijn langs de weg komt), `edgeNoise` (rafelige rand), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
+| `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok), `rockGround` (de rotsblokken liggen op de gewone grond, zonder grijze rotsplaat; standaard aan, Berlijn uit voor de betonnen bunkers) en `rockShade` (zoveel donkerder is de grond midden in een rotsveld). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js): een boomkruin is 7–10 cellen, groter dan een tank; aan de rand van een bos of rotsveld worden ze kleiner, zodat een kruin hoogstens `overhang` cel over open grond hangt (hij staat boven de tanks). |
 | tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: `sprite` (map in `public/assets/tanks/`) en `paint` (andere schildering, `tank-<paint>.png`). Waar het embleem of nummer op de tank komt en hoe donker ploeg C/D is: `TANK_ART` in config.js. Zonder bestand tekent de stijl de tank. |
-| `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit) en `width` (breedte van de strook langs de oever). |
+| `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit), `width` (zo ver van de waterlijn een waterlelie of ijsblad), `reach`, `offset` en `clump` (oeverplanten staan in groepjes tegen de getekende waterlijn). |
 | `grain` | Korrel over het beeld (0..1); samen met `grade` en `vignette` in één nabewerkingsfilter. |
 | `bridge` | Bruggen als sprite: `kind` (`hout`, `steen`, `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |

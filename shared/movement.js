@@ -1,7 +1,7 @@
 // Rijden, kogels en mijnen: de regels die server en browser elke tick gelijk uitrekenen. De browser
 // voorspelt er je eigen tank mee.
 import { ICE } from './config.js';
-import { BUILDING, BULLET_SPEED, CLASSES, DIRS, DIRT, MASKS, SPEED_ONE, TANK_R, TANK_WID, TUNNEL_COST, VEG, W, WATER, dirIndex, inBounds, isSolid, tankCovers } from './world.js';
+import { BUILDING, BULLET_SPEED, CLASSES, DIRS, DIRT, MASKS, SPEED_ONE, TANK_R, TANK_WID, TUNNEL_COST, VEG, W, WATER, dirIndex, isSolid, playable, tankCovers } from './world.js';
 
 // Welke mijnen liggen onder de tankvorm op (x, y) in richting dir?
 export function minesUnder(mines, x, y, dir) {
@@ -78,7 +78,7 @@ export function waterUnder(map, cx, cy, dir) {
   let n = 0;
   for (const c of MASKS[dir]) {
     const x = cx + c.x, y = cy + c.y;
-    if (!inBounds(x, y)) return -1;
+    if (!playable(x, y)) return -1;
     const v = map[y * W + x];
     if (v === WATER) n++;
     else if (isSolid(v)) return -1;
@@ -119,7 +119,7 @@ export function probeFootprint(map, cx, cy, dir) {
   let dirt = false;
   for (const c of MASKS[dir]) {
     const x = cx + c.x, y = cy + c.y;
-    if (!inBounds(x, y)) return FP_BLOCKED;
+    if (!playable(x, y)) return FP_BLOCKED;
     const v = map[y * W + x];
     if (isSolid(v)) return FP_BLOCKED;
     if (v === DIRT) dirt = true;
@@ -133,7 +133,7 @@ export function stepCost(w, cx, cy, dir) {
   let worst = null;
   for (const c of MASKS[dir]) {
     const x = cx + c.x, y = cy + c.y;
-    if (!inBounds(x, y)) return null;
+    if (!playable(x, y)) return null;
     const v = w.map[y * W + x];
     if (isSolid(v)) return null;
     if (v === DIRT) {
@@ -152,7 +152,7 @@ export function stepCost(w, cx, cy, dir) {
 // geraakte cel (b.x, b.y), zodat server en clients dezelfde plant raken.
 const SWEEP = Math.floor(TANK_WID);
 function bulletCheck(b, map, tanks, dig) {
-  if (!inBounds(b.x, b.y)) return { kind: 'solid' };
+  if (!playable(b.x, b.y)) return { kind: 'solid' };
   const c = map[b.y * W + b.x];
   if (isSolid(c) && c !== WATER) return { kind: 'solid' };
   for (const t of tanks) {
@@ -162,7 +162,7 @@ function bulletCheck(b, map, tanks, dig) {
   for (let k = 1; k <= SWEEP; k++) {
     for (const sgn of [1, -1]) {
       const x = b.x + px * k * sgn, y = b.y + py * k * sgn;
-      if (!inBounds(x, y)) continue;
+      if (!playable(x, y)) continue;
       const v = map[y * W + x];
       if (v === VEG || v === BUILDING) { b.x = x; b.y = y; return { kind: 'solid' }; }
     }

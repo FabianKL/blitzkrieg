@@ -1,7 +1,7 @@
 // Controles op een gegenereerde kaart volgens SPEC-blitzkrieg §6 en acceptatiecriteria 6, 7 en 8.
 // Gebruikt door tests.mjs (een paar seeds) en gen.mjs (npm run test:gen, 100 seeds per geval).
 import * as G from '../shared/game.js';
-import { terrainShares, MARGIN, toleranceOf } from '../shared/mapgen.js';
+import { terrainShares, MARGIN, toleranceOf, villageSize } from '../shared/mapgen.js';
 import { VIEW_CELLS } from '../shared/config.js';
 import { check } from './helpers.mjs';
 
@@ -114,7 +114,7 @@ export function checkGeneratedMap(id, w, players, size) {
     check(n >= f.buildings[0] && n <= f.buildings[1], `${tag}: ${n} gebouwen in ${f.name}, verwacht ${f.buildings.join('–')}`);
     if (f.landmark) check(w.landmarks.length >= 1, `${tag}: geen herkenningspunt (${f.landmark}) in ${f.name}`);
     // de huizen liggen in het dorpsvak (± 5% verschoven) rond de opgegeven plek
-    const r = Math.sqrt(f.size) / 2 + 0.05;
+    const r = Math.sqrt(villageSize(f)) / 2 + 0.05;
     check(Math.abs(sx / n / G.W - f.at[0]) < r && Math.abs(sy / n / G.H - f.at[1]) < r, `${tag}: ${f.name} ligt niet op de plek`);
   }
   // rivieren op de plek: de route ligt gemiddeld binnen 10% van de opgegeven lijn
