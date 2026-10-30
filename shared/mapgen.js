@@ -8,7 +8,7 @@ import {
   indexVeg, reachable,
 } from './world.js';
 import { applyTerrainChange } from './terrain.js';
-import { T, VEGETATION, MAP_SIZES, VIEW_CELLS } from './config.js';
+import { T, VEGETATION, MAP_SIZES, VIEW_CELLS, BUILDINGS } from './config.js';
 import { terrainChangesAt } from './weather.js';
 
 const ATTEMPTS = 8; // zo vaak opnieuw als de percentages niet binnen de marge komen
@@ -260,7 +260,7 @@ function tryMap(seed, rules, players) {
     const [lo, hi] = v.f.buildings || [4, 8];
     if (v.f.layout === 'row') { // rij boerderijen langs de weg door het dorp
       const want = lo + Math.floor(rnd() * (hi - lo + 1));
-      const bw = Math.round(2.2 * T);
+      const [bw, bh] = BUILDINGS.footprints.boerderij; // precies het grondvlak van de getekende boerderij
       for (let n = 0, x = Math.round(v.cx - (want * (bw + T)) / 2), tries = 0; n < want && tries < 200 && x < W - bw; tries++, x += 2) {
         const sgn = n % 2 ? 1 : -1; // om en om aan beide kanten van de weg
         // de weg zoeken (hoogstens 20 cellen onder het midden), dan naar de rand ervan
@@ -268,7 +268,7 @@ function tryMap(seed, rules, players) {
         while (y < Math.min(H - 2, v.cy + 40) && terrain[y * W + x] !== CLASS.paved) y++;
         if (terrain[y * W + x] !== CLASS.paved) continue;
         while (y > 0 && y < H - 1 && terrain[y * W + x] === CLASS.paved) y += sgn;
-        if (placeBuilding(x, sgn < 0 ? y - 2 * T - 1 : y + 2, bw, 2 * T)) { n++; x += bw + T - 2; }
+        if (placeBuilding(x, sgn < 0 ? y - bh - 1 : y + 2, bw, bh)) { n++; x += bw + T - 2; }
       }
       continue;
     }
@@ -278,19 +278,23 @@ function tryMap(seed, rules, players) {
         stroke([[v.cx, v.cy], [Math.round(v.cx + dx * (v.x1 - v.cx)), Math.round(v.cy + dy * (v.y1 - v.cy))]], T, (i) => { if (open(i) && map[i] !== WATER) setPaved(i); });
       }
     }
-    // kerk (herkenningspunt) aan een schuine kant van het plein, niet op een straat
+    // kerk (herkenningspunt) aan een schuine kant van het plein, niet op een straat; grondvlak van
+    // de getekende kerk (BUILDINGS.footprints)
     let church = false;
+    const [cw, ch] = BUILDINGS.footprints.kerk;
     for (const [sx, sy, off] of [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([a, b]) => [a, b, Math.round(1.6 * T) + 2 + (k - 1) * T]))) {
       if (church) break;
-      const x0 = sx > 0 ? v.cx + off : v.cx - off - 2 * T, y0 = sy > 0 ? v.cy + off : v.cy - off - 3 * T;
-      if (placeBuilding(x0, y0, 2 * T, 3 * T)) {
-        landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + T, y: y0 + 1.5 * T });
+      const x0 = sx > 0 ? v.cx + off : v.cx - off - cw, y0 = sy > 0 ? v.cy + off : v.cy - off - ch;
+      if (placeBuilding(x0, y0, cw, ch)) {
+        landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + cw / 2, y: y0 + ch / 2 });
         church = true;
       }
     }
     const want = lo + Math.floor(rnd() * (hi - lo + 1)) - (church ? 1 : 0);
     for (let n = 0, tries = 0; n < want && tries < 600; tries++) {
-      const bw = Math.round(T * (1 + rnd())), bh = Math.round(T * (1 + rnd()));
+      // een woonhuis of een (soms gedraaid) rijhuis, precies het grondvlak van de tekening
+      const kind = rnd() < BUILDINGS.houses['huis-woon'] ? 'huis-woon' : 'huis-rij', turn = rnd() < 0.5;
+      const [fw, fh] = BUILDINGS.footprints[kind], [bw, bh] = turn ? [fh, fw] : [fw, fh];
       const x0 = Math.round(v.x0 + rnd() * (v.x1 - v.x0 - bw)), y0 = Math.round(v.y0 + rnd() * (v.y1 - v.y0 - bh));
       if (Math.hypot(x0 + bw / 2 - v.cx, y0 + bh / 2 - v.cy) < 2.5 * T) continue;
       if (!nearPaved(x0, y0, bw, bh, T)) continue; // aan een straat

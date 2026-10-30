@@ -110,6 +110,9 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
 - **Plassen en rotsen** worden niet afgekapt door de rechthoekige zones (rond de bases, het dorp, een
   park, een gebied): komt een blob daaraan, dan wordt hij kleiner of komt hij ergens anders.
 - **Dorpshuizen** tellen niet mee in de percentages; ze gaan van de andere klassen af (ruimere marge).
+- **Maten van gebouwen**: de kaartmaker gebruikt de grondvlakken van de getekende gebouwen
+  (`BUILDINGS` in config.js): kerk 8×15 (spec: 2T×3T), boerderij 11×10, dorpshuizen 60% woonhuis 6×6
+  en 40% rijhuis 12×5 (de helft gedraaid) in plaats van een willekeurige maat van T tot 2T.
 - **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen. Er zijn **geen
   loopgraven** (op verzoek): verhard is één zandweg met de brug over de Psel, aangevuld met
   zijwegen vanaf de rand, samen nog steeds ~6%.

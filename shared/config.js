@@ -162,9 +162,11 @@ export const BASE_KIT = { px: 32, wall: 2, corner: 3, post: 3, item: 3, items: 4
 
 // Gebouwen in drie stadia (public/view/buildings-view.js): footprints = grondvlak (cellen) van elk
 // getekend gebouw, stages = vanaf zoveel treffers-nog-over is het heel, half, puin (BUILDING.hp = 4),
-// height = hoogte voor de schaduw, px = pixels per cel in de tekening
+// height = hoogte voor de schaduw, px = pixels per cel in de tekening. De kaartmaker gebruikt dezelfde
+// grondvlakken voor kerken, boerderijen en dorpshuizen; houses = aandeel woonhuizen en rijhuizen
+// (een rijhuis ligt de helft van de keren gedraaid)
 export const BUILDINGS = {
-  px: 32, height: 1.6, stages: [3, 1, 0],
+  px: 32, height: 1.6, stages: [3, 1, 0], houses: { 'huis-woon': 0.6, 'huis-rij': 0.4 },
   footprints: { kerk: [8, 15], boerderij: [11, 10], 'huis-woon': [6, 6], 'huis-rij': [12, 5] },
 };
 
