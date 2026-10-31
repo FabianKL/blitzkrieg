@@ -1,9 +1,8 @@
 // 1944 · Overlord — Carentan. Velden: zie maps/index.js.
-import { T_SHERMAN } from './common.js';
 
 export default { // §10.6
   name: 'Carentan 1944', style: 'zomer', header: 'OVERLORD — CARENTAN · JUNI 1944',
-  tanks: { A: { ...T_SHERMAN, camo: '#3e4a26' }, B: { name: 'PANZER IV', hull: '#b49a52', mark: 'number', number: '615', camo: '#4d5a2e', sprite: 'panzer4', paint: 'camo' } },
+  tanks: { A: 'sherman', B: 'panther' },
   terrainPercent: { normal: 40, marsh: 15, vegetation: 15, paved: 8, hard: 7, soft: 5, water: 6, rock: 4 },
   classes: {
     paved: { label: 'Wegen en dorpsstraten', color: '#8c8a80' },

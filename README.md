@@ -22,7 +22,7 @@ SCHERM helemaal rechtsboven in de balk (Android zet het scherm dan ook liggend v
 beginscherm" / "Toevoegen aan startscherm" in de browser: dan opent het spel zonder browserbalken. `/retro` heeft geen
 touchbesturing.
 
-Rechts staat op elke map hetzelfde: je tank (zeges en meters), de minikaart (terrein, je eigen basis,
+Rechts staat op elke map hetzelfde: je tank (plaatje, naam, land, zeges en meters), de minikaart (terrein, je eigen basis,
 je eigen tank en waar je brandstof (B) of munitie (M) haalt; geen tunnels, andere bases of tanks) en
 de legenda van de map. Ook op de kaart zelf staat boven elke volle laadplek (depot, dropping) een
 B- of M-badge met een pulserende ring.
@@ -53,7 +53,7 @@ B- of M-badge met een pulserende ring.
   kijkboog (130° in je rijrichting) kijk je er net langs: je ziet de rand van het obstakel en een
   tank die half achter een hoek staat. Naast en achter je zie je het obstakel zelf niet, en ook
   niets erlangs. Buiten de cirkel wordt het beeld steeds vager. Daar zie je alleen in je kijkboog
-  nog iets: een tank als vage, donkere contour, zonder kleur of kenmerken. Waar je niets kunt
+  nog iets: een tank die daar rijdt, zie je gewoon (geen vage contour meer). Waar je niets kunt
   zien, is het beeld donkerder en zie je geen tunnels, sporen, kraters of ijsbarsten, alleen het
   kale terrein. Met de knop **ZICHT AAN/UIT** in de bovenste balk zet je de mist, schaduw en
   vervaging uit; wat je niet kunt zien, blijft verborgen.
@@ -89,8 +89,8 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
   het beeld. Het weer houdt zijn waarden in T: 12 T = de volle cirkel, 6 T = de helft, nooit kleiner
   dan 2 tankbreedtes (`VISION`). Rotsen blokkeren het zicht ook. In een kijkboog van 130° in je
   rijrichting kijk je langs de randen van obstakels, naast en achter je niet. Buiten de cirkel zie
-  je geen schim maar, alleen in de kijkboog, een contour die naar de rand van het venster
-  vervaagt. Kogels van anderen zie je alleen scherp in je zichtveld. Tunnels en sporen zie je
+  je geen schim maar, alleen in de kijkboog, de tank zelf (de vage contour is geschrapt; alleen de
+  valse contouren bij El Alamein bestaan nog, zie `docs/open-punten.md`). Kogels van anderen zie je alleen scherp in je zichtveld. Tunnels en sporen zie je
   alleen waar je zicht hebt (de spec laat ze overal zien). Een tegenstander die je scherp ziet,
   geeft geen richtingshint.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard
@@ -171,7 +171,7 @@ De spelregels kijken er niet naar.
 | `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). Met een ijstextuur in het manifest (`ice` per stijl of kaart): `texScale` (maat t.o.v. de grondtextuur) en `texDeep` (donkerder naar het midden). |
 | `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur), `vergeAmount` en `vergeInside` (berm; hij begint al op de rijbaan, zodat er geen lijn langs de weg komt), `edgeNoise` (rafelige rand), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
 | `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok), `rockGround` (de rotsblokken liggen op de gewone grond, zonder grijze rotsplaat; standaard aan, Berlijn uit voor de betonnen bunkers) en `rockShade` (zoveel donkerder is de grond midden in een rotsveld). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js): een boomkruin is 7–10 cellen, groter dan een tank; aan de rand van een bos of rotsveld worden ze kleiner, zodat een kruin hoogstens `overhang` cel over open grond hangt (hij staat boven de tanks). |
-| tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: `sprite` (map in `public/assets/tanks/`) en `paint` (andere schildering, `tank-<paint>.png`). Waar het embleem of nummer op de tank komt en hoe donker ploeg C/D is: `TANK_ART` in config.js. Zonder bestand tekent de stijl de tank. |
+| tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: welke tank elke ploeg rijdt, bijv. `{ A: 'comet', B: 'panther' }`. De vijf tanks (Landsverk, T-34, Panther, Sherman, Comet) met naam, land en minikaartkleur staan in `TANKS` in config.js, op elke map met hetzelfde uiterlijk. Tekening: `public/assets/tanks/<naam>/` (romp, rupsstrook, `tank.json`; zie `docs/SPEC-tanks.md`); de rupsen schuiven mee met het rijden. Hoe donker ploeg C/D is: `TANK_ART`. Zonder bestand tekent de stijl de tank. |
 | `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit), `width` (zo ver van de waterlijn een waterlelie of ijsblad), `reach`, `offset` en `clump` (oeverplanten staan in groepjes tegen de getekende waterlijn). |
 | `grain` | Korrel over het beeld (0..1); samen met `grade` en `vignette` in één nabewerkingsfilter. |
 | `bridge` | Bruggen als sprite: `kind` (`hout`, `steen`, `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
@@ -210,6 +210,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
+| `public/view/tanks-view.js` | Tanks als container: twee rupsen (`TilingSprite`, schuiven mee met rijden en draaien) en de romp erboven, schaduw met `tank.png`; anders `tank.png` of de getekende tank. |
+| `tools/maak-tanks.mjs` | Knipt de tanksprites uit de vellen in `input/tanks/` (tank, romp, rupsstrook) en meet `tank.json`: `node tools/maak-tanks.mjs`. |
 | `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld: depots, kratten met parachute en het munitiedepot als sprite uit de atlas, anders getekend). |
 | `public/view/ground-gpu.js` | De grond op de videokaart: één mesh met een eigen shader (terreinklassen met texturen, tunnels, rots, water, ijs, puin, schone kaart buiten je zicht). |
 | `public/view/bridges-view.js` | Bruggen als sprite (begin, herhaald middenstuk, eind) in de richting van de weg, met schaduw; het wrak als de brug bij Arnhem ontploft. |

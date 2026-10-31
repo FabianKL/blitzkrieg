@@ -8,15 +8,15 @@ import { shade, mix, rgb, hash, drawEmblem, FIRE, sandbagRow } from '/render-com
 // Uiterlijk per kaart (config: tanks, via teamLook); de herkenningspanelen en wimpels geven de
 // vaste kleur van de speler
 const TEAMS = [
-  { name: 'CRUSADER', hull: '#c7ad76', turret: '#d4bc87', camo: '#8b7a50', mark: '#2fbf4a' },
-  { name: 'PANZER III', hull: '#b3a47c', turret: '#c2b48d', camo: '#7a7258', mark: '#2f7fe8' },
-  { name: 'M13/40', hull: '#c1a26a', turret: '#cfb17b', camo: '#8e7244', mark: '#e0352b' },
-  { name: 'GRANT', hull: '#bca775', turret: '#cab786', camo: '#6d6847', mark: '#f2b51c' },
+  { name: 'A34 COMET', hull: '#c7ad76', turret: '#d4bc87', camo: '#8b7a50', mark: '#2fbf4a' },
+  { name: 'PANTHER', hull: '#b3a47c', turret: '#c2b48d', camo: '#7a7258', mark: '#2f7fe8' },
+  { name: 'LANDSVERK L-60', hull: '#c1a26a', turret: '#cfb17b', camo: '#8e7244', mark: '#e0352b' },
+  { name: 'M4A1 SHERMAN', hull: '#bca775', turret: '#cab786', camo: '#6d6847', mark: '#f2b51c' },
 ].map((t) => ({ ...t, mini: t.mark }));
 const SLOT = TEAMS.map((t) => t.mark);
 function teamLook(spec, i) {
   const hull = spec.variant ? shade(spec.hull, 0.88) : spec.hull;
-  return { ...spec, emblem: spec.mark, hull, turret: mix(hull, '#ffffff', 0.12), camo: spec.camo || shade(hull, 0.72), mark: SLOT[i], mini: SLOT[i] };
+  return { ...spec, emblem: spec.mark, hull, turret: mix(hull, '#ffffff', 0.12), camo: shade(hull, 0.72), mark: SLOT[i], mini: spec.mini ?? SLOT[i] };
 }
 
 // ---------- Struikjes op de rotsranden (objectlaag, in celmaten) ----------

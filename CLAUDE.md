@@ -51,7 +51,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   Bases en tanks (en de getekende objecten als er geen atlas is) worden met Canvas 2D één keer
   getekend en als texture gebruikt. Een stijl levert alleen `surface` (details van de grond), tanks
   (zonder schaduw), bases, effecten en
-  een korte tekst in het speelveld (`label`); de tankkaart zit in `world-view.js`.
+  een korte tekst in het speelveld (`label`); de tankkaart zit in `view/side-panel.js`, de tanks in
+  beeld in `view/tanks-view.js`.
 - **Uiterlijk per map**: `LOOK` in `shared/config.js` en `look` in het kaartbestand (kleurfilter, grondtextuur,
   weerdeeltjes, lichtbron, vignet, ijs). Alleen voor de weergave; zie README "Uiterlijk per map".
 - **Assets**: sprites en texturen staan in `public/assets/` (`manifest.json` is de bron, `LEESMIJ.md`
@@ -88,7 +89,9 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
     erachter ligt;
   - in een kijkboog van 130° in de rijrichting kijk je langs randen (de rand zelf en een tank half
     achter een hoek zie je); naast en achter je niet, en daar zie je het obstakel zelf ook niet;
-  - buiten de cirkel zie je alleen in de kijkboog iets: een vage contour zonder kleur (geen schim);
+  - buiten de cirkel zie je alleen in de kijkboog iets: een tank die daar rijdt, zie je gewoon
+    (de vage contour is geschrapt; wat er met de valse contouren bij El Alamein en de hints moet,
+    staat in `docs/open-punten.md`);
   - de donkere schaduw volgt precies dezelfde regel (`visibleCell`);
   - bomkraters (van artillerie of een ontplofte tank) zie je altijd, ook zonder zicht;
   - waar je geen zicht hebt, zie je geen tunnels, sporen of ijsbarsten: daar ligt de
@@ -97,7 +100,10 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
     vervaging uit; de zichtregel blijft gelden;
   - een tegenstander die je scherp ziet, geeft geen hint;
   - gehoord binnen 20 T.
-- Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk.
+- Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk. Vijf tanks
+  (`TANKS` in config.js, `docs/SPEC-tanks.md`), op elke map en in elke stijl hetzelfde; een kaart
+  kiest er per ploeg één. Geen embleem of nummer op de tanksprite. Romp + rupsen die meeschuiven
+  (`public/view/tanks-view.js`); de plaatjes maakt `node tools/maak-tanks.mjs` uit `input/tanks/`.
 - Mijnen bij El Alamein zijn onzichtbaar. Gevaren en weer worden alleen in de browser verborgen
   (geen anti-cheat nodig).
 - **Geen loopgraven bij Koersk** (en geen zigzag-optie in de kaartmaker): één zandweg met de brug.

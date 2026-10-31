@@ -7,10 +7,10 @@ import { shade, mix, drawEmblem, drawSpots, FIRE, sandbagRow } from '/render-com
 
 // Uiterlijk per kaart (config: tanks, via teamLook); dit is alleen de begintoestand
 const TEAMS = [
-  { name: 'SHERMAN', ploeg: 'PLOEG A · ★', hull: '#55602f', turret: '#647038', dark: '#2c3318', mark: 'star', fuel: '#4e5a26' },
-  { name: 'PANZER', ploeg: 'PLOEG B · B2', hull: '#62686b', turret: '#72787a', dark: '#2f3335', mark: 'number', number: 'B2', fuel: '#4a4f52' },
-  { name: 'T-34', ploeg: 'PLOEG C · 34', hull: '#45573a', turret: '#516646', dark: '#232d1d', mark: 'redstar', fuel: '#3f5534' },
-  { name: 'CROMWELL', ploeg: 'PLOEG D · ◉', hull: '#857650', turret: '#95865d', dark: '#443b25', mark: 'roundel', fuel: '#7a6a3e' },
+  { name: 'M4A1 SHERMAN', ploeg: 'PLOEG A · ★', hull: '#55602f', turret: '#647038', dark: '#2c3318', mark: 'star', fuel: '#4e5a26' },
+  { name: 'PANTHER', ploeg: 'PLOEG B · B2', hull: '#62686b', turret: '#72787a', dark: '#2f3335', mark: 'number', number: 'B2', fuel: '#4a4f52' },
+  { name: 'T-34/76', ploeg: 'PLOEG C · 34', hull: '#45573a', turret: '#516646', dark: '#232d1d', mark: 'redstar', fuel: '#3f5534' },
+  { name: 'A34 COMET', ploeg: 'PLOEG D · ◉', hull: '#857650', turret: '#95865d', dark: '#443b25', mark: 'roundel', fuel: '#7a6a3e' },
 ];
 function teamLook(spec, i) {
   const hull = spec.variant ? shade(spec.hull, 0.85) : spec.hull;

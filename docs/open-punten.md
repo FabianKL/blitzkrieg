@@ -55,7 +55,10 @@ Controleer daarna met `npm test` en `npm run test:gen -- "" 10` dat de andere ka
 ## Nieuwe features
 
 ### Nieuwe tanks met bewegende rupsbanden
-Spec: `docs/SPEC-tanks.md`. Het plan is goedgekeurd, maar er is nog niets gebouwd.
+Spec: `docs/SPEC-tanks.md`. Gebouwd (nog niet gecommit). Afwijkingen van de spec: geen emblemen
+of nummers op de sprite (keuze van de eigenaar); de vage contour is geschrapt, een tank in je
+kijkboog buiten de cirkel wordt gewoon getekend. Nog door de eigenaar te controleren: de keuze
+van de tanks per map (§5) en hoe de rupsen eruitzien in het spel.
 
 ## Bugs
 

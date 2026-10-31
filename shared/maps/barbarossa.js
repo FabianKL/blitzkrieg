@@ -1,9 +1,8 @@
 // 1941 · Barbarossa — Russische vlakte. Velden: zie maps/index.js.
-import { T_T34 } from './common.js';
 
 export default { // §10.2
   name: 'Russische vlakte 1941', style: 'zomer', header: 'BARBAROSSA — RUSSISCHE VLAKTE · ZOMER 1941',
-  tanks: { A: T_T34, B: { name: 'PANZER III', hull: '#5a5e60', mark: 'number', number: '311', sprite: 'panzer3' } },
+  tanks: { A: 't34', B: 'panther' },
   terrainPercent: { hard: 55, normal: 15, soft: 5, vegetation: 12, paved: 6, rock: 4, water: 3 },
   classes: {
     paved: { label: 'Zandweg en dorp', color: '#b89c6a' },

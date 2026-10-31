@@ -8,18 +8,18 @@ import { clamp, shade, mix, rgb, hash, h01, vnoise, drawEmblem, drawSpots, FIRE 
 
 let ctx = null; // canvas waarop de basis getekend wordt (zie drawBase)
 
-// Uiterlijk per kaart (config: tanks, via teamLook); mini = vaste kleur per speler op de minikaart
+// Uiterlijk per kaart (config: tanks, via teamLook); mini = kleur op de minikaart (uit TANKS, anders per speler)
 const TEAMS = [
-  { name: 'SHERMAN', hull: '#5d7a2e', turret: '#6c8b36', mark: 'star', mini: '#2fd04a' },
-  { name: 'CROMWELL', hull: '#2f6db3', turret: '#3d80c6', star: false, mini: '#2f7fe8' },
-  { name: 'T-34', hull: '#b3392e', turret: '#c74a3c', star: false, mini: '#e8352b' },
-  { name: 'STUART', hull: '#c49c25', turret: '#d6b03a', star: false, mini: '#f2b51c' },
+  { name: 'M4A1 SHERMAN', hull: '#5d7a2e', turret: '#6c8b36', mark: 'star', mini: '#2fd04a' },
+  { name: 'A34 COMET', hull: '#2f6db3', turret: '#3d80c6', star: false, mini: '#2f7fe8' },
+  { name: 'T-34/76', hull: '#b3392e', turret: '#c74a3c', star: false, mini: '#e8352b' },
+  { name: 'PANTHER', hull: '#c49c25', turret: '#d6b03a', star: false, mini: '#f2b51c' },
 ];
 
 const MINI = TEAMS.map((t) => t.mini);
 function teamLook(spec, i) {
   const hull = spec.variant ? shade(spec.hull, 0.85) : spec.hull;
-  return { ...spec, hull, turret: mix(hull, '#ffffff', 0.12), mini: MINI[i] };
+  return { ...spec, hull, turret: mix(hull, '#ffffff', 0.12), mini: spec.mini ?? MINI[i] };
 }
 
 function starPath(g, x, y, r, points, inner, rot) {

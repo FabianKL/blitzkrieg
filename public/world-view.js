@@ -37,10 +37,10 @@
 //   burialColor                kleur van de hoop sneeuw, zand of stof op je ingesneeuwde tank (BURIAL)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, TANK_ART, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
-import { autoDetectRenderer, Container, Graphics, Sprite, Texture, ImageSource, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
+import { autoDetectRenderer, Container, Graphics, Sprite, Texture, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
 import { KawaseBlurFilter } from 'pixi-filters';
 import {
@@ -56,6 +56,7 @@ import { createBuildingView } from '/view/buildings-view.js';
 import { loadBaseKit, drawBaseKit } from '/view/base-kit.js';
 import { createPlantView } from '/view/plants-view.js';
 import { createEffectView } from '/view/effects-view.js';
+import { createTankView } from '/view/tanks-view.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
@@ -355,7 +356,7 @@ export function startWorld(style, game) {
       style.onTeams?.();
     clearTankTextures();
     }
-    loadTankArt();
+    tankView.load(specs || [], `${game.mapId}|${(specs || []).map((t) => t.sprite).join()}`);
     pal = makePalette(game.rules);
     makeBridgeMask();
     applyLook(lookFor(game.rules));
@@ -444,8 +445,8 @@ export function startWorld(style, game) {
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
-  // Contour: één neutraal silhouet voor alle tanks (romp, rupsen, koepel, loop), zodat je niet
-  // ziet welke speler het is; zachte randen door een eigen vervaging op de laag
+  // Contour: een neutraal silhouet van een tank (romp, rupsen, koepel, loop), alleen nog voor de
+  // valse contouren bij El Alamein; zachte randen door een eigen vervaging op de laag
   const contourTex = drawnTexture(14 * 16, 14 * 16, (g) => {
     g.scale(16, 16); g.translate(7, 7); g.fillStyle = '#fff';
     g.fillRect(-3.5, -3.2, 7, 1.4); g.fillRect(-3.5, 1.8, 7, 1.4); g.fillRect(-3, -2.2, 6, 4.4);
@@ -455,7 +456,6 @@ export function startWorld(style, game) {
   const contourLayer = L.tanks.addChild(new Container());
   contourLayer.filters = [new KawaseBlurFilter({ strength: 2, quality: 2 })];
   const contourSetup = (s) => { s.anchor.set(0.5); s.scale.set(1 / 16); s.tint = 0x0c0c0e; };
-  const contours = spritePool(contourLayer, contourTex, contourSetup);
   const mirageSprites = spritePool(contourLayer, contourTex, contourSetup); // valse contouren (El Alamein)
   const drift = L.tanks.addChild(new Sprite(driftTexture())); // hoop sneeuw op je ingesneeuwde tank
   drift.anchor.set(0.5); drift.visible = false;
@@ -476,6 +476,7 @@ export function startWorld(style, game) {
   // Schaduwen: dezelfde vorm in het zwart, iets verschoven (licht van linksboven)
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
+  const tankView = createTankView({ layer: tankLayer, shadows: tankShadows, shadow: SHADOW, report: assetReport });
   const OBJ_SHADOW = 1.4; // bomen en rotsen zijn hoger dan een tank: langere schaduw
   // Gebouwen in drie stadia (view/buildings-view.js), in de objectlaag
   const buildingView = createBuildingView({
@@ -616,7 +617,7 @@ export function startWorld(style, game) {
     look = next;
     Object.assign(SHADOW, { dx: look.light.dx, dy: look.light.dy, alpha: look.light.alpha });
     objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
-    for (const s of tankSprites.values()) s.shadow.alpha = SHADOW.alpha;
+    tankView.setShadowAlpha(SHADOW.alpha);
     setGrade(look.grade);
     filterKey = '';
     shadowBlur.strength = look.light.blur * (devicePixelRatio || 1);
@@ -646,45 +647,6 @@ export function startWorld(style, game) {
     for (const t of tankTex.values()) t.destroy(true);
     tankTex.clear();
   }
-  const tankSprites = new Map(); // id -> {body, shadow}
-  // Tanksprites (TANK_ART, config.js): per ploeg de tekening uit public/assets/tanks/<sprite>/, met
-  // mipmaps zodat een draaiende tank niet flikkert, en het embleem of nummer als eigen sprite die
-  // meedraait. Zonder bestand: de getekende tank van de stijl (tankTexture).
-  let tankArt = []; // per ploeg {tex, tint} of undefined (geen embleem of nummer: keuze van de eigenaar)
-  let tankArtKey = '';
-  async function loadTankArt() {
-    const specs = G.teamsFor(game.rules) || [], key = `${game.mapId}|${specs.map((t) => `${t.sprite}-${t.paint}`).join()}`;
-    if (key === tankArtKey) return;
-    tankArtKey = key;
-    const m = await loadManifest(), out = [], tex = new Map();
-    assetReport.tanks = {};
-    for (let id = 0; id < specs.length; id++) {
-      const spec = specs[id];
-      if (!spec?.sprite) continue;
-      const paint = `tanks/${spec.sprite}/tank-${spec.paint}.png`, plain = `tanks/${spec.sprite}/tank.png`;
-      const path = spec.paint && has(m, paint) ? paint : plain;
-      if (!tex.has(path)) {
-        const img = has(m, path) ? await loadImage(m, path) : null;
-        tex.set(path, img && new Texture({ source: new ImageSource({ resource: img, autoGenerateMipmaps: true, scaleMode: 'linear', mipmapFilter: 'linear' }) }));
-      }
-      if (!tex.get(path)) continue;
-      out[id] = { tex: tex.get(path), tint: spec.variant ? TANK_ART.variantTint : 0xffffff };
-      assetReport.tanks['ABCD'[id]] = path;
-    }
-    if (tankArtKey === key) tankArt = out;
-  }
-
-  function tankSprite(id) {
-    let s = tankSprites.get(id);
-    if (!s) {
-      s = { body: tankLayer.addChild(new Sprite()), shadow: tankShadows.addChild(new Sprite()) };
-      for (const k of [s.body, s.shadow]) { k.anchor.set(0.5); k.scale.set(1 / TANK_PX); }
-      s.shadow.tint = SHADOW.color; s.shadow.alpha = SHADOW.alpha;
-      tankSprites.set(id, s);
-    }
-    return s;
-  }
-
   // Bases: per kaart één keer getekend (de stijl tekent ze in celmaten), met schaduw
   const BASE_PX = 12, BASE_PAD = 5;
   let baseKit = null; // bouwpakket van de stijl (view/base-kit.js), of null: dan tekent de stijl de basis
@@ -733,28 +695,21 @@ export function startWorld(style, game) {
     tracers.end(); heads.end();
   }
 
-  // Tanks: de eigen altijd, tegenstanders scherp, als vage contour of helemaal niet (§9)
-  function drawTanks(now, cam) {
-    const me = eye(), radius = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
-    const opts = { radius, view: cam, smokes: game.smokes };
-    contours.begin();
-    for (const s of tankSprites.values()) s.body.visible = s.shadow.visible = false;
+  // Tanks: de eigen altijd, tegenstanders als je ze ziet (§9): binnen je zichtcirkel, of erbuiten
+  // in je kijkboog ('contour' in vision.js; die tank wordt gewoon getekend, keuze van de eigenaar)
+  function drawTanks(now) {
+    const me = eye(), opts = { radius: visionRadius(), view: view.cam, smokes: game.smokes };
+    tankView.begin();
     drift.visible = false;
     for (const [id, t] of game.tanks) {
-      if (!t.a || t.rx === undefined || t.ang === undefined) { t.seen = null; continue; }
+      if (!t.a || t.rx === undefined || t.ang === undefined) { t.seen = null; tankView.forget(id); continue; }
       const x = Math.round(t.rx), y = Math.round(t.ry);
       const seen = id === game.me || DEBUG ? 'sharp' : me && sightOf(game.map, me, { x, y, buried: t.b }, opts);
       t.seen = seen;
-      if (seen === 'sharp') {
-        const s = tankSprite(id), art = tankArt[id], tex = art?.tex ?? tankTexture(id, now), px = art ? TANK_ART.px : TANK_PX;
-        for (const k of [s.body, s.shadow]) { k.texture = tex; k.rotation = t.ang; k.visible = true; k.scale.set(1 / px); }
-        s.body.position.set(t.rx + 0.5, t.ry + 0.5);
-        s.body.tint = art?.tint ?? 0xffffff;
-        s.shadow.position.set(t.rx + 0.5 + SHADOW.dx, t.ry + 0.5 + SHADOW.dy);
-        if (id === game.me) drawBuried(t, s, now);
-      } else if (seen === 'contour') drawContour(contours, t.rx + 0.5, t.ry + 0.5, t.ang, contourAlpha(Math.hypot(x - me.x, y - me.y), radius, far));
+      if (!seen) { tankView.forget(id); continue; }
+      const s = tankView.show(id, t, () => [tankTexture(id, now), TANK_PX], SHADOW);
+      if (id === game.me) drawBuried(t, s, now);
     }
-    contours.end();
   }
 
   function drawWorld(now, dt) {
@@ -787,7 +742,7 @@ export function startWorld(style, game) {
     hz.drawObjects();
     hz.drawRefillMarkers(now);
     drawBullets(cam);
-    drawTanks(now, cam);
+    drawTanks(now);
 
     effects.clear();
     hz.drawBarrage(now);
@@ -998,7 +953,7 @@ export function startWorld(style, game) {
   const burialTint = rgb(style.burialColor || '#ece8dc');
   const puff = style.clouds?.puff ? 'puff' : style.clouds?.dust ? 'dust' : Object.keys(style.clouds || { smoke: 1 })[0];
   let buriedSince = 0, wasBuried = false;
-  // s: de tanksprite (body, shadow), t: je tank
+  // s: de tank in beeld (body: container met romp en rupsen, shadow), t: je tank
   function drawBuried(t, s, now) {
     if (!t.b) {
       if (wasBuried) { // de hoop valt eraf

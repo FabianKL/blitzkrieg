@@ -5,6 +5,7 @@
 import * as G from '/shared/game.js';
 import { HUD, TUNNEL } from '/shared/config.js';
 import { hash, rgb, R, REFILL_COLORS, paintRefillIcon } from '/render-common.js';
+import { loadManifest, has } from '/assets.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -186,10 +187,11 @@ export function createSidePanel(v) {
     v.paintRegion(g, sx, sy, N, () => v.objects?.drawRegion(g, sx, sy, N, N, 0, 0, sw.width, sw.height));
   }
   // ---------- Tankkaart in het zijpaneel (op elke kaart dezelfde, opmaak per stijl in CSS) ----------
-  // Naam, zeges en drie meters; alleen bijwerken als er iets veranderd is. Plus de korte tekst van
-  // de stijl in het speelveld (je ploeg, hoe lang de mist nog hangt).
+  // Je tank (tank.png, als die er is), naam, land, zeges en drie meters; alleen bijwerken als er
+  // iets veranderd is. Plus de korte tekst van de stijl in het speelveld (je ploeg, hoe lang de mist
+  // nog hangt).
   const card = {
-    el: $('card'), name: $('card-name'), wins: $('card-wins'), label: $('panel-label'), key: '',
+    el: $('card'), name: $('card-name'), nation: $('card-nation'), tank: $('card-tank'), wins: $('card-wins'), label: $('panel-label'), key: '', sprite: '',
     gauges: ['fuel', 'armour', 'ammo'].map((k) => ({ fill: $(`fill-${k}`), num: $(`num-${k}`), low: HUD.low[k] })),
   };
   function drawCard(now) {
@@ -197,11 +199,13 @@ export function createSidePanel(v) {
     if (card.label && card.label.textContent !== txt) card.label.textContent = txt;
     const t = game.tanks.get(game.me);
     if (!t || !card.el) return;
-    const name = style.teams[game.me]?.name ?? '';
+    const team = style.teams[game.me], name = team?.name ?? '';
     const key = `${name},${t.f},${t.s},${t.m},${t.c},${t.a}`;
     if (key === card.key) return;
     card.key = key;
     card.name.textContent = name;
+    if (card.nation) card.nation.textContent = team?.nation ?? '';
+    showTank(team);
     card.wins.textContent = t.c ?? 0;
     const values = [[(t.f ?? 0) / 100, `${t.f ?? 0}%`], [(t.s ?? 0) / G.SHIELD_MAX, `${t.s ?? 0}`], [(t.m ?? 0) / G.AMMO_MAX, `${t.m ?? 0}`]];
     card.gauges.forEach((g, k) => {
@@ -211,6 +215,19 @@ export function createSidePanel(v) {
       g.num.textContent = text;
     });
     card.el.classList.toggle('dead', t.a === 0);
+  }
+
+  // Plaatje van je tank op de kaart (C en D iets donkerder, zoals in het spel); zonder tank.png niets
+  function showTank(team) {
+    const path = team?.sprite ? `tanks/${team.sprite}/tank.png` : '', want = `${path}|${!!team?.variant}`;
+    if (!card.tank || want === card.sprite) return;
+    card.sprite = want;
+    card.tank.classList.toggle('variant', !!team?.variant);
+    loadManifest().then((m) => {
+      if (card.sprite !== want) return;
+      card.tank.hidden = !has(m, path);
+      if (has(m, path)) card.tank.src = `/assets/${path}`;
+    });
   }
 
   // Nieuwe kaart: minikaart opnieuw opbouwen (alle cellen) en de legenda maken

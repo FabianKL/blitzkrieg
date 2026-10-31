@@ -167,10 +167,24 @@ export const OBJECTS = {
   height: { tall: 2.2, low: 0.6 },
 };
 
-// Tanks als sprite (public/world-view.js): public/assets/tanks/<sprite>/tank[-<paint>].png, 448 x 448
-// px, px pixels per cel, neus naar rechts, draaipunt in het midden. Geen embleem of nummer op de tank
-// (keuze van de eigenaar). Ploeg C en D (variant van A en B) krijgen variantTint: iets donkerder.
-export const TANK_ART = { px: 32, variantTint: 0xb8b8b8 };
+// De vijf tanks (docs/SPEC-tanks.md). Een kaart kiest er per ploeg één: tanks: { A: 't34', B: 'panther' }.
+// Alleen uiterlijk: name en nation op de tankkaart; mini de kleur op de minikaart; hull, mark en
+// number alleen voor de getekende tank van de stijl (als de sprites ontbreken; op de sprite komt
+// geen embleem of nummer, keuze van de eigenaar). De tekening staat in public/assets/tanks/<sleutel>/.
+export const TANKS = {
+  landsverk: { name: 'LANDSVERK L-60', nation: 'NEDERLAND', mini: '#f28c1c', hull: '#6a7158', mark: 'triangle' },
+  t34: { name: 'T-34/76', nation: 'SOVJET-UNIE', mini: '#e8352b', hull: '#45573a', mark: 'redstar' },
+  panther: { name: 'PANTHER', nation: 'DUITSLAND', mini: '#2f7fe8', hull: '#5a5e60', mark: 'number', number: '401' },
+  sherman: { name: 'M4A1 SHERMAN', nation: 'VERENIGDE STATEN', mini: '#2fd04a', hull: '#55602f', mark: 'star' },
+  comet: { name: 'A34 COMET', nation: 'VERENIGD KONINKRIJK', mini: '#f2b51c', hull: '#5b6040', mark: 'roundel' },
+};
+
+// Tanks als sprite (public/world-view.js): per tank in public/assets/tanks/<naam>/ tank.png (compleet)
+// en romp.png (zonder rupsen), 448 x 448 px, px pixels per cel, neus naar rechts, draaipunt in het
+// midden; rups.png en tank.json voor de twee rupsen die meeschuiven met het rijden. Ploeg C en D
+// (variant van A en B) krijgen variantTint: iets donkerder. maxStep: verspringt een tank in één beeld
+// verder dan zoveel cellen (opnieuw in de basis), dan schuiven de rupsen niet.
+export const TANK_ART = { px: 32, variantTint: 0xb8b8b8, maxStep: 3 };
 
 // De basis als bouwpakket (public/view/base-kit.js), in cellen: wall = dikte van de muur, corner,
 // post en item = maat van hoekpaal, deurpost en spullen, items = zoveel spullen binnen langs de muren

@@ -1,9 +1,9 @@
 // 1942 · Beleg van Leningrad — Leningrad. Velden: zie maps/index.js.
-import { storm, T_T34 } from './common.js';
+import { storm } from './common.js';
 
 export default { // §10.4
   name: 'Leningrad 1942', style: 'winter', header: 'BELEG VAN LENINGRAD — LENINGRAD · WINTER 1942',
-  tanks: { A: { ...T_T34, winter: true, paint: 'winter' }, B: { name: 'PANZER IV', hull: '#4f5458', mark: 'number', number: '211', sprite: 'panzer4' } },
+  tanks: { A: 't34', B: 'panther' },
   terrainPercent: { soft: 46, hard: 15, ice: 12, rock: 8, vegetation: 12, paved: 5, water: 2 },
   classes: {
     paved: { label: 'Weg en brug', color: '#9a978f' },

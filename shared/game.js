@@ -4,7 +4,7 @@
 // Dit is de ingang (import * as G): hij geeft alles door uit world.js (maten, celtypes, tankvorm),
 // terrain.js (wat de kaart verandert), movement.js (rijden, kogels), codec.js (kaart over de lijn)
 // en mapgen.js (kaart maken). Hier zelf: rondes en score, en het uiterlijk van de ploegen.
-import { GAME, TOUCH } from './config.js';
+import { GAME, TOUCH, TANKS } from './config.js';
 import { DIRS } from './world.js';
 
 export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH } from './config.js';
@@ -14,13 +14,15 @@ export * from './movement.js';
 export * from './codec.js';
 export { generateMap } from './mapgen.js';
 
-// Uiterlijk van de 4 tanks op een kaart (§4): ploeg A en B uit de config, C en D als variant.
-// Alleen het uiterlijk; alle tanks rijden, schieten en incasseren precies hetzelfde.
+// Uiterlijk van de 4 tanks op een kaart (§4): ploeg A en B kiezen een tank uit TANKS (config),
+// C en D rijden een variant daarvan. Alleen het uiterlijk; alle tanks rijden, schieten en
+// incasseren precies hetzelfde. sprite: de map in public/assets/tanks/.
 export function teamsFor(rules) {
   const t = rules?.tanks;
   if (!t) return null;
+  const tank = (id) => ({ ...TANKS[id], sprite: id });
   const variant = (spec) => ({ ...spec, name: `${spec.name} II`, variant: true, number: spec.number && String(Number(spec.number) + 100) });
-  return [t.A, t.B, variant(t.A), variant(t.B)];
+  return [tank(t.A), tank(t.B), variant(tank(t.A)), variant(tank(t.B))];
 }
 
 // ---------- Spel en rondes (§2) ----------

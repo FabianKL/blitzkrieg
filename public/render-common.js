@@ -228,9 +228,9 @@ export function drawEmblem(g, team, cx, cy, r) {
     g.textAlign = 'start'; g.textBaseline = 'alphabetic';
   }
 }
-// Camouflage- of wintervlekken op de romp (rechthoek x, y, w, h; neus naar rechts)
+// Camouflagevlekken op de romp (rechthoek x, y, w, h; neus naar rechts)
 export function drawSpots(g, team, x, y, w, h) {
-  const col = team.winter ? 'rgba(240, 242, 238, 0.85)' : team.camo;
+  const col = team.camo;
   if (!col) return;
   g.save();
   g.beginPath(); g.rect(x, y, w, h); g.clip();

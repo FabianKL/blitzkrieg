@@ -6,6 +6,7 @@ import * as Wx from '../shared/weather.js';
 import * as Hz from '../hazards.js';
 import { mapTests } from './maps.mjs';
 import { acceptanceTest } from './acceptance.mjs';
+import { TANKS } from '../shared/config.js';
 import { fingerprints, expectedFingerprints } from './fingerprint.mjs';
 
 const MAP_IDS = Object.keys(G.MAPS);
@@ -487,14 +488,16 @@ export const tests = [
   {
     name: 'tanks: per kaart alleen een ander uiterlijk, 4 varianten, eigenschappen overal gelijk',
     async run() {
-      const LOOK = new Set(['name', 'hull', 'mark', 'number', 'camo', 'winter', 'sprite', 'paint']); // alleen uiterlijk (sprite, paint: tekening)
+      // een kaart kiest alleen een tank uit de lijst TANKS; die heeft alleen uiterlijk
+      const LOOK = new Set(['name', 'nation', 'mini', 'hull', 'mark', 'number']);
+      for (const [key, tank] of Object.entries(TANKS)) {
+        for (const k of Object.keys(tank)) check(LOOK.has(k), `${key}: tank heeft eigenschap ${k} (alleen uiterlijk)`);
+      }
       const out = [];
       for (const [id, rules] of Object.entries(G.MAPS)) {
         if (id === 'retro') continue;
         check(rules.tanks?.A && rules.tanks?.B, `${id}: geen ploeg A en B`);
-        for (const spec of Object.values(rules.tanks)) {
-          for (const k of Object.keys(spec)) check(LOOK.has(k), `${id}: tank heeft eigenschap ${k} (alleen uiterlijk mag per kaart)`);
-        }
+        for (const pick of Object.values(rules.tanks)) check(typeof pick === 'string' && TANKS[pick], `${id}: tank ${JSON.stringify(pick)} staat niet in TANKS`);
         const teams = G.teamsFor(rules);
         check(teams.length === 4 && new Set(teams.map((t) => t.name)).size === 4, `${id}: 4 verschillende tanks`);
         check(rules.header && rules.style, `${id}: titel of weergave ontbreekt`);

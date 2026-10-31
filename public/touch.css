@@ -59,6 +59,7 @@ html, body { overscroll-behavior: none; }
   [data-style] aside .card { padding: 4px 6px; margin: 0; }
   [data-style] aside .card .top { margin-bottom: 2px; padding-bottom: 2px; }
   [data-style] aside .card .name { font-size: 13px; letter-spacing: 1px; }
+  [data-style] aside .card .nation, [data-style] aside .card .tank { display: none; }
   [data-style] aside .card .wins { font-size: 8px; }
   [data-style] aside .card .wins b { font-size: 14px; margin-top: 0; padding: 0 4px; }
   [data-style] aside .card .gauge { font-size: 8px; margin-top: 2px; gap: 4px; grid-template-columns: 52px 1fr; }
