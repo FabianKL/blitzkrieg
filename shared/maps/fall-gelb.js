@@ -3,6 +3,12 @@
 export default { // §10.1
   name: 'Grebbeberg 1940', style: 'zomer', header: 'FALL GELB — GREBBEBERG · MEI 1940',
   tanks: { A: 'landsverk', B: 'panther' },
+  desc: {
+    setting: 'Mei 1940. De Duitse invasie van Nederland begint. Bij de Grebbeberg verdedigt het Nederlandse leger de Grebbelinie tegen een overmacht.',
+    terrain: 'Groene weilanden in de vallei, een beboste heuvelflank met rotsen, en het dorpje Rhenen met een munitiedepot.',
+    weather: 'Vanaf ronde 2 stijgt het inundatiewater in de vallei. In ronde 3 maakt regen het zicht slechter.',
+    special: 'Munitie alleen bij het depot in Rhenen — je basis vult geen munitie aan. Het stijgende water maakt de vallei steeds moeilijker begaanbaar.',
+  },
   terrainPercent: { normal: 39, soft: 17, hard: 10, vegetation: 15, marsh: 7, rock: 4, paved: 8 },
   classes: {
     paved: { label: 'Wegen en het dorp', color: '#c8b48a' },
@@ -28,7 +34,7 @@ export default { // §10.1
   tunnelColor: '#4a3a22',
   weather: [
     { label: 'Inundatie', from: { round: 2 }, everyRound: true, untilRound: 4, effect: { terrain: { type: 'inundate', valley: [0, 0.55], stages: 3 } } },
-    { label: 'Regen', from: { round: 3 }, untilRound: 3, effect: { visibility: 8 } },
+    { label: 'Regen', from: { round: 3 }, untilRound: 3, effect: { visibility: 8, rain: { min: 0.2, max: 0.6, period: 25 } } },
     { label: 'Rook van brandende boerderijen', effect: { farmSmoke: true } },
   ],
 };

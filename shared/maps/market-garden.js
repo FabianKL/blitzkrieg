@@ -3,6 +3,12 @@
 export default { // §10.7
   name: 'Arnhem 1944', style: 'zomer', header: 'MARKET GARDEN — ARNHEM · SEPTEMBER 1944',
   tanks: { A: 'comet', B: 'panther' },
+  desc: {
+    setting: 'September 1944. Operatie Market Garden: een gewaagde luchtlanding om de brug bij Arnhem te veroveren — "a bridge too far".',
+    terrain: 'Hollands polderlandschap met boomgaarden, de brede Rijn met dijken en uiterwaarden, en het stadje Arnhem.',
+    weather: 'Helder weer met luchtlandingen in de eerste rondes. Daarna mist en regen.',
+    special: 'De brug kan instorten bij elke oversteek — de kans groeit. Geen brandstof of munitie bij de basis: wacht op geallieerde luchtdroppings.',
+  },
   terrainPercent: { normal: 40, soft: 12, hard: 10, water: 12, paved: 8, vegetation: 10, marsh: 5, rock: 3 },
   classes: {
     paved: { label: 'Wegen, brug en stad', color: '#8a7a6a' },
@@ -30,6 +36,6 @@ export default { // §10.7
   tunnelColor: '#4a3a22',
   weather: [
     { label: 'Helder', untilRound: 2, effect: { visibility: 12, drops: true, citySmoke: true } },
-    { label: 'Mist en regen', from: { round: 3 }, effect: { visibility: 8 } },
+    { label: 'Mist en regen', from: { round: 3 }, effect: { visibility: 8, rain: { min: 0.2, max: 0.6, period: 25 } } },
   ],
 };

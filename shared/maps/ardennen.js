@@ -4,6 +4,12 @@ import { storm } from './common.js';
 export default { // §10.8
   name: 'Ardennen 1944', style: 'winter', header: 'WACHT AM RHEIN — ARDENNEN · DECEMBER 1944',
   tanks: { A: 'sherman', B: 'panther' },
+  desc: {
+    setting: 'December 1944. Het Ardennenoffensief: de laatste grote Duitse aanval door de besneeuwde Belgische bossen rond Bastogne.',
+    terrain: 'Dichte dennenbossen, besneeuwde wegen die uitwaaieren vanuit Bastogne, en een bergbeek met houten bruggen.',
+    weather: 'Dichte mist die langzaam optrekt, sneeuwval die wisselt van licht tot zwaar, en sneeuwstormen.',
+    special: 'Artillerie beschiet het bos — zoek dekking buiten de bomen. Brandstofdepots zijn je enige bron: zoek ze voordat je droog komt te staan.',
+  },
   terrainPercent: { soft: 52, hard: 12, vegetation: 18, paved: 8, rock: 6, water: 4 },
   tolerance: { klein: 1, default: 0 }, // klein: wegen (vaste breedte) zijn ~14% verhard, dat gaat van de sneeuw af
   classes: {
@@ -28,6 +34,7 @@ export default { // §10.8
   tunnelColor: '#2b2118',
   weather: [
     { label: 'Dichte mist', from: { secondsInRound: 0 }, untilRound: 2, effect: { visibility: { start: 2, end: 12, overSeconds: 120 }, fog: true } },
+    { label: 'Sneeuwval', effect: { drift: { min: 0.15, max: 0.8, period: 30 } } }, // licht (tunnel dicht in 2 min) tot zwaar (45 s)
     storm('Sneeuwstorm'),
   ],
   hazard: { type: 'forestBarrage', everySeconds: 20, area: 6, warningSeconds: 2, armorLoss: 15 },

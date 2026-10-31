@@ -57,6 +57,7 @@ import { loadBaseKit, drawBaseKit } from '/view/base-kit.js';
 import { createPlantView } from '/view/plants-view.js';
 import { createEffectView } from '/view/effects-view.js';
 import { createTankView } from '/view/tanks-view.js';
+import { createWeatherView } from '/view/weather-view.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
 
@@ -469,7 +470,13 @@ export function startWorld(style, game) {
   visionSprite.anchor.set(0.5);
   const lights = L.fog.addChild(new Graphics());
   const overlaySprite = L.ui.addChild(new Sprite());
-  const eraserG = L.ui.addChild(new Graphics()), eraserLabel = createLabel(L.ui);
+  const eraserG = L.ui.addChild(new Graphics());
+  // Sneeuw, zand en regen vallen vóór de mist, de schaduw en de stormwaas (view/weather-view.js)
+  const weatherView = createWeatherView({
+    layer: L.ui.addChild(new Container()), world, game, lookOf: () => look,
+    stormOf: () => eraserInfo(game), onThunder: (s) => { shake = Math.max(shake, s); },
+  });
+  const eraserLabel = createLabel(L.ui);
   const hintSprites = spritePool(L.ui.addChild(new Container()), TEX.fadeX, (s) => s.anchor.set(0));
   const hintCorners = spritePool(L.ui.addChild(new Container()), TEX.soft);
   const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
@@ -593,7 +600,7 @@ export function startWorld(style, game) {
   // staat). De vervaging rekent op volle resolutie: op halve resolutie werd ook het scherpe midden
   // van het beeld zacht (de filter werkt op de hele wereld).
   function updateFilters(now) {
-    const haze = !!game.weather?.flags.heatHaze && look.haze > 0;
+    const haze = !!game.weather?.flags.heatHaze && look.haze > 0 && weatherView.stormShown < 0.5; // in de storm geen hittewaas
     const blur = !DEBUG && !!eye() && game.visionOverlay !== false && FOG.blur > 0;
     const key = `${haze},${blur}`;
     if (key !== filterKey) {
@@ -754,7 +761,7 @@ export function startWorld(style, game) {
     sightSprite.visible = visionSprite.visible = overlayOn;
     if (!sightOn) { crackMask.texture = plantMask.texture = Texture.EMPTY; gpu.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
     mirageSprites.begin();
-    if (sightOn) { drawSight(me, cam); hz.drawMirages(me, cam, now); }
+    if (sightOn) { drawSight(me, cam); if (weatherView.stormShown < 0.5) hz.drawMirages(me, cam, now); } // geen luchtspiegelingen in de storm
     if (overlayOn) drawFog(me, cam);
     mirageSprites.end();
     hz.drawSearchlights();
@@ -824,33 +831,29 @@ export function startWorld(style, game) {
     sparkles.end();
   }
 
-  // Weer in beeld (look.weather): sneeuw, stof of regen als deeltjes in de wereld. Ze blijven
-  // binnen de camera (wat eruit waait, komt aan de andere kant terug); in een storm meer en harder.
+  // Stof in beeld (look.weather 'dust', Barbarossa en Berlijn): trage vlekjes in de wereld die
+  // binnen de camera blijven, in een storm meer en harder. Sneeuw, stuifzand en regen tekent
+  // view/weather-view.js.
   const flakes = [], flakeSprites = spritePool(L.effects.addChild(new Container()), TEX.soft);
-  const rainSprites = spritePool(L.effects.addChild(new Container()), TEX.white);
-  const WEATHER = {
-    snow: { tint: 0xffffff, fall: [5, 4], wind: 1.5, size: [0.35, 0.55], alpha: [0.55, 0.4] },
-    dust: { tint: 0xd8c09a, fall: [0.5, 0.5], wind: 7, size: [0.8, 1.4], alpha: [0.18, 0.15] },
-    rain: { tint: 0xdfe8f0, fall: [55, 15], wind: 6, size: [0.1, 0], alpha: [0.25, 0.15] },
-  };
+  const DUST = { tint: 0xd8c09a, fall: [0.5, 0.5], wind: 7, size: [0.8, 1.4], alpha: [0.18, 0.15] };
   const wrap = (v, lo, len) => lo + ((((v - lo) % len) + len) % len);
   function drawWeather(cam, now, dt) {
-    const w = WEATHER[look.weather], storm = eraserInfo(game)?.active ? look.stormFactor : 1;
-    flakeSprites.begin(); rainSprites.begin();
+    weatherView.update(cam, now, dt);
+    const w = look.weather === 'dust' ? DUST : null, storm = eraserInfo(game)?.active ? look.stormFactor : 1;
+    flakeSprites.begin();
     const n = w ? Math.round((look.amount * cam.w * cam.h * storm) / 10000) : 0;
     while (flakes.length < n) flakes.push({ x: cam.x + Math.random() * cam.w, y: cam.y + Math.random() * cam.h, z: Math.random(), ph: Math.random() * 6.3 });
     for (let k = 0; k < n; k++) {
       const f = flakes[k], wind = w.wind * storm * (0.6 + f.z);
-      const vx = wind + Math.sin(now / 900 + f.ph) * (look.weather === 'snow' ? 1.2 : 0.4), vy = w.fall[0] + w.fall[1] * f.z;
+      const vx = wind + Math.sin(now / 900 + f.ph) * 0.4, vy = w.fall[0] + w.fall[1] * f.z;
       f.x = wrap(f.x + vx * dt, cam.x - 2, cam.w + 4);
       f.y = wrap(f.y + vy * dt, cam.y - 2, cam.h + 4);
-      const s = look.weather === 'rain' ? rainSprites.next() : flakeSprites.next();
+      const s = flakeSprites.next();
       s.tint = w.tint; s.alpha = w.alpha[0] + w.alpha[1] * f.z;
       s.position.set(f.x, f.y);
-      if (look.weather === 'rain') { s.rotation = Math.atan2(vy, vx); s.width = 1.5 + f.z * 1.5; s.height = w.size[0]; }
-      else s.width = s.height = w.size[0] + w.size[1] * f.z;
+      s.width = s.height = w.size[0] + w.size[1] * f.z;
     }
-    flakeSprites.end(); rainSprites.end();
+    flakeSprites.end();
   }
 
   // Een eigen stijllaag over het beeld (witte mist): de stijl geeft een canvas terug dat over
@@ -868,16 +871,15 @@ export function startWorld(style, game) {
     overlaySprite.width = canvas.width; overlaySprite.height = canvas.height;
   }
 
-  // Sporenwisser (storm): waas en waaiende strepen over het hele beeld zolang hij woedt, en een
-  // melding bovenin (waarschuwing vooraf, aftellen tijdens). style.eraser: {name, haze, hazeAlpha, streak, banner}
+  // Sporenwisser (storm): waas (die aanzwelt en afneemt) en waaiende strepen over het hele beeld zolang hij woedt, en een
+  // melding bovenin (waarschuwing vooraf, aftellen tijdens). style.eraser: {name, haze, hazeAlpha, streak (null = geen), banner}
   function drawEraser(now) {
     eraserG.clear();
-    const st = style.eraser, info = st && eraserInfo(game);
+    const st = style.eraser, info = st && eraserInfo(game), W = canvas.width, H = canvas.height, s = devicePixelRatio || 1;
+    if (st && weatherView.stormShown > 0) eraserG.rect(0, 0, W, H).fill({ color: tintOf(st.haze), alpha: st.hazeAlpha * weatherView.stormShown });
     if (!info || (!info.active && !info.warn)) { eraserLabel.hide(); return; }
-    const W = canvas.width, H = canvas.height, s = devicePixelRatio || 1;
     if (info.active) {
-      eraserG.rect(0, 0, W, H).fill({ color: tintOf(st.haze), alpha: st.hazeAlpha });
-      for (let i = 0; i < 140; i++) {
+      for (let i = 0; st.streak && i < 140; i++) { // sneeuw en zand hebben geen strepen: daar waaien vlokken en korrels
         const speed = 0.35 + (i % 7) * 0.08, len = (18 + (i % 5) * 14) * s;
         const x = ((i * 137.3 + now * speed * s) % (W + 200 * s)) - 100 * s;
         const y = ((i * 71.9) % 100) / 100 * H + Math.sin(now / 900 + i) * 12 * s;

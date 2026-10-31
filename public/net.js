@@ -4,13 +4,14 @@
 import * as Sim from '/shared/client-sim.js';
 
 // room: welk potje = welke kaart uit config.js; size: kaartgrootte (alleen als het potje leeg is)
-export function connect(hooks = {}, { room = 'carentan', size } = {}) {
+export function connect(hooks = {}, { room = 'carentan', size, name } = {}) {
   const state = Sim.createState();
   state.bytes = 0; // ontvangen bytes, de weergave mag dit resetten
   state.status = 'connecting'; // connecting | playing | full | closed | left
   const setStatus = (s) => { state.status = s; hooks.onStatus?.(s); };
 
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?room=${encodeURIComponent(room)}${size ? `&size=${encodeURIComponent(size)}` : ''}`);
+  const qs = `?room=${encodeURIComponent(room)}${size ? `&size=${encodeURIComponent(size)}` : ''}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/${qs}`);
   ws.onmessage = (ev) => {
     state.bytes += ev.data.length;
     const msg = JSON.parse(ev.data);
@@ -47,6 +48,8 @@ export function connect(hooks = {}, { room = 'carentan', size } = {}) {
   // Toets in of uit; ook aangeroepen vanuit een ingebedde weergave (iframe) die de focus heeft
   state.key = (e) => {
     if (e.type === 'blur') { held.clear(); sendInput(); return; }
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     // K: zelfvernietiging (niet bij ingedrukt houden herhalen)
     if (e.code === 'KeyK') { e.preventDefault(); if (e.type === 'keydown' && !e.repeat) state.selfDestruct(); return; }
     const k = KEYS[e.code];

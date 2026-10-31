@@ -46,7 +46,8 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   hints en tanks. De grond tekent `public/view/ground-gpu.js` op de videokaart (één mesh met een eigen
   shader en texturen van 1 pixel per cel), bomen en rotsen `public/view/objects-view.js` (sprites uit
   de atlas van de stijl), bruggen `public/view/bridges-view.js`; het zijpaneel (minikaart, legenda, tankkaart) staat
-  in `public/view/side-panel.js`, gevaren en laadplekken in beeld in `public/view/hazards-view.js`. Tekenen gaat met **PixiJS** in
+  in `public/view/side-panel.js`, gevaren en laadplekken in beeld in `public/view/hazards-view.js`, sneeuw, stuifzand, regen en bliksem in
+  `public/view/weather-view.js`. Tekenen gaat met **PixiJS** in
   lagen (`L` in `startWorld`); de gamestate is de enige bron, de weergave leest hem elk frame uit.
   Bases en tanks (en de getekende objecten als er geen atlas is) worden met Canvas 2D één keer
   getekend en als texture gebruikt. Een stijl levert alleen `surface` (details van de grond), tanks

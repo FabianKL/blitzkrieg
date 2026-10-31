@@ -2,7 +2,7 @@
 // vervagen, planten en gebouwen wegschieten, ijs en dooi, en de veranderingen door het weer en
 // de gevaren (artillerie, brand, puin, de brug).
 import { FELL, T, TRACK_ERASER, BUILDING as BUILDING_CFG } from './config.js';
-import { growBox, BASE_H, BASE_W, BUILDING, CLASS, CLASSES, DIRT, DOOR_CLEAR, EMPTY, H, ICE_B, ICE_BH, ICE_BW, MASKS, TICK_RATE, VEG, W, WATER, inBounds, isIce, mulberry32, reachable, trackStage } from './world.js';
+import { growBox, BASE_H, BASE_W, BUILDING, CLASS, CLASSES, DIRT, DOOR_CLEAR, EMPTY, H, ICE_B, ICE_BH, ICE_BW, MASKS, TICK_RATE, TRACK_ONE, VEG, W, WATER, inBounds, isIce, mulberry32, reachable, trackStage } from './world.js';
 
 // Een kogel raakt (x, y). Is dat een plant of gebouw, dan één treffer minder. Bij 0:
 // - een plant wordt een permanent gat (tunnel) in zijn ondergrond, scar = 1 (stronk, takken);
@@ -128,18 +128,24 @@ export function touchTank(w, x, y, dir, onChange) {
 }
 
 // erasing: de sporenwisser woedt (true), of alleen bij water ('nearWater': binnen 3 T van
-// moeras of water, zie nearWaterMask). Permanente gaten van begroeiing en puin vervagen nooit.
+// moeras of water, zie nearWaterMask), of een verstuiving (sneeuw, stuifzand): een getal = zoveel
+// van een vol spoor per seconde (weather.js driftRate), naar boven afgerond zodat een tunnel op de
+// afgesproken tijd dicht is. ground: gewicht per terreinklasse (ontbreekt = 1; 0,5 = half zo
+// snel), bij 0 gewoon vervagen. Permanente gaten van begroeiing en puin vervagen nooit.
 // onFill(x, y): tunnel is dichtgelopen. onStage(x, y): spoor ziet er een stap vager uit.
-export function fadeStep(w, tick, erasing, onFill, onStage) {
+export function fadeStep(w, tick, erasing, onFill, onStage, ground) {
   if (tick % FADE_CHECK !== 0) return;
   const { map, terrain, track, scar } = w;
   const mask = erasing === 'nearWater' ? nearWaterMask(w) : null;
+  const drift = typeof erasing === 'number' && erasing > 0;
+  const driftFade = drift ? CLASSES.map((c) => Math.ceil(TRACK_ONE * erasing * (ground?.[c.name] ?? 1))) : null;
   for (let i = 0; i < track.length; i++) {
     const v = track[i];
     if (!v || scar[i]) continue;
-    const cls = CLASSES[terrain[i]];
-    const wipe = erasing && cls.erasable && (!mask || mask[i]);
-    const fade = wipe ? cls.fade * TRACK_ERASER.fadeFactor : cls.fade, min = wipe ? 0 : cls.min;
+    const cls = CLASSES[terrain[i]], df = drift ? driftFade[terrain[i]] : 0;
+    const wipe = !drift && erasing && cls.erasable && (!mask || mask[i]);
+    const fade = df ? Math.max(cls.fade, df) : wipe ? cls.fade * TRACK_ERASER.fadeFactor : cls.fade;
+    const min = df || wipe ? 0 : cls.min;
     const nv = Math.max(Math.min(v, min), v - fade);
     if (nv === v) continue;
     track[i] = nv;

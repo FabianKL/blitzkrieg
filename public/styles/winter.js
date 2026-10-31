@@ -375,7 +375,7 @@ export default function start(game) {
     onEvent, overlay: drawFog, teamLook, drawBase, drawTank,
     shadow: { color: 0x283755, alpha: 0.35 },
     tracer: ['rgba(255, 170, 60, 0)', 'rgba(255, 210, 110, 1)'],
-    eraser: { name: 'SNEEUWSTORM', haze: '232, 238, 245', hazeAlpha: 0.38, streak: '255, 255, 255' },
+    eraser: { name: 'SNEEUWSTORM', haze: '232, 238, 245', hazeAlpha: 0.5, streak: null },
     label: fogLabel,
   }, game);
   return view;

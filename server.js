@@ -55,6 +55,16 @@ const GAME = { ...G.GAME, roundsToWin: Number(process.env.TUNNELER_ROUNDS_TO_WIN
 // Weerklok: de tests laten het weer sneller lopen (0.05 = twintig keer zo snel)
 const WEATHER_SCALE = Number(process.env.TUNNELER_WEATHER_SCALE) || 1;
 
+// Effectieve maxima voor brandstof, pantser en munitie (lobby-instellingen)
+function effectiveMax(room) {
+  const s = room.settings || {};
+  return {
+    fuel: Math.round(G.FUEL_MAX * (s.fuelMul ?? 1)),
+    shield: Math.round(G.SHIELD_MAX * (s.shieldMul ?? 1)),
+    ammo: Math.round(G.AMMO_MAX * (s.ammoMul ?? 1)),
+  };
+}
+
 // ---------- Rooms ----------
 // Het spel op / speelt in het potje 'blitzkrieg'; retro (/retro) en de tests in een vast potje per kaart.
 const rooms = new Map();
@@ -75,6 +85,7 @@ function getRoom(name, size) {
     room = {
       name, lobby, mapId, rules: G.MAPS[mapId], tick: 0, bullets: [], nextBulletId: 1, pendingEvents: [],
       tanks: new Array(G.MAX_PLAYERS).fill(null), host: -1,
+      rounds: GAME.roundsToWin, settings: { ...G.DEFAULT_SETTINGS },
     };
     rooms.set(name, room);
     if (lobby) { room.size = G.DEFAULT_SIZE; newWorld(room); }
@@ -96,19 +107,35 @@ function hostOf(room) {
 
 // De host kiest een kaart en grootte: nieuwe kaart voor iedereen, die op START wacht.
 // Alleen in de wachtkamer; tijdens een spel drukt de host eerst op STOP.
-function configure(room, t, mapId, size) {
+function configure(room, t, msg) {
   if (!room.lobby || room.phase !== 'lobby' || t.id !== hostOf(room)) return;
+  const mapId = String(msg.map ?? room.mapId);
+  const size = String(msg.size ?? room.size);
   if (!Object.hasOwn(G.MAPS, mapId) || mapId === 'retro' || !Object.hasOwn(G.MAP_SIZES, size)) return;
-  if (room.tanks.filter(Boolean).length > G.MAP_SIZES[size].maxPlayers) return; // te veel spelers voor deze grootte
-  if (mapId === room.mapId && size === room.size) return;
-  const old = { mapId: room.mapId, rules: room.rules, size: room.size };
-  Object.assign(room, { mapId, rules: G.MAPS[mapId], size });
-  const made = makeWorld(room);
-  if (made) { newGame(room, made); return; }
-  // de bases passen niet (te veel spelers voor deze kaartgrootte): de oude kaart blijft, melden in het menu
-  Object.assign(room, old);
-  useRoom(room);
-  room.pendingEvents.push({ t: 'err', msg: 'De bases passen niet op deze kaartgrootte: kies een grotere kaart.' });
+  if (room.tanks.filter(Boolean).length > G.MAP_SIZES[size].maxPlayers) return;
+  // rondes
+  const rounds = Number(msg.rounds);
+  if (G.ROUND_OPTIONS.includes(rounds)) room.rounds = rounds;
+  // instellingen (valideer elke waarde tegen de opties in LOBBY_SETTINGS)
+  if (msg.settings && typeof msg.settings === 'object') {
+    for (const [k, v] of Object.entries(msg.settings)) {
+      const def = G.LOBBY_SETTINGS[k];
+      if (def && def.options.some(([val]) => val === v)) room.settings[k] = v;
+    }
+  }
+  // kaart of grootte veranderd: nieuwe wereld
+  if (mapId !== room.mapId || size !== room.size) {
+    const prev = { mapId: room.mapId, rules: room.rules, size: room.size };
+    Object.assign(room, { mapId, rules: G.MAPS[mapId], size });
+    const made = makeWorld(room);
+    if (made) { newGame(room, made); return; }
+    Object.assign(room, prev);
+    useRoom(room);
+    room.pendingEvents.push({ t: 'err', msg: 'De bases passen niet op deze kaartgrootte: kies een grotere kaart.' });
+    return;
+  }
+  // alleen rondes of instellingen veranderd: iedereen bijwerken
+  for (const o of room.tanks) if (o) sendInit(room, o);
 }
 
 // De host start het spel
@@ -118,6 +145,7 @@ function startGame(room, t, events) {
 }
 function beginPlay(room, events) {
   room.phase = 'play';
+  for (const t of room.tanks) if (t) spawn(room, t); // met de effectieve maxima van de lobby-instellingen
   room.mapTick = room.roundTick = room.tick; // storm- en weerklok beginnen nu
   events.push({ t: 'n', n: room.round, m0: room.mapTick, r0: room.roundTick });
   Hazards.roundStart(room, events);
@@ -175,10 +203,11 @@ function newWorld(room, made = makeWorld(room)) {
 
 function spawn(room, t) {
   const b = room.world.bases[t.id];
+  const max = effectiveMax(room);
   Object.assign(t, {
     x: b.x, y: b.y, dir: 0, alive: true, cooldown: 0, mv: 0, iceBlock: -1, wetTicks: 0, still: 0, buried: false,
     gauge: room.rules.meter?.start ?? 0, slow: G.SPEED_ONE, meterState: {},
-    fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX,
+    fuel: max.fuel, shield: max.shield, ammo: max.ammo,
   });
 }
 
@@ -195,7 +224,7 @@ function kill(room, t, killerUid, events) {
 // Pantser kwijt door een gevaar of het weer (procent van vol): de anderen krijgen een hint,
 // en een dood telt voor niemand als kill
 function hurt(room, t, pct, events) {
-  t.shield = Math.max(0, t.shield - Math.round((pct * G.SHIELD_MAX) / 100));
+  t.shield = Math.max(0, t.shield - Math.round((pct * effectiveMax(room).shield) / 100));
   events.push({ t: 'hint', x: t.x, y: t.y, i: t.id });
   if (t.shield === 0) kill(room, t, null, events);
 }
@@ -207,7 +236,7 @@ function endRound(room, events) {
   const players = room.tanks.filter(Boolean);
   room.roundWinner = G.roundWinner(players);
   if (room.roundWinner >= 0) room.tanks[room.roundWinner].rounds++;
-  room.winner = G.gameWinner(players, GAME);
+  room.winner = G.gameWinner(players, { ...GAME, roundsToWin: room.rounds });
   room.bullets = [];
   if (room.winner >= 0) {
     room.phase = 'over';
@@ -251,10 +280,11 @@ function newGame(room, made) {
 // Daarna alleen nog delta's en gebeurtenissen.
 function sendInit(room, t) {
   const players = room.tanks.filter(Boolean);
+  const max = effectiveMax(room);
   const init = {
     t: 'init', you: t.id, k: room.tick, w: G.W, h: G.H, size: room.size,
     map: G.toBase64(G.rleEncode(room.world.map)),
-    tanks: players.map((o) => ({ i: o.id, ...(o === t || !Object.keys(o.sent).length ? tankFields(o, players.length) : o.sent) })),
+    tanks: players.map((o) => ({ i: o.id, ...(o === t || !Object.keys(o.sent).length ? tankFields(o, players.length, max.fuel) : o.sent) })),
     bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, d: b.d, i: b.owner })),
     terrain: G.toBase64(G.rleEncode(room.world.terrain)),
     track: G.toBase64(G.rleEncode16(room.world.track)), // exacte sporen, daarna rekent de client zelf mee
@@ -265,6 +295,8 @@ function sendInit(room, t) {
     room: room.name,
     mapId: room.mapId, // welke kaart; de instellingen staan in config.js
     lobby: room.lobby, host: hostOf(room),
+    names: room.tanks.filter(Boolean).map((o) => ({ i: o.id, name: o.name || '' })),
+    rounds: room.rounds, settings: room.settings, max,
     lm: room.world.landmarks || [], // herkenningspunten (kerk) in dorpen
     // middellijnen van de wegen (alleen voor de weergave): punten op 0,1 cel, breedte, klasse
     rd: (room.world.roads || []).map((r) => ({ p: r.path.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), w: r.width, c: r.class })),
@@ -316,11 +348,11 @@ function iceStep(room, t, events) {
 
 // Velden die naar alle clients gaan. Brandstof als percentage: verandert minder vaak = minder bytes.
 // c = score volgens de telwijze van nu (gewonnen rondes bij 2 spelers, anders kills).
-function tankFields(t, players) {
+function tankFields(t, players, fuelMax) {
   return {
     x: t.x, y: t.y, d: t.dir, a: t.alive ? 1 : 0,
-    f: Math.ceil((t.fuel * 100) / G.FUEL_MAX), s: t.shield, m: t.ammo, c: G.score(t, players), b: t.buried ? 1 : 0,
-    g: Math.round(t.gauge ?? 0), v: t.slow ?? G.SPEED_ONE, // meter van de kaart (zand, warmte, temperatuur) en snelheidsfactor
+    f: Math.ceil((t.fuel * 100) / fuelMax), s: t.shield, m: t.ammo, c: G.score(t, players), b: t.buried ? 1 : 0,
+    g: Math.round(t.gauge ?? 0), v: t.slow ?? G.SPEED_ONE,
   };
 }
 
@@ -346,11 +378,12 @@ function step(room) {
   if (playing) {
     const deaths = live.filter((t) => !t.alive).length;
     // het weer van nu (zicht rekent elke client zelf uit; hier: sporenwisser en onderduiken)
-    room.wx = Weather.weatherAtTick(room.rules, room.round, tick, room.mapTick, room.roundTick, WEATHER_SCALE);
+    const wxScale = WEATHER_SCALE * (room.settings?.stormFreq ?? 1);
+    room.wx = Weather.weatherAtTick(room.rules, room.round, tick, room.mapTick, room.roundTick, wxScale);
     stepBullets(room, live, events);
     for (const t of live) stepTank(room, t, live, events);
     // gevaren en schaarse middelen van deze kaart
-    Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
+    if (room.settings?.hazards !== 0) Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
     if (live.filter((t) => !t.alive).length > deaths) endRound(room, events);
   } else for (const t of live) t.selfDestruct = false;
 
@@ -360,8 +393,8 @@ function step(room) {
     G.digTank(room.world, t.x, t.y, t.dir);
     G.touchTank(room.world, t.x, t.y, t.dir); // bereden tunnels krijgen een vers spoor
   }
-  // Sporen vervagen per terreinklasse (tijdens de storm sneller); op 0 loopt een tunnel dicht
-  G.fadeStep(room.world, tick, playing && room.wx.eraser);
+  // Sporen vervagen per terreinklasse (tijdens de storm en bij sneeuwval sneller); op 0 loopt een tunnel dicht
+  G.fadeStep(room.world, tick, playing && (room.wx.driftRate || room.wx.eraser), undefined, undefined, room.wx?.driftGround); // verstuiving eerst: de storm dekt toe
 
   sendTick(room, live, events);
 }
@@ -369,7 +402,7 @@ function step(room) {
 // Kogels (een treffer op begroeiing kost die plant een leven; clients zien in het
 // 'x'-bericht dat er een plant staat en doen hetzelfde)
 function stepBullets(room, live, events) {
-  const w = room.world, dig = G.bulletsDig(room.rules);
+  const w = room.world, dig = room.settings?.bulletsDig ? true : G.bulletsDig(room.rules);
   room.bullets = room.bullets.filter((b) => {
     const hit = G.stepBullet(b, w.map, live, dig);
     if (!hit && Hazards.bulletAt(room, b.x, b.y, events)) { events.push({ t: 'x', id: b.id, x: b.x, y: b.y, r: 0, o: b.owner }); return false; }
@@ -397,12 +430,12 @@ function stepTank(room, t, live, events) {
   const w = room.world, tick = room.tick, wx = room.wx;
   if (t.cooldown > 0) t.cooldown--;
 
+  const max = effectiveMax(room);
   if (w.map[t.y * G.W + t.x] === G.BASE + t.id) {
-    // In eigen basis: bijtanken en repareren, tenzij de kaart dat schaars maakt (refill)
     const refill = room.rules.refill || {};
-    if (refill.fuel !== false) t.fuel = Math.min(G.FUEL_MAX, t.fuel + G.REFILL.fuel);
-    if (refill.armor !== false && tick % G.REFILL.armorEvery === 0) t.shield = Math.min(G.SHIELD_MAX, t.shield + 1);
-    if (refill.ammo !== false && tick % G.REFILL.ammoEvery === 0) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+    if (refill.fuel !== false) t.fuel = Math.min(max.fuel, t.fuel + G.REFILL.fuel);
+    if (refill.armor !== false && tick % G.REFILL.armorEvery === 0) t.shield = Math.min(max.shield, t.shield + 1);
+    if (refill.ammo !== false && tick % G.REFILL.ammoEvery === 0) t.ammo = Math.min(max.ammo, t.ammo + 1);
   } else if (tick % G.IDLE_DRAIN_EVERY === 0) {
     t.fuel--;
   }
@@ -453,7 +486,7 @@ function stepTank(room, t, live, events) {
 function sendTick(room, live, events) {
   const p = [];
   for (const t of live) {
-    const cur = tankFields(t, live.length);
+    const cur = tankFields(t, live.length, effectiveMax(room).fuel);
     const entry = { i: t.id };
     let changed = false;
     for (const k in cur) {
@@ -519,7 +552,7 @@ wss.on('connection', (ws, req) => {
   }
   // Eerste speler in een leeg potje: de kaart begint nu (mist, stormklok)
   if (!room.tanks.some(Boolean)) room.mapTick = room.tick;
-  const t = { id: slot, uid: nextUid++, ws, input: { dx: 0, dy: 0, fire: false }, seq: 0, ackSeq: 0, seqTicks: 0, rounds: 0, kills: 0, sent: {} };
+  const t = { id: slot, uid: nextUid++, ws, input: { dx: 0, dy: 0, fire: false }, seq: 0, ackSeq: 0, seqTicks: 0, rounds: 0, kills: 0, sent: {}, name: String(params.get('name') || '').slice(0, 20) };
   spawn(room, t);
   if (room.phase === 'pause' || room.phase === 'over') t.alive = false; // instappen tijdens de pauze: meedoen vanaf de volgende ronde
   room.tanks[slot] = t;
@@ -537,7 +570,10 @@ wss.on('connection', (ws, req) => {
       t.input = { dx: clampDir(msg.dx), dy: clampDir(msg.dy), fire: !!msg.f };
       if (Number.isInteger(msg.q) && msg.q > t.seq) t.seq = msg.q;
     } else if (msg.t === 'cfg') {
-      configure(room, t, String(msg.map), String(msg.size));
+      configure(room, t, msg);
+    } else if (msg.t === 'naam') {
+      t.name = String(msg.name || '').slice(0, 20);
+      room.pendingEvents.push({ t: 'nm', i: t.id, name: t.name });
     } else if (msg.t === 'start') {
       startGame(room, t, room.pendingEvents);
     } else if (msg.t === 'stop') {

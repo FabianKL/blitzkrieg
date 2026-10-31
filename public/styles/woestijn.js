@@ -208,7 +208,7 @@ export default function start(game) {
     onEvent, drawUnder: drawMines, drawBase, drawTank,
     tankFrames: 8, tankPeriod: 754, // één golf van de wimpel (sin(now / 120))
     shadow: { color: 0x50321a, alpha: 0.35, dx: 0.5, dy: 0.65 },
-    eraser: { name: 'ZANDSTORM', haze: '196, 156, 98', hazeAlpha: 0.42, streak: '245, 226, 182' },
+    eraser: { name: 'ZANDSTORM', haze: '196, 156, 98', hazeAlpha: 0.36, streak: null }, // de wolken en korrels doen de rest (view/weather-view.js)
   }, game);
   return view;
 }

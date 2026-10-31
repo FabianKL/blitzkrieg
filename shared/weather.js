@@ -9,10 +9,47 @@
 //   effect    visibility: zichtstraal in T, of {start, end, overSeconds} (oplopend vanaf het
 //             begin van de regel); trackEraser: true | 'nearWater' (alleen binnen 3 T van moeras
 //             of water); burial: onderduiken; terrain: verandering bij het ingaan (zie
-//             game.js applyTerrainChange); en vrije vlaggen voor de kaart (fog, drops, fires, ...)
+//             game.js applyTerrainChange); drift: {min, max, period, ground}: verstuiving (sneeuw
+//             of stuifzand) die tussen min en max (0..1) wisselt, elke period seconden naar een
+//             nieuwe sterkte; in een storm met onderduiken is het 1. Bij min is een vers spoor in
+//             TRACK_ERASER.drift.lightSeconds dicht, bij max in heavySeconds, en de storm dekt
+//             stormCover ervan toe; ground: gewicht per terreinklasse (ontbreekt = 1) (terrain.js
+//             fadeStep). rain: {min, max, period}: regen voor in beeld (0..1, verandert niets aan
+//             sporen); lightning: {every}: bliksem, gemiddeld elke `every` seconden een flits.
+//             En vrije vlaggen voor de kaart (fog, drops, fires, ...)
 // scale: alle seconden keer scale (de tests draaien met een snelle klok).
 import { TICK_RATE } from './world.js';
-import { TRACK_ERASER } from './config.js';
+import { LIGHTNING, TRACK_ERASER } from './config.js';
+
+// Vast toeval uit een geheel getal (0..1): server en clients krijgen dezelfde waarde
+function hash01(n) {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// Sterkte (verstuiving, regen) na `since` seconden: vloeiend van de ene vaste waarde naar de volgende
+export function driftAt(cfg, since, scale = 1) {
+  if (cfg.min === cfg.max) return cfg.min;
+  const u = Math.max(0, since) / ((cfg.period || 1) * scale), i = Math.floor(u), f = u - i;
+  const a = hash01(i), b = hash01(i + 1), s = f * f * (3 - 2 * f);
+  return cfg.min + (cfg.max - cfg.min) * (a + (b - a) * s);
+}
+
+// Bliksem (alleen beeld): de tijd is verdeeld in vakken van `every` seconden met in elk vak één
+// inslag op een vaste plek (uit de hash), zodat iedereen hem tegelijk ziet. Geeft de flits van nu
+// (0..1): een felle flits, een kortere tweede en een korte nagloed (LIGHTNING in config.js).
+export function lightningAt(cfg, since, scale = 1) {
+  const t = Math.max(0, since) / scale, L = LIGHTNING;
+  for (let i = Math.floor(t / cfg.every); i >= 0 && i >= Math.floor(t / cfg.every) - 1; i--) {
+    const dt = t - (i + L.firstAt + hash01(i + 7919) * L.spread) * cfg.every;
+    if (dt < 0) continue;
+    if (dt < L.flash) return 1;
+    if (dt >= L.gap && dt < L.gap + L.second) return L.secondStrength;
+    if (dt < L.afterglow) return L.glow * (1 - dt / L.afterglow);
+  }
+  return 0;
+}
 
 // Is de regel in deze ronde en op dit moment van kracht? Geeft null of {since, left, warn}:
 // since = seconden sinds hij (deze keer) inging, left = seconden tot hij stopt (Infinity),
@@ -35,7 +72,8 @@ export function ruleState(rule, round, tGame, tRound, scale = 1) {
 // Alles wat nu geldt: zichtstraal (de kleinste), sporenwisser, onderduiken, vlaggen, de
 // storm voor in beeld ({label, active, warn, secs}) en de regels die nu actief zijn.
 export function weatherAt(rules, round, tGame, tRound, scale = 1) {
-  const out = { visibility: null, eraser: false, burial: false, flags: {}, storm: null, active: [] };
+  const out = { visibility: null, eraser: false, burial: false, drift: 0, driftRate: 0, driftGround: null, rain: 0, lightning: 0, flags: {}, storm: null, active: [] };
+  let drift = null, stormSeconds = 0;
   for (const rule of rules?.weather || []) {
     const st = ruleState(rule, round, tGame, tRound, scale);
     if (rule.every && st && (st.since !== null || st.warn)) {
@@ -49,11 +87,26 @@ export function weatherAt(rules, round, tGame, tRound, scale = 1) {
     if (typeof vis === 'object' && vis) vis = vis.start + (vis.end - vis.start) * Math.min(1, st.since / (vis.overSeconds * scale));
     if (vis !== undefined) out.visibility = out.visibility === null ? vis : Math.min(out.visibility, vis);
     if (e.trackEraser) out.eraser = e.trackEraser === true ? true : e.trackEraser;
-    if (e.burial) out.burial = true;
-    for (const [k, v] of Object.entries(e)) if (!['visibility', 'trackEraser', 'burial', 'terrain'].includes(k)) out.flags[k] = v;
+    if (e.burial) { out.burial = true; stormSeconds = rule.duration || 0; }
+    if (e.drift) { drift = e.drift; out.drift = Math.max(out.drift, driftAt(e.drift, st.since, scale)); }
+    if (e.rain) out.rain = Math.max(out.rain, driftAt(e.rain, st.since, scale));
+    if (e.lightning) out.lightning = Math.max(out.lightning, lightningAt(e.lightning, st.since, scale));
+    for (const [k, v] of Object.entries(e)) if (!OWN.has(k)) out.flags[k] = v;
     if (typeof e.visibility === 'object') out.flags.fogProgress = Math.min(1, st.since / (e.visibility.overSeconds * scale));
   }
+  if (drift) Object.assign(out, driftRate(drift, out.drift, out.burial && stormSeconds));
   return out;
+}
+const OWN = new Set(['visibility', 'trackEraser', 'burial', 'terrain', 'drift', 'rain', 'lightning']);
+
+// Hoeveel van een vol spoor (1,0) de verstuiving per seconde toedekt. Tussen min en max van de
+// kaart loopt het van lightSeconds naar heavySeconds tot dicht; de storm (stormSeconds lang) dekt
+// stormCover van een vers spoor toe en is voor het beeld sterkte 1.
+export function driftRate(cfg, s, stormSeconds) {
+  const D = TRACK_ERASER.drift, ground = cfg.ground || null;
+  if (stormSeconds) return { drift: 1, driftRate: D.stormCover / stormSeconds, driftGround: ground };
+  const k = cfg.max > cfg.min ? Math.min(1, Math.max(0, (s - cfg.min) / (cfg.max - cfg.min))) : 1;
+  return { driftRate: 1 / D.lightSeconds + (1 / D.heavySeconds - 1 / D.lightSeconds) * k, driftGround: ground };
 }
 
 // Vanuit ticks: game0 = tick waarop het spel begon, round0 = tick waarop de ronde begon

@@ -60,6 +60,22 @@ of nummers op de sprite (keuze van de eigenaar); de vage contour is geschrapt, e
 kijkboog buiten de cirkel wordt gewoon getekend. Nog door de eigenaar te controleren: de keuze
 van de tanks per map (§5) en hoe de rupsen eruitzien in het spel.
 
+### Eén basis per team
+Eén basis per team, niet per speler. Bij 2v2 zijn dat 2 bases (één per team); bij ieder voor zich
+met 4 spelers zijn het er 4. Teken ook alleen het aantal bases dat nodig is voor het aantal spelers:
+bij twee spelers maximaal twee bases.
+
 ## Bugs
 
-(nog geen)
+### Wegen worden niet goed getekend
+Er worden happen uit wegen gehaald waar ze water of een andere weg kruisen. De weg hoort daar
+doorlopend getekend te worden.
+
+### Verborgen tank toont tunnel aan tegenstander
+Als een tank ondergesneeuwd of ondergestoven is (bedekt), ziet de tegenstander een tunnel op die
+plek. Dat klopt niet: de tegenstander hoort gewoon sneeuw (of zand) te zien, niet de tunnel eronder.
+
+### Sporen van tegenstander alleen zichtbaar in het zichtsveld
+Het spoor van een tegenstander is nu alleen te zien als die tegenstander in je zichtsveld is. Dat
+moet aangepast worden: sporen horen zichtbaar te zijn zodra de cel waar het spoor ligt in je
+zichtsveld komt, ongeacht of de tegenstander zelf zichtbaar is.

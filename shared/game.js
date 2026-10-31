@@ -7,7 +7,7 @@
 import { GAME, TOUCH, TANKS } from './config.js';
 import { DIRS } from './world.js';
 
-export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH } from './config.js';
+export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH, ROUND_OPTIONS, DEFAULT_ROUNDS, LOBBY_SETTINGS, DEFAULT_SETTINGS } from './config.js';
 export * from './world.js';
 export * from './terrain.js';
 export * from './movement.js';

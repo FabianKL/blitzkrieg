@@ -127,7 +127,7 @@ export default function start(game) {
     clouds: { smoke: '74, 70, 62' }, cloudAlpha: { smoke: 0.42 }, burialColor: '#a39274', // stof van de storm
     onEvent, drawBase, baseLabel, drawTank, teamLook,
     shadow: { color: 0x000000, alpha: 0.38 },
-    eraser: { name: 'STORM', haze: '70, 64, 56', hazeAlpha: 0.3, streak: '205, 196, 178' },
+    eraser: { haze: '60, 68, 78', hazeAlpha: 0.18, streak: null }, // regenbui en onweer: melding met de naam van de regel; de regen tekent view/weather-view.js
     label: () => TEAMS[view.game.me]?.ploeg ?? '', // je ploeg rechtsboven in het speelveld
   }, game);
   return view;

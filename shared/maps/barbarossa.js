@@ -3,6 +3,12 @@
 export default { // §10.2
   name: 'Russische vlakte 1941', style: 'zomer', header: 'BARBAROSSA — RUSSISCHE VLAKTE · ZOMER 1941',
   tanks: { A: 't34', B: 'panther' },
+  desc: {
+    setting: 'Zomer 1941. Operatie Barbarossa: de Duitse Wehrmacht valt de Sovjet-Unie binnen over de eindeloze Russische vlakte.',
+    terrain: 'Open, droge steppe met akkers, berkenbossen en een zandweg door een klein dorp.',
+    weather: 'Hittegolven met stofwolken in de eerste rondes. Daarna breekt het modderseizoen aan: de harde grond wordt drassig.',
+    special: 'Het modderseizoen verandert het slagveld: droge vlakte en akkers worden zachte modder die je tank vertraagt.',
+  },
   terrainPercent: { hard: 55, normal: 15, soft: 5, vegetation: 12, paved: 6, rock: 4, water: 3 },
   classes: {
     paved: { label: 'Zandweg en dorp', color: '#b89c6a' },

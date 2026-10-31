@@ -28,6 +28,10 @@ export function createState() {
     mapW: G.W, mapH: G.H, // kaartmaat van dit potje
     lobby: false, // potje met wachtkamer (de spelpagina op /)
     host: -1, // speler die de kaart kiest en start
+    names: new Map(), // id → spelersnaam
+    rounds: G.DEFAULT_ROUNDS, // gewonnen rondes om te winnen
+    settings: { ...G.DEFAULT_SETTINGS }, // lobby-instellingen
+    max: { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX }, // effectieve maxima
     landmarks: [], // herkenningspunten in dorpen: {kind, x, y}
     roads: [], // middellijnen van de wegen (weergave): {p: [[x, y], ...], w: breedte, c: klasse}
     bridges: [], // bruggen (weergave): {a, z: middellijn, w: breedte, ice, runs: [[cel, aantal], ...]}
@@ -74,6 +78,10 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.mapId = msg.mapId ?? msg.room;
   state.lobby = !!msg.lobby;
   state.host = msg.host ?? -1;
+  state.names = new Map((msg.names || []).map((n) => [n.i, n.name]));
+  state.rounds = msg.rounds ?? G.DEFAULT_ROUNDS;
+  state.settings = msg.settings ?? { ...G.DEFAULT_SETTINGS };
+  state.max = msg.max ?? { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX };
   state.landmarks = msg.lm || [];
   state.roads = msg.rd || [];
   state.bridges = msg.br || [];
@@ -160,7 +168,7 @@ export function applyState(state, msg, hooks = {}, now = 0) {
 
   // 5. Weer bijwerken en sporen vervagen (zelfde ticks en hetzelfde weer als de server)
   updateWeather(state);
-  G.fadeStep(world, tick, state.game.phase === 'play' && state.weather.eraser, changed, changed);
+  G.fadeStep(world, tick, state.game.phase === 'play' && (state.weather.driftRate || state.weather.eraser), changed, changed, state.weather?.driftGround);
 
   // 6. Voorspelling bijwerken met de bevestiging van de server
   const self = tanks.get(state.me);
@@ -197,7 +205,8 @@ const ON = {
   b(state, e, c) { // schot {id, x, y, d, i: van wie (eigen kogels altijd te zien)}
     state.bullets.set(e.id, { x: e.x, y: e.y, d: e.d, i: e.i, sx: e.x, sy: e.y, sk: c.tick });
   },
-  l(state, e) { state.tanks.delete(e.i); }, // speler vertrokken
+  l(state, e) { state.tanks.delete(e.i); state.names.delete(e.i); }, // speler vertrokken
+  nm(state, e) { state.names.set(e.i, e.name); }, // speler verandert van naam
   r(state, e, c) { // ronde voorbij {n, w: winnaar, left: ticks pauze}
     Object.assign(state.game, { phase: 'pause', rw: e.w, until: c.tick + e.left });
     state.bullets.clear();

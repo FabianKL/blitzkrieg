@@ -62,20 +62,27 @@ B- of M-badge met een pulserende ring.
   die tegenstander scherp, dan komt er geen hint.
 - **Weer** per map, per ronde of op een timer: zichtstraal, stormen die sporen wissen (stilstaan =
   onderduiken), mist, regen, nacht met zoeklichten, en terrein dat verandert (dooi, modder, inundatie).
+  Verstuiving: sneeuwval (Ardennen, Leningrad tot de dooi) en woestijnwind (El Alamein) wisselen van
+  licht tot zwaar en laten tunnels dichtlopen. Bij een beetje sneeuw of zand is een vers spoor na 2
+  minuten dicht, bij zware sneeuw of wind na 45 s, en een storm (20 s) maakt het voor 90% dicht.
+  Sneeuw doet dat op elke grond even snel; zand vooral in los zand (rotsige grond en de kustweg half
+  zo snel). Regen is alleen beeld (druppels, spatten, regengordijnen, donkerder lucht) en verandert
+  niets aan tunnels, behalve de bestaande regenbui bij Carentan die bij het water sporen wist. In
+  Carentan en Berlijn komen regenstormen met onweer: bliksem die voor iedereen tegelijk flitst.
 - **Gevaren en schaarse middelen** per map: zie de tabel hieronder.
 
 | Map | Gevaar | Schaars middel | Weer |
 |---|---|---|---|
 | 1940 Grebbeberg | – | munitie alleen bij het depot in Rhenen | inundatie vanaf ronde 2, regen in ronde 3, rook |
 | 1941 Russische vlakte | – | dubbel brandstof in de modder | zomer met stofspoor; vanaf ronde 3 modder |
-| 1942 El Alamein | zandmeter, mijnen | – | hitte met valse contouren; zandstorm elke 90 s |
-| 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, sneeuwjacht; dooi in ronde 4 |
-| 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer vanaf ronde 3 |
-| 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenbuien bij het water |
+| 1942 El Alamein | zandmeter, mijnen | – | hitte met valse contouren; wisselende woestijnwind; zandstorm elke 90 s |
+| 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, wisselende sneeuwval, sneeuwjacht; dooi in ronde 4 |
+| 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer met regen vanaf ronde 3 |
+| 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenstorm met onweer elke 120 s (wist sporen bij het water) |
 | 1944 Arnhem | de brug kan ontploffen (10% per oversteek, +5% na elke oversteek) | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
-| 1944 Ardennen | barrage in het bos | brandstofdepots | mist; sneeuwstorm elke 90 s |
+| 1944 Ardennen | barrage in het bos | brandstofdepots | mist, wisselende sneeuwval; sneeuwstorm elke 90 s |
 | 1945 Oder-front | artilleriebarrage | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
-| 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter |
+| 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter; ronde 3 regen met onweersbuien |
 
 **Alle getallen staan in `shared/config.js`**: terreinklassen, maten (T = 5 cellen), zicht, tank,
 kogels, mijnen, gebouwen, rondes, hints, netwerk, rook en kaartgroottes. Zie de uitleg bovenaan elk
@@ -165,7 +172,7 @@ De spelregels kijken er niet naar.
 | `blend` | Breedte van de zachte overgang tussen terreinklassen, in cellen. |
 | `ground` | Grondtexturen: `cells` (zoveel cellen beslaat één textuur van 512 px), `tint` (0 = eigen kleur van de textuur, 1 = klassekleur van de kaart), `contrast` (0 = effen, 1 = zoals getekend), `textures` (`{ klasse: naam }`: een andere textuur dan het manifest zegt). |
 | `light` | Eén lichtbron voor alle schaduwen: verschuiving `dx`, `dy` (cellen), `alpha`, `blur` (zachte rand). |
-| `weather`, `amount` | Deeltjes in beeld: `'snow'`, `'dust'`, `'rain'` of `null`, en hoeveel per 100×100 cellen (in een storm `stormFactor` keer zoveel). |
+| `weather`, `amount` | Deeltjes in beeld: `'snow'` (ronde vlokken, `SNOW_FX`), `'sand'` (stuifzand en zandwolken, `SAND_FX`), `'dust'` (stofjes) of `null`, en hoeveel per 100×100 cellen. Sneeuw en zand volgen de sterkte van de verstuiving; regen komt uit de weerregel `rain` (`RAIN_FX`). Getekend in `public/view/weather-view.js`. |
 | `vignette`, `fogSoft` | Donkere hoeken; hoe zacht de rand van je zichtveld inloopt. |
 | `water` | Water in de grondshader: `deep` (donkerte in het diepe), `depthCells` (zo ver van de kant is het diep), `shore` (lichter aan de kant), `shine` (glinstering), golven met `waveCells` (maat), `waveSpeed` en `waves` (sterkte). Ook de glans op moeras en doorwaadbare plekken. Grillige waterlijn (ook ijs, alleen weergave): `edgeNoise` (zoveel cellen schuift de lijn hoogstens), `edgeScale` (maat van de inhammen), `edgeFine` (aandeel rafelige ruis). |
 | `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). Met een ijstextuur in het manifest (`ice` per stijl of kaart): `texScale` (maat t.o.v. de grondtextuur) en `texDeep` (donkerder naar het midden). |

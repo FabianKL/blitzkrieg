@@ -4,6 +4,12 @@ import { storm } from './common.js';
 export default { // §10.4
   name: 'Leningrad 1942', style: 'winter', header: 'BELEG VAN LENINGRAD — LENINGRAD · WINTER 1942',
   tanks: { A: 't34', B: 'panther' },
+  desc: {
+    setting: 'Winter 1942. De Sovjet-Unie probeert het beleg van Leningrad te doorbreken over het ijs van de bevroren Neva.',
+    terrain: 'Besneeuwde oevers met berkenbossen, bevroren veen en een brede ijsvlakte over de Neva met wakken.',
+    weather: 'Korte winterdagen met dalend zicht. Sneeuwval wisselt van licht tot zwaar. Vanaf ronde 4 begint de dooi.',
+    special: 'De motorwarmte zakt als je stilstaat — bij nul bevriest de motor. Blijf rijden! De dooi laat het ijs smelten en maakt plassen.',
+  },
   terrainPercent: { soft: 46, hard: 15, ice: 12, rock: 8, vegetation: 12, paved: 5, water: 2 },
   classes: {
     paved: { label: 'Weg en brug', color: '#9a978f' },
@@ -28,6 +34,7 @@ export default { // §10.4
   tunnelColor: '#3a2f27',
   weather: [
     { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },
+    { label: 'Sneeuwval', untilRound: 3, effect: { drift: { min: 0.15, max: 0.8, period: 30 } } }, // tot de dooi
     storm('Sneeuwjacht', { untilRound: 3 }),
     { label: 'Dooi', from: { round: 4 }, effect: { terrain: { type: 'thaw', pools: [4, 6], poolRadius: 5 }, thawed: true } },
   ],

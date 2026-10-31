@@ -4,6 +4,12 @@ import { storm } from './common.js';
 export default { // §10.3
   name: 'El Alamein 1942', style: 'woestijn', header: 'LIGHTFOOT — EL ALAMEIN · OKTOBER 1942',
   tanks: { A: 'comet', B: 'panther' },
+  desc: {
+    setting: 'Oktober 1942. Operatie Lightfoot: Montgomery doorbreekt Rommels stellingen bij El Alamein in de Noord-Afrikaanse woestijn.',
+    terrain: 'Woestijnzand met rotsplateaus, een kustweg langs de Middellandse Zee en palmen langs de kust.',
+    weather: 'Verzengende hitte veroorzaakt luchtspiegelingen. Wisselende woestijnwind laat tunnels dichtwaaien, vooral in los zand; zandstormen verminderen het zicht drastisch.',
+    special: 'De zandmeter loopt op in het losse zand en vreet aan je pantser. Onzichtbare mijnen liggen verborgen in de woestijn.',
+  },
   terrainPercent: { soft: 50, hard: 20, paved: 5, rock: 10, water: 10, vegetation: 5 },
   classes: {
     paved: { label: 'Kustweg', color: '#a89c84' },
@@ -22,10 +28,12 @@ export default { // §10.3
   // per vak (T) zand +soft, op hard/verhard firm; boven danger armorPct% pantser per vak zand, bij 100 snelheid slow
   meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040', soft: 2, firm: -5, armorPct: 1, slow: 0.7 },
   // kustweg: duidelijke rijsporen, weinig berm; rotsplateaus met hier en daar een rotsblok
-  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'dust', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.25, vergeColor: '#a8875a' } },
+  look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'sand', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.25, vergeColor: '#a8875a' } },
   tunnelColor: '#6e5430',
   weather: [
     { label: 'Hitte', effect: { visibility: 10, heatHaze: true, mirages: true } },
+    // stuifzand: wind van licht (tunnel dicht in 2 min) tot matig (45 s); in los zand het snelst
+    { label: 'Woestijnwind', effect: { drift: { min: 0.1, max: 0.6, period: 25, ground: { soft: 1, hard: 0.5, paved: 0.5 } } } },
     storm('Zandstorm'),
   ],
   mines: true,

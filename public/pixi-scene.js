@@ -24,6 +24,20 @@ export const TEX = {
     r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = r; g.fillRect(0, 0, S, S);
   }),
+  // sneeuwvlok: een wit hart dat geleidelijk wegloopt, met een vleugje grijsblauw in de rand zodat
+  // hij niet helemaal verdwijnt tegen besneeuwde grond (een harde rand oogt als een stip)
+  flake: drawnTexture(S, S, (g) => {
+    const r = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.3, 'rgba(255,255,255,0.9)');
+    r.addColorStop(0.65, 'rgba(205,215,230,0.4)'); r.addColorStop(1, 'rgba(205,215,230,0)');
+    g.fillStyle = r; g.fillRect(0, 0, S, S);
+  }),
+  // regendruppel: een smal streepje dat van boven doorzichtig naar beneden vol loopt (de staart)
+  drop: drawnTexture(8, S, (g) => {
+    const l = g.createLinearGradient(0, 0, 0, S);
+    l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(0.7, 'rgba(255,255,255,0.8)'); l.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = l; g.beginPath(); g.ellipse(4, S / 2, 3, S / 2 - 1, 0, 0, Math.PI * 2); g.fill();
+  }),
   ring: drawnTexture(S, S, (g) => { g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 3, 0, Math.PI * 2); g.stroke(); }),
   // lichtflits: wit-geel hart, oranje rand
   flash: drawnTexture(S, S, (g) => {

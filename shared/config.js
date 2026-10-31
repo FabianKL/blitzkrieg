@@ -8,6 +8,28 @@
 // een nieuwe kaart. Tunnels en andere veranderingen aan de kaart blijven tussen rondes liggen.
 export const GAME = { roundsToWin: 3, killsToWin: 5, roundPauseSeconds: 3, gameOverSeconds: 8, maxPlayers: 4 };
 
+// Rondekeuze in de wachtkamer (§2): hoeveel rondes je moet winnen (bij 2 spelers), of het aantal
+// kills dat nodig is (bij meer). De host kiest; standaard 3.
+export const ROUND_OPTIONS = [1, 2, 3, 5, 7];
+export const DEFAULT_ROUNDS = 3;
+
+// Instelbare spelopties in de wachtkamer. De host kan deze veranderen; iedereen speelt met
+// dezelfde waarden. Elke sleutel is een vermenigvuldiger of schakelaar; de standaard is altijd
+// de "gewone" ervaring. De opties zijn wat de dropdown toont.
+export const LOBBY_SETTINGS = {
+  stormFreq:  { label: 'Storm',          type: 'select', default: 1,  options: [[0, 'Uit'], [2, 'Langzaam'], [1, 'Normaal'], [0.5, 'Snel']] },
+  hazards:    { label: 'Gevaren',        type: 'toggle', default: 1,  options: [[1, 'Aan'], [0, 'Uit']] },
+  bulletsDig: { label: 'Kogels graven',  type: 'toggle', default: 0,  options: [[0, 'Uit'], [1, 'Aan']] },
+  zoom:       { label: 'Zoom',           type: 'select', default: 1,  options: [[0.6, 'Ingezoomd'], [1, 'Normaal'], [1.5, 'Uitgezoomd']] },
+  fuelMul:    { label: 'Brandstof',      type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
+  shieldMul:  { label: 'Pantser',        type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
+  ammoMul:    { label: 'Munitie',        type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
+};
+// Standaardwaarden als plat object (server en client)
+export const DEFAULT_SETTINGS = Object.fromEntries(
+  Object.entries(LOBBY_SETTINGS).map(([k, v]) => [k, v.default]),
+);
+
 // Tank (§5): voorraden (brandstof in eenheden, pantser en munitie), buiten de basis 1 brandstof per
 // idleDrainEvery ticks, fireCooldown ticks tussen schoten, deathDigR: krater als hij ontploft.
 // Alle tanks zijn gelijk; per kaart verschilt alleen het uiterlijk.
@@ -76,8 +98,9 @@ export const DISPLAY = { minimap: true };
 //   noise       grondtextuur met simplex-ruis over de terreinkleur: scale (cellen per vlek),
 //               strength (0..1, verschil licht/donker), octaves (lagen fijnere ruis)
 //   blend       breedte van de zachte overgang tussen terreinklassen (in cellen, ~2 = smal)
-//   weather     deeltjes in beeld: 'snow', 'dust', 'rain' of null; amount = deeltjes per
-//               100x100 cellen (tijdens een storm stormFactor keer zoveel)
+//   weather     deeltjes in beeld: 'snow' (SNOW_FX), 'sand' (SAND_FX), 'dust' of null; amount =
+//               deeltjes per 100x100 cellen (stof: tijdens een storm stormFactor keer zoveel).
+//               Regen komt uit de weerregel rain (RAIN_FX), niet uit look
 //   vignette    donkere hoeken van het speelveld (0..1); fogSoft: zo'n deel van de zichtstraal
 //               loopt de mist al zacht in (0 = harde rand)
 //   iceShine    glinstering op ijs (0..1); shakeOnHit: schudden als je eigen tank geraakt wordt
@@ -146,6 +169,66 @@ export const LOOK = {
   haze: 5, // hittewaas (als het weer heatHaze heeft): hoeveel pixels het beeld trilt
 };
 
+// Sneeuw in beeld (look.weather 'snow', alleen weergave, public/view/weather-view.js). De sterkte
+// s (0..1) komt uit het weer (weerregel drift, in de storm 1) en loopt in rampSeconds naar een nieuwe waarde. Elke vlok
+// heeft een diepte z (0 = ver, 1 = dichtbij); [a, b] = van ver naar dichtbij, of van licht naar zwaar.
+//   amount   zoveel keer look.amount vlokken per 100x100 cellen bij s = 0 en s = 1 (onder s = 0,1
+//            loopt het naar nul); max = plafond
+//   stormAmount, stormMax   idem in de sneeuwstorm: zoveel dat je er nauwelijks doorheen kijkt
+//   size     doorsnee in CSS-pixels (ver, dichtbij); heavier: zoveel groter bij s = 1
+//   alpha    dekking (ver, dichtbij)
+//   fall     valsnelheid in cellen/s (ver, dichtbij); heavier: zoveel sneller bij s = 1
+//   wind     zijwind in cellen/s bij lichte en zware sneeuw; storm: zijwind in de storm
+//   gust     windvlagen: zoveel van de wind erbij of eraf, periode in seconden
+//   sway     dwarrelen: uitslag in cellen/s en frequentie in Hz (per vlok ertussen)
+//   rampSeconds  zo lang duurt de overgang naar een nieuwe sterkte, en die van en naar de storm
+export const SNOW_FX = {
+  amount: [4, 28], max: 800,
+  stormAmount: 110, stormMax: 3000,
+  size: [3.5, 11], heavier: 0.4,
+  alpha: [0.6, 0.95],
+  fall: [3, 9], fallHeavier: 0.6,
+  wind: [0.8, 4], storm: 26,
+  gust: { amount: 0.5, seconds: 7 },
+  sway: { amount: [0.5, 1.6], hz: [0.3, 1.1] },
+  rampSeconds: 3,
+};
+
+// Stuifzand in beeld (look.weather 'sand', weather-view.js): korrels en zandwolken. De sterkte s
+// komt uit het weer (weerregel drift, in de zandstorm 1). Velden zoals SNOW_FX, en verder:
+//   grains   korrels: amount/stormAmount x look.amount per 100x100 cellen; size in CSS-pixels;
+//            stretch: zo lang uitgerekt als ze het snelst gaan (bewegingsonscherpte); colors: zandtinten
+//   clouds   zandwolken per beeld (calm bij s = 0 en 1, storm); size in cellen; alpha (calm, storm);
+//            speed: deel van de wind; pulse: zoveel zwellen ze aan en slinken ze (periode in s)
+export const SAND_FX = {
+  grains: {
+    amount: [14, 55], max: 900, stormAmount: 150, stormMax: 2500,
+    size: [2, 4], stretch: 3, alpha: [0.65, 0.95], colors: ['#f6e6c0', '#e6c890', '#7d5732'],
+  },
+  clouds: { calm: [3, 10], storm: 44, size: [12, 40], alpha: [0.22, 0.62], speed: 0.6, pulse: { amount: 0.15, seconds: 6 }, color: '#b48850' },
+  fall: [-0.6, 0.6], wind: [4, 14], storm: 45,
+  gust: { amount: 0.4, seconds: 5 },
+  sway: { amount: [0.3, 1.2], hz: [0.5, 1.5] },
+  rampSeconds: 3,
+};
+
+// Regen in beeld (weerregel rain, weather-view.js; verandert niets aan sporen). r = de sterkte (0..1).
+//   drops    druppels per 100x100 cellen bij r = 0 en 1, plafond; length/width in CSS-pixels (ver,
+//            dichtbij); fall en wind in cellen/s; alpha (ver, dichtbij)
+//   splash   spatten per seconde per beeld bij r = 0 en 1; size in cellen (grond, water), life in s
+//   curtain  regengordijnen vanaf r = from: aantal bij r = 1, size in cellen (lang, breed), alpha
+//   dim      zo donker wordt het bij r = 1 (kleur, dekking)
+//   flash    bliksem: kleur en dekking van de flits, shake: zo hard schudt het beeld bij een inslag
+export const RAIN_FX = {
+  drops: { amount: [60, 900], max: 1400, length: [7, 20], width: [0.9, 1.5], fall: [40, 70], wind: [2, 14], alpha: [0.22, 0.5] },
+  splash: { amount: [20, 240], size: [0.7, 1.4], life: [0.35, 0.8], alpha: 0.5 },
+  curtain: { from: 0.55, count: 8, size: [70, 22], alpha: 0.12, color: '#9aa6b2', speed: 0.5 },
+  dim: { color: '#18202c', alpha: 0.28 },
+  flash: { color: '#eef3ff', alpha: 0.6, shake: 0.15 },
+  gust: { amount: 0.35, seconds: 6 },
+  rampSeconds: 3,
+};
+
 // Bomen, struiken, rotsen en kraters als sprites (public/view/objects-view.js), getekend op 32 px
 // per cel. step: rooster in cellen (op elk punt hoogstens één object, met vast toeval verschoven;
 // lowStep op een kaart met alleen lage begroeiing, zoals heggen; rockStep voor rotsblokken op de grond);
@@ -199,6 +282,9 @@ export const BASE_KIT = { px: 32, wall: 2, corner: 3, post: 3, item: 3, items: 4
 export const BUILDINGS = {
   px: 32, height: 2.7, stages: [3, 1, 0], houses: { 'huis-woon': 0.6, 'huis-rij': 0.4 },
   footprints: { kerk: [14, 26], boerderij: [19, 17], 'huis-woon': [10, 10], 'huis-rij': [20, 8] },
+  // dorpsgeneratie: gap = cellen tussenruimte, farmGap = tussenruimte boerderijen,
+  // farmSpacing = extra cellen tussen boerderijen langs de weg
+  gap: 1, farmGap: 3, farmSpacing: 6,
 };
 
 // Dingen van gevaren en schaarse middelen als sprite (public/view/hazards-view.js): px = pixels per
@@ -325,11 +411,23 @@ export const VEGETATION = {
 // verliest sinkDamagePerSecond pantser per seconde tot hij weer op het droge staat.
 export const ICE = { block: 6, breakPerPass: 0.08, crackStages: [2, 5, 8], sinkSpeed: 0.15, sinkDamagePerSecond: 2 };
 
-// Sporenwisser (sneeuwstorm, zandstorm, ...): zolang hij woedt vervagen sporen op klassen
-// met erasable fadeFactor keer zo snel en geldt hun minimum niet. warnSeconds: zo lang van
-// tevoren staat de waarschuwing in beeld. burialSeconds: zo lang stilstaan in een storm en je
-// tank is bedekt (§5.7).
-export const TRACK_ERASER = { fadeFactor: 10, warnSeconds: 5, burialSeconds: 2 };
+// Sporenwisser (storm, regenbui): zolang hij woedt vervagen sporen op klassen met erasable
+// fadeFactor keer zo snel en geldt hun minimum niet. Verstuiving (weerregel drift: sneeuw,
+// stuifzand) dekt sporen toe, bovenop de gewone fade en zonder minimum, naar de sterkte van nu:
+// bij de min van de kaart is een vers spoor (1,0) in drift.lightSeconds dicht, bij de max in
+// heavySeconds (daartussen lineair); een storm met onderduiken dekt er stormCover van toe (0,9 =
+// na de storm voor 90% dicht). warnSeconds: zo lang van tevoren staat de waarschuwing in beeld.
+// burialSeconds: zo lang stilstaan in een storm en je tank is bedekt (§5.7).
+export const TRACK_ERASER = {
+  fadeFactor: 10, warnSeconds: 5, burialSeconds: 2,
+  drift: { lightSeconds: 120, heavySeconds: 45, stormCover: 0.9 },
+  snow: { perSecond: 0.05 },
+};
+
+// Bliksem (weerregel lightning, alleen beeld), in seconden. Elk vak van `every` seconden heeft
+// één inslag tussen firstAt en firstAt + spread (deel van het vak): een flits van `flash`, na
+// `gap` een tweede van `second` lang (secondStrength), en tot afterglow een nagloed (glow).
+export const LIGHTNING = { firstAt: 0.05, spread: 0.8, flash: 0.08, gap: 0.16, second: 0.06, secondStrength: 0.7, afterglow: 1, glow: 0.25 };
 
 // De kaarten (veldslagen) staan elk in een eigen bestand: zie maps/index.js.
 export { MAPS, MAP_MENU, DEFAULT_MAP } from './maps/index.js';

@@ -3,6 +3,12 @@
 export default { // §10.5
   name: 'Koersk 1943', style: 'zomer', header: 'ZITADELLE — KOERSK · JULI 1943',
   tanks: { A: 't34', B: 'panther' },
+  desc: {
+    setting: 'Juli 1943. Operatie Zitadelle: de grootste tankslag uit de geschiedenis op de Russische steppe bij Koersk.',
+    terrain: 'Graanvelden en droge steppe, doorsneden door de rivier de Psel, met heuvelruggen als natuurlijke barrières.',
+    weather: 'Zomerhitte met slagveldnevel. Vanaf ronde 3 breekt onweer los: de modder verandert het terrein.',
+    special: 'Graanbranden! Schoten en onweer kunnen het graan laten ontvlammen. Het vuur verspreidt zich met de wind en oververhit je motor.',
+  },
   terrainPercent: { normal: 45, hard: 15, soft: 12, paved: 6, rock: 8, vegetation: 8, water: 6 },
   classes: {
     paved: { label: 'Zandweg', color: '#7a6448' },
@@ -31,6 +37,6 @@ export default { // §10.5
   tunnelColor: '#2e2418',
   weather: [
     { label: 'Zomerhitte', untilRound: 2, effect: { visibility: 12, fires: true, battleSmoke: true } },
-    { label: 'Onweer', from: { round: 3 }, effect: { visibility: 8, thunder: true, terrain: { type: 'reclass', from: ['soft'], to: 'marsh' } } },
+    { label: 'Onweer', from: { round: 3 }, effect: { visibility: 8, thunder: true, rain: { min: 0.3, max: 0.8, period: 25 }, terrain: { type: 'reclass', from: ['soft'], to: 'marsh' } } },
   ],
 };

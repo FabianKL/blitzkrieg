@@ -299,6 +299,67 @@ export const tests = [
     },
   },
   {
+    name: 'verstuiving (sneeuw, stuifzand): sterkte wisselt vast, 1 in de storm; 2 min licht, 45 s zwaar, storm 90%',
+    async run() {
+      const A = G.MAPS.ardennen, Ln = G.MAPS.leningrad, E = G.MAPS['el-alamein'];
+      for (const map of [A, E]) {
+        const cfg = map.weather.find((r) => r.effect?.drift).effect.drift, seen = [];
+        for (let t = 0; t < 600; t += 7) {
+          const wx = Wx.weatherAt(map, 3, t, t);
+          if (wx.burial) { check(wx.drift === 1, `${map.name}: storm op ${t} s niet op sterkte 1`); continue; }
+          check(wx.drift >= cfg.min && wx.drift <= cfg.max, `${map.name}: sterkte op ${t} s buiten ${cfg.min}..${cfg.max}: ${wx.drift}`);
+          check(wx.driftRate === Wx.weatherAt(map, 3, t, t).driftRate, 'zelfde tijd geeft een andere verstuiving');
+          seen.push(wx.drift);
+        }
+        check(Math.max(...seen) - Math.min(...seen) > 0.2, `${map.name}: verstuiving wisselt nauwelijks`);
+      }
+      check(Wx.weatherAt(Ln, 3, 10, 10).drift > 0 && Wx.weatherAt(Ln, 4, 10, 10).drift === 0, 'Leningrad: sneeuw na de dooi (of niet ervoor)');
+      check(!Wx.weatherAt(G.MAPS.carentan, 2, 110, 110).driftRate, 'regenbui verstuift');
+      // een vers spoor: hoe lang tot dicht, en wat er na een storm over is
+      const snowed = (cls, rate, seconds, ground) => {
+        const w = testWorld(cls);
+        simDrive(w, 1, 80, { x: 200, y: 100 });
+        for (let s = 1; s <= seconds; s++) G.fadeStep(w, s * G.FADE_CHECK, rate, null, null, ground);
+        return { closed: w.map[100 * G.W + 200] === G.DIRT, track: w.track[100 * G.W + 200] / G.TRACK_ONE };
+      };
+      const cfg = E.weather.find((r) => r.effect?.drift).effect.drift;
+      const light = Wx.driftRate(cfg, cfg.min).driftRate, heavy = Wx.driftRate(cfg, cfg.max).driftRate;
+      check(snowed('soft', light, 120).closed && !snowed('soft', light, 110).closed, 'lichte verstuiving niet dicht in 2 minuten');
+      check(snowed('soft', heavy, 45).closed && !snowed('soft', heavy, 40).closed, 'zware verstuiving niet dicht in 45 s');
+      check(!snowed('soft', 0, 2000).closed, 'zonder verstuiving loopt een tunnel in zacht dicht');
+      for (const map of [A, E]) {
+        const storm = map.weather.find((r) => r.effect?.burial), rate = Wx.weatherAt(map, 3, 75, 75).driftRate;
+        const r = snowed('soft', rate, storm.duration);
+        check(Math.abs(r.track - 0.1) <= 0.01, `${map.name}: na de storm is van een vers spoor ${r.track.toFixed(3)} over, niet 10%`);
+      }
+      // rotsige grond (gewicht 0,5): half zo snel
+      const rock = snowed('soft', heavy, 45, cfg.ground), half = snowed('soft', heavy, 45, { soft: 0.5 });
+      check(rock.closed && !half.closed && Math.abs(half.track - 0.5) < 0.02, `gewicht 0,5 niet half zo snel (${half.track.toFixed(2)} over)`);
+      return 'Ardennen en El Alamein wisselen tussen min en max; dicht in 120 s / 45 s; storm laat 10% over; gewicht 0,5 = half zo snel';
+    },
+  },
+  {
+    name: 'regen en onweer: alleen in de bui, bliksem op vaste momenten',
+    async run() {
+      const C = G.MAPS.carentan, B = G.MAPS.berlijn;
+      check(Wx.weatherAt(C, 1, 110, 110).rain === 0, 'Carentan: regen in ronde 1 (ochtendmist)');
+      check(Wx.weatherAt(C, 2, 500, 50).rain === 0 && Wx.weatherAt(C, 2, 500, 110).rain === 1, 'Carentan: regen tussen de buien of geen storm in de bui');
+      const r = Wx.weatherAt(B, 3, 500, 30).rain;
+      check(r >= 0.3 && r <= 0.7 && Wx.weatherAt(B, 2, 500, 30).rain === 0, 'Berlijn: regen niet tussen 0,3 en 0,7 in ronde 3 (of al in ronde 2)');
+      const cfg = C.weather.find((x) => x.effect?.lightning).effect.lightning;
+      let flashes = 0, prev = 0;
+      for (let t = 0; t <= 20; t += 0.02) {
+        const v = Wx.lightningAt(cfg, t);
+        check(v === Wx.lightningAt(cfg, t), 'bliksem niet vast');
+        if (v === 1 && prev !== 1) flashes++;
+        prev = v;
+      }
+      check(flashes >= 1, 'geen bliksem in een bui van 20 s');
+      check(Wx.weatherAt(C, 2, 500, 50).lightning === 0, 'bliksem buiten de bui');
+      return `regen alleen waar en wanneer het hoort; ${flashes} flitsen in 20 s`;
+    },
+  },
+  {
     name: 'onderduiken: 2 s stil in de storm = bedekt en onzichtbaar, tot rijden of schieten',
     async run(port) {
       const a = await connectBot(port, 'el-alamein');

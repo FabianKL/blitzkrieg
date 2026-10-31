@@ -3,6 +3,12 @@
 export default { // §10.10
   name: 'Berlijn 1945', style: 'zomer', header: 'VAL VAN BERLIJN — BERLIJN · APRIL 1945',
   tanks: { A: 't34', B: 'panther' },
+  desc: {
+    setting: 'April 1945. De val van Berlijn: het Rode Leger vecht zich straat voor straat door de brandende hoofdstad van het Derde Rijk.',
+    terrain: 'Verwoeste straten en pleinen, de Spree en het Landwehrkanaal, puinhopen, betonnen bunkers en de Tiergarten als groene oase.',
+    weather: 'Dichte rook hangt boven de stad en wordt elke ronde dikker, tot het zicht bijna verdwijnt. In ronde 3 regent het, met onweersbuien.',
+    special: 'Instortende gevels: gebouwen storten in na herhaalde treffers en begraven alles eronder. Pantser wordt niet hersteld tijdens een ronde.',
+  },
   terrainPercent: { paved: 30, building: 30, soft: 15, normal: 8, vegetation: 5, water: 7, rock: 5 },
   classes: {
     paved: { label: 'Straten en pleinen', color: '#7a7670' },
@@ -33,6 +39,7 @@ export default { // §10.10
   weather: [
     { label: 'Rook boven de stad', untilRound: 1, effect: { visibility: 12 } },
     { label: 'Dichtere rook', from: { round: 2 }, untilRound: 2, effect: { visibility: 8 } },
-    { label: 'Dikke rook en regen', from: { round: 3 }, effect: { visibility: 6 } }, // geen metro (op verzoek)
+    { label: 'Dikke rook en regen', from: { round: 3 }, effect: { visibility: 6, rain: { min: 0.3, max: 0.7, period: 20 } } },
+    { label: 'Onweer', from: { round: 3 }, every: 90, duration: 20, effect: { rain: { min: 1, max: 1 }, lightning: { every: 7 } } }, // geen metro (op verzoek)
   ],
 };

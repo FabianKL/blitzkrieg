@@ -265,15 +265,14 @@ function tryMap(seed, rules, players) {
     const [lo, hi] = v.f.buildings || [4, 8];
     if (v.f.layout === 'row') { // rij boerderijen langs de weg door het dorp
       const want = lo + Math.floor(rnd() * (hi - lo + 1));
-      const [bw, bh] = BUILDINGS.footprints.boerderij; // precies het grondvlak van de getekende boerderij
-      for (let n = 0, x = Math.round(v.cx - (want * (bw + T)) / 2), tries = 0; n < want && tries < 200 && x < W - bw; tries++, x += 2) {
+      const [bw, bh] = BUILDINGS.footprints.boerderij;
+      for (let n = 0, x = Math.round(v.cx - (want * (bw + BUILDINGS.farmSpacing)) / 2), tries = 0; n < want && tries < 200 && x < W - bw; tries++, x += 2) {
         const sgn = n % 2 ? 1 : -1; // om en om aan beide kanten van de weg
-        // de weg zoeken (hoogstens 20 cellen onder het midden), dan naar de rand ervan
         let y = Math.max(1, v.cy - 40);
         while (y < Math.min(H - 2, v.cy + 40) && terrain[y * W + x] !== CLASS.paved) y++;
         if (terrain[y * W + x] !== CLASS.paved) continue;
         while (y > 0 && y < H - 1 && terrain[y * W + x] === CLASS.paved) y += sgn;
-        if (placeBuilding(x, sgn < 0 ? y - bh - 1 : y + 2, bw, bh)) { n++; x += bw + T - 2; }
+        if (placeBuilding(x, sgn < 0 ? y - bh - 1 : y + 2, bw, bh, BUILDINGS.farmGap)) { n++; x += bw + BUILDINGS.farmSpacing; }
       }
       continue;
     }
@@ -283,41 +282,43 @@ function tryMap(seed, rules, players) {
         stroke([[v.cx, v.cy], [Math.round(v.cx + dx * (v.x1 - v.cx)), Math.round(v.cy + dy * (v.y1 - v.cy))]], T, (i) => { if (open(i) && map[i] !== WATER) setPaved(i); });
       }
     }
-    // kerk (herkenningspunt) aan een schuine kant van het plein, niet op een straat; grondvlak van
-    // de getekende kerk (BUILDINGS.footprints)
-    let church = false;
+    // kerk (herkenningspunt) aan een schuine kant van het plein: de kern van het dorp
+    let church = false, churchX = v.cx, churchY = v.cy;
     const [kw, kh] = BUILDINGS.footprints.kerk;
-    // rechtop, en anders dwars (een krap dorp: de kerk is lang)
     for (const [cw, ch] of [[kw, kh], [kh, kw]]) {
       for (const [sx, sy, off] of [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([a, b]) => [a, b, Math.round(1.6 * T) + 2 + (k - 1) * T]))) {
         if (church) break;
         const x0 = sx > 0 ? v.cx + off : v.cx - off - cw, y0 = sy > 0 ? v.cy + off : v.cy - off - ch;
         if (placeBuilding(x0, y0, cw, ch)) {
           landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + cw / 2, y: y0 + ch / 2 });
+          churchX = x0 + cw / 2; churchY = y0 + ch / 2;
           church = true;
         }
       }
     }
+    // huizen dicht om de kerk heen: willekeurig in het dorpsvak, maar ver weg wordt vaker afgewezen
     const want = lo + Math.floor(rnd() * (hi - lo + 1)) - (church ? 1 : 0);
+    const houseGap = BUILDINGS.gap;
     for (let n = 0, tries = 0; n < want && tries < 600; tries++) {
-      // een woonhuis of een (soms gedraaid) rijhuis, precies het grondvlak van de tekening
       const kind = rnd() < BUILDINGS.houses['huis-woon'] ? 'huis-woon' : 'huis-rij', turn = rnd() < 0.5;
       const [fw, fh] = BUILDINGS.footprints[kind], [bw, bh] = turn ? [fh, fw] : [fw, fh];
       const x0 = Math.round(v.x0 + rnd() * (v.x1 - v.x0 - bw)), y0 = Math.round(v.y0 + rnd() * (v.y1 - v.y0 - bh));
-      if (Math.hypot(x0 + bw / 2 - v.cx, y0 + bh / 2 - v.cy) < 2.5 * T) continue;
-      if (!nearPaved(x0, y0, bw, bh, T)) continue; // aan een straat
-      if (placeBuilding(x0, y0, bw, bh)) n++;
+      const d = Math.hypot(x0 + bw / 2 - churchX, y0 + bh / 2 - churchY);
+      if (d < 2.5 * T) continue;
+      if (d > 4 * T && rnd() > 4 * T / d) continue; // voorkeur dicht bij de kerk
+      if (!nearPaved(x0, y0, bw, bh, T)) continue;
+      if (placeBuilding(x0, y0, bw, bh, houseGap)) n++;
     }
   }
-  function placeBuilding(x0, y0, bw, bh, gap = 2) {
+  function placeBuilding(x0, y0, bw, bh, gap = BUILDINGS.gap) {
     for (let y = y0 - gap; y < y0 + bh + gap; y++) {
       for (let x = x0 - gap; x < x0 + bw + gap; x++) {
         if (!inBounds(x, y)) return false;
         const i = y * W + x, inside = x >= x0 && x < x0 + bw && y >= y0 && y < y0 + bh;
         if (map[i] === BUILDING || zone[i] || border[i]) return false; // ruimte tussen huizen
         if (inside && (map[i] !== DIRT || isRoad(i))) return false;
-        // in een dorp ook niet pal tegen de weg (in de stad liggen de blokken wel tegen de straat)
-        if (gap >= 2 && isRoad(i) && x >= x0 - 1 && x <= x0 + bw && y >= y0 - 1 && y <= y0 + bh) return false;
+        // niet pal tegen de weg (in de stad liggen de blokken tegen de straat: gap = 0)
+        if (gap > 0 && isRoad(i) && x >= x0 - 1 && x <= x0 + bw && y >= y0 - 1 && y <= y0 + bh) return false;
       }
     }
     const id = vegHp.length + 1;
@@ -358,7 +359,7 @@ function tryMap(seed, rules, players) {
         if (have.building >= target('building') || rnd() < 0.02) continue; // af en toe een open plek (puin)
         let ok = true;
         for (let y = y0; y < y0 + lh && ok; y++) for (let x = x0; x < x0 + lw && ok; x++) ok = !parkMask[y * W + x];
-        if (ok && placeBuilding(x0, y0, lw, lh, 1)) have.building += lw * lh;
+        if (ok && placeBuilding(x0, y0, lw, lh, 0)) have.building += lw * lh;
       }
     }
   }

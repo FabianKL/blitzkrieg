@@ -3,6 +3,12 @@
 export default { // §10.9
   name: 'Oder-front 1945', style: 'zomer', header: 'SEELOWER HOOGTEN — ODER-FRONT · APRIL 1945',
   tanks: { A: 't34', B: 'panther' },
+  desc: {
+    setting: 'April 1945. De slag om de Seelower Hoogten: het Rode Leger bestormt de laatste verdedigingslinie voor Berlijn.',
+    terrain: 'Een steile heuvelrug in het westen, moerassen en natte aarde in het dal, de Oder en een kanaal met stalen bruggen.',
+    weather: 'De slag begint in het donker met verblindende zoeklichten. Vanaf ronde 3 breekt de dageraad aan.',
+    special: 'Artilleriebeschietingen. De heuvelrug biedt dekking maar beperkt je routes — zoek de doorgangen.',
+  },
   terrainPercent: { soft: 30, marsh: 15, hard: 20, normal: 10, rock: 10, vegetation: 5, water: 6, paved: 4 },
   classes: {
     paved: { label: 'Wegen', color: '#5a5650' },
