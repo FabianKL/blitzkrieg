@@ -1,0 +1,1356 @@
+{
+ "pxPerCell": 32,
+ "note": "Gemaakt uit input/ door Claude. Ontbrekende bestanden: de code valt terug op de oude tekening.",
+ "terrain": {
+  "perStyle": {
+   "zomer": {
+    "paved": "kasseien",
+    "hard": "grind",
+    "normal": "gras",
+    "soft": "aarde",
+    "marsh": "moeras",
+    "burnt": "verbrand",
+    "rock": "rots",
+    "tunnel": "aarde",
+    "rubble": "puin"
+   },
+   "winter": {
+    "paved": "bosweg",
+    "hard": "bevroren-grond",
+    "soft": "sneeuw",
+    "rock": "rots",
+    "tunnel": "aarde",
+    "ice": "ijs"
+   },
+   "woestijn": {
+    "paved": "weg",
+    "hard": "hard",
+    "soft": "zand",
+    "rock": "rots",
+    "tunnel": "aarde"
+   }
+  },
+  "perMap": {
+   "fall-gelb": {
+    "soft": "modder"
+   },
+   "barbarossa": {
+    "paved": "grind"
+   },
+   "leningrad": {
+    "hard": "veen",
+    "ice": "ijs-neva"
+   },
+   "carentan": {
+    "soft": "modder"
+   },
+   "market-garden": {
+    "soft": "modder"
+   },
+   "seelow": {
+    "soft": "modder"
+   },
+   "berlijn": {
+    "paved": "asfalt",
+    "soft": "puin"
+   },
+   "koersk": {
+    "paved": "zandweg"
+   }
+  },
+  "size": 512,
+  "format": "jpg",
+  "ice": "winter/terrain/ijs.jpg (Leningrad: ijs-neva.jpg), met diepte en barsten uit de shader",
+  "water": "procedureel (shader)",
+  "winterRubble": "zomer/terrain/puin.jpg (geen winterversie)"
+ },
+ "buildings": {
+  "footprintCells": {
+   "kerk": [
+    8,
+    15
+   ],
+   "boerderij": [
+    11,
+    10
+   ],
+   "huis-woon": [
+    6,
+    6
+   ],
+   "huis-rij": [
+    12,
+    5
+   ]
+  },
+  "stages": [
+   "heel",
+   "half",
+   "puin"
+  ]
+ },
+ "felled": {
+  "kapot": [
+   "loof",
+   "winter/den",
+   "winter/berk",
+   "struik",
+   "cactus",
+   "palm"
+  ],
+  "verdwijnt": [
+   "zomer/den",
+   "zomer/berk",
+   "heg"
+  ]
+ },
+ "tanks": {
+  "canvas": 448,
+  "pivot": [
+   224,
+   224
+  ],
+  "hullLengthCells": 7.6,
+  "noseRight": true,
+  "parts": [
+   "tank.png",
+   "romp.png",
+   "rups.png",
+   "tank.json"
+  ]
+ },
+ "bridges": {
+  "deckHeightPx": 384,
+  "parts": [
+   "begin",
+   "midden",
+   "eind"
+  ]
+ },
+ "effects": {
+  "format": "PixiJS spritesheet met animations",
+  "additive": [
+   "explosie",
+   "mondingsvuur"
+  ],
+  "anchorMondingsvuur": [
+   0.12,
+   0.5
+  ]
+ },
+ "depots": {
+  "brandstof": [
+   "zomer",
+   "winter"
+  ],
+  "munitie": "zomer/objects/munitie-depot.png"
+ },
+ "atlases": {
+  "zomer": "zomer/objects.json",
+  "winter": "winter/objects.json",
+  "woestijn": "woestijn/objects.json"
+ },
+ "files": {
+  "effects/explosie.png": [
+   1024,
+   1024
+  ],
+  "effects/inslag-aarde.png": [
+   1024,
+   512
+  ],
+  "effects/inslag-sneeuw.png": [
+   1024,
+   512
+  ],
+  "effects/inslag-zand.png": [
+   1024,
+   512
+  ],
+  "effects/mondingsvuur.png": [
+   768,
+   256
+  ],
+  "effects/rook.png": [
+   1024,
+   512
+  ],
+  "tanks/landsverk/tank.png": [
+   448,
+   448
+  ],
+  "tanks/panther/tank.png": [
+   448,
+   448
+  ],
+  "tanks/sherman/tank.png": [
+   448,
+   448
+  ],
+  "tanks/t34/tank.png": [
+   448,
+   448
+  ],
+  "winter/bases/deurpost.png": [
+   96,
+   96
+  ],
+  "winter/bases/hoek.png": [
+   96,
+   96
+  ],
+  "winter/bases/muur.png": [
+   704,
+   64
+  ],
+  "winter/bases/spul-01.png": [
+   96,
+   96
+  ],
+  "winter/bases/spul-02.png": [
+   96,
+   96
+  ],
+  "winter/bases/spul-03.png": [
+   96,
+   96
+  ],
+  "winter/bases/spul-04.png": [
+   96,
+   96
+  ],
+  "winter/bases/spul-05.png": [
+   96,
+   96
+  ],
+  "winter/bases/spul-06.png": [
+   96,
+   96
+  ],
+  "winter/bridges/hout-begin.png": [
+   658,
+   382
+  ],
+  "winter/bridges/hout-eind.png": [
+   655,
+   384
+  ],
+  "winter/bridges/hout-midden.png": [
+   595,
+   307
+  ],
+  "winter/bridges/hout-wrak.png": [
+   1664,
+   384
+  ],
+  "winter/bridges/steen-begin.png": [
+   485,
+   383
+  ],
+  "winter/bridges/steen-eind.png": [
+   495,
+   384
+  ],
+  "winter/bridges/steen-midden.png": [
+   478,
+   270
+  ],
+  "winter/bridges/steen-wrak.png": [
+   1397,
+   384
+  ],
+  "winter/buildings/boerderij-half.png": [
+   352,
+   320
+  ],
+  "winter/buildings/boerderij-heel.png": [
+   352,
+   320
+  ],
+  "winter/buildings/boerderij-puin.png": [
+   352,
+   320
+  ],
+  "winter/buildings/huis-rij-half.png": [
+   384,
+   160
+  ],
+  "winter/buildings/huis-rij-heel.png": [
+   384,
+   160
+  ],
+  "winter/buildings/huis-rij-puin.png": [
+   384,
+   160
+  ],
+  "winter/buildings/huis-woon-half.png": [
+   192,
+   192
+  ],
+  "winter/buildings/huis-woon-heel.png": [
+   192,
+   192
+  ],
+  "winter/buildings/huis-woon-puin.png": [
+   192,
+   192
+  ],
+  "winter/buildings/kerk-half.png": [
+   256,
+   480
+  ],
+  "winter/buildings/kerk-heel.png": [
+   256,
+   480
+  ],
+  "winter/buildings/kerk-puin.png": [
+   256,
+   480
+  ],
+  "winter/objects.png": [
+   2048,
+   1024
+  ],
+  "winter/objects/berk-01.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-02.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-03.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-04.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-05.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-06.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-07.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-08.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-09.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-kapot-01.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-kapot-02.png": [
+   192,
+   192
+  ],
+  "winter/objects/berk-kapot-03.png": [
+   192,
+   192
+  ],
+  "winter/objects/brandstof-leeg.png": [
+   192,
+   192
+  ],
+  "winter/objects/brandstof-vol.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-01.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-02.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-03.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-04.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-05.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-06.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-07.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-08.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-09.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-kapot-01.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-kapot-02.png": [
+   192,
+   192
+  ],
+  "winter/objects/den-kapot-03.png": [
+   192,
+   192
+  ],
+  "winter/objects/ijsblad-01.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-02.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-03.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-04.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-05.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-06.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-07.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-08.png": [
+   96,
+   96
+  ],
+  "winter/objects/ijsblad-09.png": [
+   96,
+   96
+  ],
+  "winter/objects/krater-01.png": [
+   256,
+   256
+  ],
+  "winter/objects/krater-02.png": [
+   256,
+   256
+  ],
+  "winter/objects/krater-03.png": [
+   256,
+   256
+  ],
+  "winter/objects/krater-04.png": [
+   256,
+   256
+  ],
+  "winter/objects/oeverriet-01.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-02.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-03.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-04.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-05.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-06.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-07.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-08.png": [
+   96,
+   96
+  ],
+  "winter/objects/oeverriet-09.png": [
+   96,
+   96
+  ],
+  "winter/objects/rots-01.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-02.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-03.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-04.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-05.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-06.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-07.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-08.png": [
+   160,
+   160
+  ],
+  "winter/objects/rots-09.png": [
+   160,
+   160
+  ],
+  "winter/terrain/aarde.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/bevroren-grond.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/bosweg.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/ijs.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/ijs-neva.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/rots.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/sneeuw.jpg": [
+   512,
+   512
+  ],
+  "winter/terrain/veen.jpg": [
+   512,
+   512
+  ],
+  "woestijn/bases/deurpost.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/hoek.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/muur.png": [
+   512,
+   64
+  ],
+  "woestijn/bases/spul-01.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/spul-02.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/spul-03.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/spul-04.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/spul-05.png": [
+   96,
+   96
+  ],
+  "woestijn/bases/spul-06.png": [
+   96,
+   96
+  ],
+  "woestijn/objects.png": [
+   2048,
+   1024
+  ],
+  "woestijn/objects/cactus-01.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-02.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-03.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-04.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-05.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-06.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-07.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-08.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-09.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-kapot-01.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-kapot-02.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/cactus-kapot-03.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/krater-01.png": [
+   256,
+   256
+  ],
+  "woestijn/objects/krater-02.png": [
+   256,
+   256
+  ],
+  "woestijn/objects/krater-03.png": [
+   256,
+   256
+  ],
+  "woestijn/objects/krater-04.png": [
+   256,
+   256
+  ],
+  "woestijn/objects/palm-01.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-02.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-03.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-04.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-05.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-06.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-07.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-08.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-09.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-kapot-01.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-kapot-02.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/palm-kapot-03.png": [
+   192,
+   192
+  ],
+  "woestijn/objects/rots-01.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-02.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-03.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-04.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-05.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-06.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-07.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-08.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/rots-09.png": [
+   160,
+   160
+  ],
+  "woestijn/objects/struik-01.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-02.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-03.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-04.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-05.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-06.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-07.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-08.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-09.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-kapot-01.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-kapot-02.png": [
+   128,
+   128
+  ],
+  "woestijn/objects/struik-kapot-03.png": [
+   128,
+   128
+  ],
+  "woestijn/terrain/aarde.jpg": [
+   512,
+   512
+  ],
+  "woestijn/terrain/hard.jpg": [
+   512,
+   512
+  ],
+  "woestijn/terrain/rots.jpg": [
+   512,
+   512
+  ],
+  "woestijn/terrain/weg.jpg": [
+   512,
+   512
+  ],
+  "woestijn/terrain/zand.jpg": [
+   512,
+   512
+  ],
+  "zomer/bases/deurpost.png": [
+   96,
+   96
+  ],
+  "zomer/bases/hoek.png": [
+   96,
+   96
+  ],
+  "zomer/bases/muur.png": [
+   576,
+   64
+  ],
+  "zomer/bases/spul-01.png": [
+   96,
+   96
+  ],
+  "zomer/bases/spul-02.png": [
+   96,
+   96
+  ],
+  "zomer/bases/spul-03.png": [
+   96,
+   96
+  ],
+  "zomer/bases/spul-04.png": [
+   96,
+   96
+  ],
+  "zomer/bases/spul-05.png": [
+   96,
+   96
+  ],
+  "zomer/bases/spul-06.png": [
+   96,
+   96
+  ],
+  "zomer/bridges/hout-wrak.png": [
+   1707,
+   384
+  ],
+  "zomer/bridges/staal-begin.png": [
+   693,
+   384
+  ],
+  "zomer/bridges/staal-eind.png": [
+   694,
+   384
+  ],
+  "zomer/bridges/staal-midden.png": [
+   628,
+   315
+  ],
+  "zomer/bridges/staal-wrak.png": [
+   1870,
+   384
+  ],
+  "zomer/bridges/steen-begin.png": [
+   504,
+   381
+  ],
+  "zomer/bridges/steen-eind.png": [
+   504,
+   384
+  ],
+  "zomer/bridges/steen-midden.png": [
+   461,
+   231
+  ],
+  "zomer/bridges/steen-wrak.png": [
+   1413,
+   384
+  ],
+  "zomer/buildings/boerderij-half.png": [
+   352,
+   320
+  ],
+  "zomer/buildings/boerderij-heel.png": [
+   352,
+   320
+  ],
+  "zomer/buildings/boerderij-puin.png": [
+   352,
+   320
+  ],
+  "zomer/buildings/huis-rij-half.png": [
+   384,
+   160
+  ],
+  "zomer/buildings/huis-rij-heel.png": [
+   384,
+   160
+  ],
+  "zomer/buildings/huis-rij-puin.png": [
+   384,
+   160
+  ],
+  "zomer/buildings/huis-woon-half.png": [
+   192,
+   192
+  ],
+  "zomer/buildings/huis-woon-heel.png": [
+   192,
+   192
+  ],
+  "zomer/buildings/huis-woon-puin.png": [
+   192,
+   192
+  ],
+  "zomer/buildings/kerk-half.png": [
+   256,
+   480
+  ],
+  "zomer/buildings/kerk-heel.png": [
+   256,
+   480
+  ],
+  "zomer/buildings/kerk-puin.png": [
+   256,
+   480
+  ],
+  "zomer/objects.png": [
+   2048,
+   2048
+  ],
+  "zomer/objects/berk-01.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-02.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-03.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-04.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-05.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-06.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-07.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-08.png": [
+   192,
+   192
+  ],
+  "zomer/objects/berk-09.png": [
+   192,
+   192
+  ],
+  "zomer/objects/brandstof-leeg.png": [
+   192,
+   192
+  ],
+  "zomer/objects/brandstof-vol.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-01.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-02.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-03.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-04.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-05.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-06.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-07.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-08.png": [
+   192,
+   192
+  ],
+  "zomer/objects/den-09.png": [
+   192,
+   192
+  ],
+  "zomer/objects/heg-01.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-02.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-03.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-04.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-05.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-06.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-07.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-08.png": [
+   128,
+   128
+  ],
+  "zomer/objects/heg-09.png": [
+   128,
+   128
+  ],
+  "zomer/objects/krat-brandstof.png": [
+   128,
+   128
+  ],
+  "zomer/objects/krat-leeg.png": [
+   128,
+   128
+  ],
+  "zomer/objects/krat-munitie.png": [
+   128,
+   128
+  ],
+  "zomer/objects/krater-01.png": [
+   256,
+   256
+  ],
+  "zomer/objects/krater-02.png": [
+   256,
+   256
+  ],
+  "zomer/objects/krater-03.png": [
+   256,
+   256
+  ],
+  "zomer/objects/krater-04.png": [
+   256,
+   256
+  ],
+  "zomer/objects/loof-01.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-02.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-03.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-04.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-05.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-06.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-07.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-08.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-09.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-kapot-01.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-kapot-02.png": [
+   192,
+   192
+  ],
+  "zomer/objects/loof-kapot-03.png": [
+   192,
+   192
+  ],
+  "zomer/objects/oeverplant-01.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-02.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-03.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-04.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-05.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-06.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-07.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-08.png": [
+   96,
+   96
+  ],
+  "zomer/objects/oeverplant-09.png": [
+   96,
+   96
+  ],
+  "zomer/objects/parachute.png": [
+   192,
+   192
+  ],
+  "zomer/objects/rots-01.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-02.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-03.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-04.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-05.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-06.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-07.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-08.png": [
+   160,
+   160
+  ],
+  "zomer/objects/rots-09.png": [
+   160,
+   160
+  ],
+  "zomer/objects/waterlelie-01.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-02.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-03.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-04.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-05.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-06.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-07.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-08.png": [
+   96,
+   96
+  ],
+  "zomer/objects/waterlelie-09.png": [
+   96,
+   96
+  ],
+  "zomer/terrain/aarde.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/asfalt.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/gras.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/grind.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/kasseien.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/modder.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/moeras.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/puin.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/rots.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/verbrand.jpg": [
+   512,
+   512
+  ],
+  "zomer/terrain/zandweg.jpg": [
+   512,
+   512
+  ],
+  "zomer/objects/munitie-depot.png": [
+   320,
+   96
+  ],
+  "tanks/landsverk/romp.png": [
+   448,
+   448
+  ],
+  "tanks/landsverk/rups.png": [
+   160,
+   26
+  ],
+  "tanks/landsverk/tank.json": "json",
+  "tanks/t34/romp.png": [
+   448,
+   448
+  ],
+  "tanks/t34/rups.png": [
+   154,
+   28
+  ],
+  "tanks/t34/tank.json": "json",
+  "tanks/panther/romp.png": [
+   448,
+   448
+  ],
+  "tanks/panther/rups.png": [
+   168,
+   35
+  ],
+  "tanks/panther/tank.json": "json",
+  "tanks/sherman/romp.png": [
+   448,
+   448
+  ],
+  "tanks/sherman/rups.png": [
+   160,
+   30
+  ],
+  "tanks/sherman/tank.json": "json",
+  "tanks/comet/tank.png": [
+   448,
+   448
+  ],
+  "tanks/comet/romp.png": [
+   448,
+   448
+  ],
+  "tanks/comet/rups.png": [
+   168,
+   31
+  ],
+  "tanks/comet/tank.json": "json"
+ }
+}
