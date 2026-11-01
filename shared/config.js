@@ -140,7 +140,7 @@ export const DISPLAY = { minimap: true };
 //               blokken liggen op de gewone grond (gras, sneeuw, zand) in plaats van op een grijze
 //               rotsplaat (dan rocks 1, zodat het hele rotsveld vol blokken ligt), rockShade = zoveel
 //               donkerder is de grond midden in een rotsveld
-//   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout', 'steen', 'staal';
+//   bridge      bruggen (public/view/bridges-view.js): kind = soort sprite ('hout' of 'staal';
 //               public/assets/<stijl>/bridges/<soort>-begin|midden|eind|wrak.png), land = zo'n deel
 //               van het landhoofd ligt op de oever, height = hoe hoog boven het water (lengte van
 //               de schaduw, in cellen per cel schaduwverschuiving)
@@ -155,7 +155,7 @@ export const LOOK = {
     verge: 2.2, vergeColor: null, vergeAmount: 0.3, ruts: 0.22, rutOffset: 1.8, rutWidth: 0.55,
     smooth: 2.5, junction: 3, curb: 0, curbColor: '#a3a199', line: 0, vergeInside: 0.6, edgeNoise: 0.3,
   },
-  bridge: { kind: 'steen', land: 0.33, height: 1.6 },
+  bridge: { kind: 'hout', land: 0.33, height: 1.6 },
   objects: { rocks: 1, rockGround: true, rockShade: 0.88 },
   waterPlants: { density: 0.55, width: 2, reach: 3, offset: [-0.3, 0.7], clump: 7 },
   grain: 0.035,

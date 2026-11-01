@@ -120,7 +120,7 @@
   ]
  },
  "bridges": {
-  "deckHeightPx": 384,
+  "deckHeightPx": 227,
   "parts": [
    "begin",
    "midden",
@@ -228,36 +228,20 @@
    96
   ],
   "winter/bridges/hout-begin.png": [
-   658,
-   382
+   681,
+   230
   ],
   "winter/bridges/hout-eind.png": [
-   655,
-   384
+   683,
+   230
   ],
   "winter/bridges/hout-midden.png": [
-   595,
-   307
+   627,
+   230
   ],
   "winter/bridges/hout-wrak.png": [
-   1664,
-   384
-  ],
-  "winter/bridges/steen-begin.png": [
-   485,
-   383
-  ],
-  "winter/bridges/steen-eind.png": [
-   495,
-   384
-  ],
-  "winter/bridges/steen-midden.png": [
-   478,
-   270
-  ],
-  "winter/bridges/steen-wrak.png": [
-   1397,
-   384
+   2064,
+   239
   ],
   "winter/buildings/boerderij-half.png": [
    352,
@@ -864,40 +848,24 @@
    96
   ],
   "zomer/bridges/hout-wrak.png": [
-   1707,
-   384
+   2070,
+   245
   ],
   "zomer/bridges/staal-begin.png": [
-   693,
-   384
+   684,
+   236
   ],
   "zomer/bridges/staal-eind.png": [
-   694,
-   384
+   685,
+   236
   ],
   "zomer/bridges/staal-midden.png": [
-   628,
-   315
+   636,
+   236
   ],
   "zomer/bridges/staal-wrak.png": [
-   1870,
-   384
-  ],
-  "zomer/bridges/steen-begin.png": [
-   504,
-   381
-  ],
-  "zomer/bridges/steen-eind.png": [
-   504,
-   384
-  ],
-  "zomer/bridges/steen-midden.png": [
-   461,
-   231
-  ],
-  "zomer/bridges/steen-wrak.png": [
-   1413,
-   384
+   2067,
+   251
   ],
   "zomer/buildings/boerderij-half.png": [
    352,
@@ -1351,6 +1319,34 @@
    168,
    31
   ],
-  "tanks/comet/tank.json": "json"
+  "tanks/comet/tank.json": "json",
+  "zomer/bridges/hout-begin.png": [
+   677,
+   227
+  ],
+  "zomer/bridges/hout-midden.png": [
+   626,
+   227
+  ],
+  "zomer/bridges/hout-eind.png": [
+   681,
+   227
+  ],
+  "winter/bridges/staal-begin.png": [
+   688,
+   240
+  ],
+  "winter/bridges/staal-midden.png": [
+   636,
+   241
+  ],
+  "winter/bridges/staal-eind.png": [
+   689,
+   241
+  ],
+  "winter/bridges/staal-wrak.png": [
+   2069,
+   250
+  ]
  }
 }

@@ -181,7 +181,7 @@ De spelregels kijken er niet naar.
 | tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: welke tank elke ploeg rijdt, bijv. `{ A: 'comet', B: 'panther' }`. De vijf tanks (Landsverk, T-34, Panther, Sherman, Comet) met naam, land en minikaartkleur staan in `TANKS` in config.js, op elke map met hetzelfde uiterlijk. Tekening: `public/assets/tanks/<naam>/` (romp, rupsstrook, `tank.json`; zie `docs/SPEC-tanks.md`); de rupsen schuiven mee met het rijden. Hoe donker ploeg C/D is: `TANK_ART`. Zonder bestand tekent de stijl de tank. |
 | `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit), `width` (zo ver van de waterlijn een waterlelie of ijsblad), `reach`, `offset` en `clump` (oeverplanten staan in groepjes tegen de getekende waterlijn). |
 | `grain` | Korrel over het beeld (0..1); samen met `grade` en `vignette` in één nabewerkingsfilter. |
-| `bridge` | Bruggen als sprite: `kind` (`hout`, `steen`, `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
+| `bridge` | Bruggen als sprite: `kind` (`hout` of `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |
 | `iceShine`, `haze`, `shakeOnHit` | Glinstering op ijs, hittewaas (als het weer `heatHaze` heeft), schudden als je geraakt wordt. |
 
 **Een nieuwe map een eigen stijl geven:**

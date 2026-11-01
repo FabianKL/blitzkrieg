@@ -13,7 +13,6 @@ const PARTS = ['begin', 'midden', 'eind', 'wrak'];
 // Getekende vervanger per soort: rijbaan, leuning en landhoofd (kleuren)
 const DRAWN = {
   hout: { deck: '#7a5a3a', seam: '#4e3824', rail: '#5a4028', pier: '#8a8478' },
-  steen: { deck: '#9a958c', seam: '#6e6a62', rail: '#b4ada2', pier: '#a29c92' },
   staal: { deck: '#5c6064', seam: '#3c4044', rail: '#6c7a6a', pier: '#a29c92' },
 };
 const PX = 32; // getekende vervanger: pixels per cel
@@ -24,7 +23,7 @@ export function createBridgeView({ layer, shadowLayer, game, particles, shadowCo
 
   // Getekende vervanger: canvas in de maat van de echte sprites (rijbaan 8 cellen breed)
   function drawn(kind, part) {
-    const c = document.createElement('canvas'), d = DRAWN[kind] || DRAWN.steen, deck = 8 * PX, rail = PX * 0.7;
+    const c = document.createElement('canvas'), d = DRAWN[kind] || DRAWN.hout, deck = 8 * PX, rail = PX * 0.7;
     const len = part === 'midden' ? 4 * PX : part === 'wrak' ? 24 * PX : 6 * PX;
     const tall = part === 'midden' ? deck : deck * 1.4;
     c.width = len; c.height = tall;
