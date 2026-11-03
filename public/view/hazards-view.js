@@ -174,14 +174,14 @@ export function createHazardView(v) {
     const cfg = game.weather?.flags.searchlights;
     if (!cfg) return;
     const half = (cfg.widthT * G.T) / 2;
-    for (const b of searchlightBeams(cfg, game.tick - game.mapTick)) {
+    for (const b of searchlightBeams(cfg, game.tick - game.mapTick, game.stuckBeams)) {
       const Lb = G.W * 1.3, c = Math.cos(b.ang), s = Math.sin(b.ang);
       lights.poly([
         b.x0 - s * half, b.y0 + c * half,
         b.x0 + c * Lb - s * half * 1.6, b.y0 + s * Lb + c * half * 1.6,
         b.x0 + c * Lb + s * half * 1.6, b.y0 + s * Lb - c * half * 1.6,
         b.x0 + s * half, b.y0 - c * half,
-      ]).fill({ color: 0xfffad2, alpha: 0.16 });
+      ]).fill({ color: 0xfffad2, alpha: b.stuck ? 0.45 : 0.35 });
     }
   }
   // Woestijnhallucinaties (El Alamein): buiten je zichtcirkel soms een valse contour, ergens waar
@@ -191,21 +191,27 @@ export function createHazardView(v) {
   let nextMirage = 0;
   function drawMirages(me, cam, now) {
     if (!game.weather?.flags.mirages) return;
-    if (!nextMirage) nextMirage = now + 15000 * Math.random();
+    if (!nextMirage) nextMirage = now + 4000 + Math.random() * 11000;
     const r = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
     if (now > nextMirage) {
-      nextMirage = now + 15000 * (0.5 + Math.random()); // gemiddeld eens per 15 s
+      nextMirage = now + 4000 + Math.random() * 11000; // 4–15 seconden
       const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180), a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
       const d = r + 4 + Math.random() * Math.max(4, far * 0.8 - r - 4);
       const x = Math.round(me.x + Math.cos(a) * d), y = Math.round(me.y + Math.sin(a) * d);
       if (G.inBounds(x, y) && sightAt(game.map, me, x, y, { radius: r, view: cam, smokes: game.smokes }) === 'contour') {
-        mirages.push({ x, y, ang: Math.floor(Math.random() * 8) * (Math.PI / 4), until: now + 2000 + Math.random() * 2000 });
+        mirages.push({ x, y, born: now, ang: Math.floor(Math.random() * 8) * (Math.PI / 4),
+          dx: (Math.random() - 0.5) * 0.6, dy: (Math.random() - 0.5) * 0.6,
+          angSpeed: (Math.random() - 0.5) * 1.0,
+          until: now + 4000 + Math.random() * 4000 });
       }
     }
     for (let k = mirages.length - 1; k >= 0; k--) {
       const m = mirages[k];
       if (now > m.until) { mirages.splice(k, 1); continue; }
-      drawContour(mirageSprites, m.x + 0.5, m.y + 0.5, m.ang, contourAlpha(Math.hypot(m.x - me.x, m.y - me.y), r, far));
+      const elapsed = (now - m.born) / 1000;
+      const mx = m.x + m.dx * elapsed, my = m.y + m.dy * elapsed;
+      const ma = m.ang + m.angSpeed * elapsed;
+      drawContour(mirageSprites, mx + 0.5, my + 0.5, ma, contourAlpha(Math.hypot(mx - me.x, my - me.y), r, far));
     }
   }
 

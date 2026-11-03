@@ -202,10 +202,25 @@ function newWorld(room, made = makeWorld(room)) {
 }
 
 function spawn(room, t) {
-  const b = room.world.bases[t.id];
   const max = effectiveMax(room);
+  let x, y;
+  if (room.rules.noBases) {
+    // willekeurige begaanbare plek, minstens 10 T van andere tanks
+    const w = room.world, minDist = 10 * G.T;
+    for (let tries = 0; tries < 500; tries++) {
+      x = Math.floor(Math.random() * G.W); y = Math.floor(Math.random() * G.H);
+      if (!G.playable(x, y)) continue;
+      const v = w.map[y * G.W + x];
+      if (v !== G.DIRT && v !== G.EMPTY) continue;
+      if (room.tanks.some((o) => o?.alive && o !== t && Math.hypot(o.x - x, o.y - y) < minDist)) continue;
+      break;
+    }
+  } else {
+    const b = room.world.bases[t.id];
+    x = b.x; y = b.y;
+  }
   Object.assign(t, {
-    x: b.x, y: b.y, dir: 0, alive: true, cooldown: 0, mv: 0, iceBlock: -1, wetTicks: 0, still: 0, buried: false,
+    x, y, dir: 0, alive: true, cooldown: 0, mv: 0, iceBlock: -1, wetTicks: 0, still: 0, buried: false,
     gauge: room.rules.meter?.start ?? 0, slow: G.SPEED_ONE, meterState: {},
     fuel: max.fuel, shield: max.shield, ammo: max.ammo,
   });
@@ -336,7 +351,8 @@ function iceStep(room, t, events) {
     if (G.isIce(w, i)) {
       const n = w.ice[b] = Math.min(255, w.ice[b] + 1);
       events.push({ t: 'c', b, n, i: t.id });
-      if (Math.random() < G.iceBreakChance(n)) { G.breakIce(w, b); events.push({ t: 'w', b, i: t.id }); }
+      const mul = room.wx?.flags?.iceBreakMul || 1;
+      if (Math.random() < G.iceBreakChance(n, (room.rules.iceBreak ?? G.ICE.breakPerPass) * mul)) { G.breakIce(w, b); events.push({ t: 'w', b, i: t.id }); }
     }
   }
   if (G.waterUnder(w.map, t.x, t.y, t.dir) > 0) {

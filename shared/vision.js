@@ -75,19 +75,26 @@ export function hintDirection(dx, dy) {
 // Zoeklichten (Oder-front, §10.9): beams bundels vanaf de rechterrand, elk widthT breed, die
 // heen en weer zwaaien (één zwaai per sweepSeconds). Server en clients rekenen dezelfde stand
 // uit de tijd sinds het begin van het spel (ticks). Geeft per bundel {x0, y0, ang}.
-export function searchlightBeams(cfg, ticks) {
+// stuckBeams: Map(beamIndex → {x, y}) — bundels die op een tank zijn vastgeplakt
+export function searchlightBeams(cfg, ticks, stuckBeams) {
   const out = [], t = ticks / G.TICK_RATE;
   for (let k = 0; k < cfg.beams; k++) {
     const y0 = ((k + 0.5) / cfg.beams) * G.H;
-    const phase = (t / cfg.sweepSeconds) * Math.PI * 2 + k * 2.1;
-    out.push({ x0: G.W - 1, y0, ang: Math.PI + Math.sin(phase) * 0.55 }); // naar links, zwaaiend
+    const x0 = G.W - 1;
+    const stuck = stuckBeams?.get(k);
+    if (stuck) {
+      out.push({ x0, y0, ang: Math.atan2(stuck.y - y0, stuck.x - x0), stuck: true });
+    } else {
+      const phase = (t / cfg.sweepSeconds) * Math.PI * 2 + k * 2.1;
+      out.push({ x0, y0, ang: Math.PI + Math.sin(phase) * 0.55 });
+    }
   }
   return out;
 }
 // Ligt (x, y) in een bundel?
-export function searchlightAt(cfg, ticks, x, y) {
+export function searchlightAt(cfg, ticks, x, y, stuckBeams) {
   const half = (cfg.widthT * G.T) / 2;
-  return searchlightBeams(cfg, ticks).some((b) => {
+  return searchlightBeams(cfg, ticks, stuckBeams).some((b) => {
     const dx = x - b.x0, dy = y - b.y0, along = dx * Math.cos(b.ang) + dy * Math.sin(b.ang);
     return along > 0 && Math.abs(-dx * Math.sin(b.ang) + dy * Math.cos(b.ang)) <= half;
   });

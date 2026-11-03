@@ -79,7 +79,9 @@ function tryMap(seed, rules, players) {
   const villages = of('village').map((f) => villageRect(f, rnd));
   const parks = of('park').map((f) => villageRect(f, rnd));
   const rivers = of('river');
-  const bases = placeBases(players, rnd, isBorder, [...villages, ...parks], rivers, pt, rules); // niet in een dorp of park
+  // bij noBases (Arnhem): geen bases plaatsen, spawn gaat op willekeurige plek
+  const lakeExclude = lakeExclusion(of('lake'), noise, band);
+  const bases = rules.noBases ? [] : placeBases(players, rnd, isBorder, [...villages, ...parks], rivers, pt, rules, lakeExclude);
   const zone = protectedZone(bases);
 
   // ---------- 2. Vaste kenmerken ----------
@@ -107,6 +109,47 @@ function tryMap(seed, rules, players) {
       for (let y = 0; y < depth; y++) { const i = (f.side === 'south' ? H - 1 - y : y) * W + x; if (!zone[i]) map[i] = WATER; }
     }
   }
+  // meer: ellipsvormig met noise-rand (Leningrad); irregular = extra inhammen
+  for (const f of of('lake')) {
+    const cx = Math.round(f.cx * W), cy = Math.round(f.cy * H);
+    const rx = Math.round(f.rx * W), ry = Math.round(f.ry * H);
+    for (let y = cy - ry - 4; y <= cy + ry + 4; y++) {
+      for (let x = cx - rx - 4; x <= cx + rx + 4; x++) {
+        if (!inBounds(x, y)) continue;
+        const nx = (x - cx) / rx, ny = (y - cy) / ry;
+        const d = nx * nx + ny * ny;
+        const edge = 1 + lakeNoise(f, noise, x, y);
+        if (d > edge) continue;
+        const i = y * W + x;
+        if (zone[i]) continue;
+        if (f.frozen) setClass(i, 'ice'); else { map[i] = WATER; fixedClass[i] = 1; }
+      }
+    }
+    // steile oever (rots) aan één kant
+    if (f.bank) {
+      const sgn = f.bank.side === 'north' ? -1 : 1;
+      const th = Math.max(1, Math.round((f.bank.thickness ?? 1) * T));
+      const gaps = spread(rnd, f.bank.openings ?? 2, 0.1, 0.9);
+      for (let x = cx - rx; x <= cx + rx; x++) {
+        const u = (x - (cx - rx)) / (2 * rx);
+        if (gaps.some((g) => Math.abs(u - g) * 2 * rx < ((f.bank.openingWidth ?? 3) * T) / 2)) continue;
+        // zoek de rand van het meer voor deze kolom
+        let ey = sgn < 0 ? cy : cy;
+        for (let y = cy; y !== cy + sgn * (ry + 5); y += sgn) {
+          if (!inBounds(x, y)) break;
+          const nx = (x - cx) / rx, ny = (y - cy) / ry;
+          if (nx * nx + ny * ny > 1.05) { ey = y; break; }
+          ey = y;
+        }
+        for (let d = 1; d <= th; d++) {
+          const y = ey + sgn * d;
+          if (!inBounds(x, y)) continue;
+          const i = y * W + x;
+          if (open(i) && map[i] === DIRT && !fixedClass[i]) map[i] = ROCK;
+        }
+      }
+    }
+  }
   // rivieren, beken en kanalen (buigen om de beschermde zones heen)
   const riverCells = [];
   rivers.forEach((f, k) => {
@@ -114,7 +157,7 @@ function tryMap(seed, rules, players) {
     const path = routePath(pt(f.from), pt(f.to), zone, half + 2 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 300 + k, f.wiggle ?? 0.12);
     const mine = [];
     stroke(path, half, (i) => {
-      if (border[i] || zone[i] || villageMask[i]) return;
+      if ((!f.inEdge && border[i]) || zone[i] || villageMask[i]) return;
       if (f.frozen) setClass(i, 'ice'); else { map[i] = WATER; fixedClass[i] = 1; }
       mine.push(i);
     });
@@ -132,12 +175,18 @@ function tryMap(seed, rules, players) {
       }
     }
     // dijken langs beide oevers met uiterwaarden ertussen (Market Garden)
+    // offset loodrecht op het pad, zodat het ook bij verticale rivieren werkt
     if (f.dikes) {
       const fp = f.dikes.floodplain * T, dw = f.dikes.width * T;
-      for (const [px, py] of densify(path)) {
+      const pts = densify(path);
+      for (let k = 0; k < pts.length; k++) {
+        const [px, py] = pts[k];
+        const prev = pts[Math.max(k - 1, 0)], next = pts[Math.min(k + 1, pts.length - 1)];
+        const tdx = next[0] - prev[0], tdy = next[1] - prev[1], tl = Math.hypot(tdx, tdy) || 1;
+        const nx = -tdy / tl, ny = tdx / tl;
         for (const sgn of [-1, 1]) {
           for (let d = Math.ceil(half) + 1; d <= half + fp + dw; d++) {
-            const x = Math.round(px), y = Math.round(py + sgn * d), i = y * W + x;
+            const x = Math.round(px + nx * sgn * d), y = Math.round(py + ny * sgn * d), i = y * W + x;
             if (!inBounds(x, y) || !open(i) || map[i] !== DIRT || fixedClass[i]) continue;
             setClass(i, d <= half + fp ? 'marsh' : 'hard');
           }
@@ -188,7 +237,7 @@ function tryMap(seed, rules, players) {
   const roads = [];
   of('road').forEach((f, k) => {
     const width = f.width * T;
-    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1, noise, 700 + k, 0.1);
+    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 700 + k, 0.1);
     roads.push({ path, width, class: f.class || 'paved' });
     stroke(path, width / 2, (i) => {
       if (!open(i)) return;
@@ -196,6 +245,25 @@ function tryMap(seed, rules, players) {
       if (map[i] === BUILDING) return;
       setClass(i, f.class || 'paved');
     });
+    // moeras of uiterwaard langs de weg (dijkweg Carentan)
+    // offset loodrecht op het pad, net als bij rivier-dijken
+    if (f.dikes) {
+      const fp = f.dikes.floodplain * T, dw = f.dikes.width * T;
+      const dpts = densify(path);
+      for (let k = 0; k < dpts.length; k++) {
+        const [px, py] = dpts[k];
+        const prev = dpts[Math.max(k - 1, 0)], next = dpts[Math.min(k + 1, dpts.length - 1)];
+        const tdx = next[0] - prev[0], tdy = next[1] - prev[1], tl = Math.hypot(tdx, tdy) || 1;
+        const nx = -tdy / tl, ny = tdx / tl;
+        for (const sgn of [-1, 1]) {
+          for (let d = Math.ceil(width / 2) + 1; d <= width / 2 + fp + dw; d++) {
+            const x = Math.round(px + nx * sgn * d), y = Math.round(py + ny * sgn * d), i = y * W + x;
+            if (!inBounds(x, y) || !open(i) || map[i] !== DIRT || fixedClass[i]) continue;
+            setClass(i, d <= width / 2 + fp ? 'marsh' : 'hard');
+          }
+        }
+      }
+    }
   });
   // vaste aantallen bruggen zonder weg (Berlijn: de stad heeft anders bij elke straat een brug)
   for (const r of riverCells) {
@@ -333,6 +401,61 @@ function tryMap(seed, rules, players) {
     return false;
   }
 
+  // akkerblokken: verwijder kleine fragmenten, plaats een boerderij in de grootste blokken
+  function consolidateAndPlaceFarms(cfg) {
+    const cls = CLASS[cfg.class];
+    if (cls === undefined) return;
+    const count = typeof cfg.count === 'number' ? cfg.count : (cfg.count?.[sizeName()] ?? cfg.count?.groot ?? 3);
+    const minSize = cfg.minSize ?? T * T; // alleen hele kleine fragmenten opruimen
+    const mask = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (terrain[i] === cls && map[i] === DIRT && !border[i]) mask[i] = 1;
+    const comps = components(mask);
+    comps.sort((a, b) => b.cells - a.cells);
+    // verwijder alleen blokken kleiner dan minSize (de rest blijft voor het terreinpercentage)
+    for (const c of comps) {
+      if (c.cells >= minSize) continue;
+      for (const i of c.list) {
+        const freq = {};
+        for (const j of [i + 1, i - 1, i + W, i - W]) {
+          if (j >= 0 && j < N && terrain[j] !== cls) { const n = terrain[j]; freq[n] = (freq[n] || 0) + 1; }
+        }
+        let best = CLASS.hard ?? 0, bestN = 0;
+        for (const [k, v] of Object.entries(freq)) if (v > bestN) { best = +k; bestN = v; }
+        terrain[i] = best;
+      }
+    }
+    // plaats een boerderij in de 'count' grootste blokken
+    const [bw, bh] = BUILDINGS.footprints.boerderij;
+    const big = comps.filter((c) => c.cells >= minSize);
+    for (let c = 0; c < Math.min(count, big.length); c++) {
+      const comp = big[c];
+      let sx = 0, sy = 0;
+      for (const i of comp.list) { sx += i % W; sy += (i / W) | 0; }
+      const cx = Math.round(sx / comp.cells), cy = Math.round(sy / comp.cells);
+      let placed = false;
+      for (let r = 0; r < 20 * T && !placed; r++) {
+        for (let dy = -r; dy <= r && !placed; dy++) {
+          for (let dx = -r; dx <= r && !placed; dx++) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+            if (placeBuilding(cx + dx, cy + dy, bw, bh, BUILDINGS.farmGap)) placed = true;
+          }
+        }
+      }
+    }
+  }
+
+  // wegbescherming: rotsen en water niet binnen ½T van een weg
+  const roadPadding = new Uint8Array(N);
+  const pad = Math.ceil(T / 2);
+  for (let i = 0; i < N; i++) {
+    if (!fixedClass[i] || (terrain[i] !== CLASS.paved && terrain[i] !== CLASS.hard)) continue;
+    const cx = i % W, cy = (i / W) | 0;
+    for (let dy = -pad; dy <= pad; dy++) for (let dx = -pad; dx <= pad; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x >= 0 && x < W && y >= 0 && y < H) roadPadding[y * W + x] = 1;
+    }
+  }
+
   // ---------- 3. Terrein invullen tot de percentages (§6.1 stap 4) ----------
   const pct = rules.terrainPercent;
   let P = 0, featurePaved = 0;
@@ -385,8 +508,9 @@ function tryMap(seed, rules, players) {
     }
   };
   const rk = rules.rocks || {};
-  blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeIn(rk.in), rk.in && areaOf(rk.in));
-  if (!rules.noPonds) blobs(WATER, 'water', target('water'), 0.8 * T, 2 * T, 53, (i) => free(i) && !parkMask[i]);
+  const freeNoRoad = (fn) => (i) => fn(i) && !roadPadding[i];
+  blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeNoRoad(freeIn(rk.in)), rk.in && areaOf(rk.in));
+  if (!rules.noPonds) blobs(WATER, 'water', target('water'), 0.8 * T, 2 * T, 53, (i) => free(i) && !parkMask[i] && !roadPadding[i]);
   const vcfg = rules.vegetation;
   if (vcfg && pct.vegetation) {
     const pattern = vcfg.pattern || (vcfg.type === 'hedge' ? 'hedges' : vcfg.type === 'shrub' ? 'shrubs' : 'forest');
@@ -398,13 +522,27 @@ function tryMap(seed, rules, players) {
   // de rest: samenhangende vlakken per klasse (ruis); eerst de gebieden met hun eigen mix
   for (const a of areas) fillClasses(map, terrain, fixedClass, border, Object.keys(a.f.classes), a.f.classes, null, seed + 17, (i) => inArea(a, i));
   for (const p of parks) for (let i = 0; i < N; i++) if (parkMask[i] && map[i] === DIRT && !fixedClass[i] && CLASS.normal !== undefined) { terrain[i] = CLASS.normal; fixedClass[i] = 1; }
-  fillClasses(map, terrain, fixedClass, border, groundClasses, pct, P, seed);
+  fillClasses(map, terrain, fixedClass, border, groundClasses, pct, P, seed, undefined, rules.noiseScale);
+
+  // akkerblokken: houd de N grootste aaneengesloten stukken, zet fragmenten om
+  if (rules.farms) consolidateAndPlaceFarms(rules.farms);
+
+  // fillClasses kan paved naast een gebouw zetten (ook boerderijen): herklasseer die cellen
+  for (let i = 0; i < N; i++) {
+    if (map[i] !== BUILDING) continue;
+    for (const di of [-1, 1, -W, W, -W - 1, -W + 1, W - 1, W + 1]) {
+      const j = i + di;
+      if (j >= 0 && j < N && terrain[j] === CLASS.paved && !fixedClass[j]) terrain[j] = CLASS.normal ?? CLASS.hard;
+    }
+  }
 
   // ---------- 4. Bases tekenen, verbinden en objecten ----------
-  drawBases(map, veg, bases, isBorder, noise);
-  connectBases(map, bases, isBorder, band);
-  ensureWeatherRoutes(map, terrain, bases, isBorder, rules);
-  const { fields, mines } = rules.mines ? addMines(map, bases, rnd, Math.max(2, Math.round((8 * W * H) / 100000))) : { fields: [], mines: [] };
+  if (bases.length) {
+    drawBases(map, veg, bases, isBorder, noise);
+    connectBases(map, bases, isBorder, band);
+    ensureWeatherRoutes(map, terrain, bases, isBorder, rules);
+  }
+  const { fields, mines } = rules.mines ? addMines(map, terrain, bases, rnd, Math.max(2, Math.round((8 * W * H) / 100000)), rules.mineClass) : { fields: [], mines: [] };
   mirrorEdge(map, terrain, veg, band);
 
   const w = {
@@ -506,10 +644,43 @@ function ensureWeatherRoutes(map, terrain, bases, isBorder, rules) {
   }
 }
 
+// Bereken een masker van alle lake-cellen + buffer zodat bases er niet op worden geplaatst
+function lakeExclusion(lakes, noise, band) {
+  if (!lakes.length) return null;
+  const mask = new Uint8Array(W * H);
+  const buf = 3 * T;
+  for (const f of lakes) {
+    const cx = Math.round(f.cx * W), cy = Math.round(f.cy * H);
+    const rx = Math.round(f.rx * W), ry = Math.round(f.ry * H);
+    for (let y = cy - ry - buf; y <= cy + ry + buf; y++) {
+      for (let x = cx - rx - buf; x <= cx + rx + buf; x++) {
+        if (!inBounds(x, y) || x < band || y < band || x >= W - band || y >= H - band) continue;
+        const nx = (x - cx) / rx, ny = (y - cy) / ry;
+        const d = nx * nx + ny * ny;
+        const edge = 1 + lakeNoise(f, noise, x, y);
+        // cel in of nabij het meer (inclusief buffer)
+        const bufEdge = edge + (buf / Math.max(rx, ry)) * 2;
+        if (d <= bufEdge) mask[y * W + x] = 1;
+      }
+    }
+  }
+  return mask;
+}
+
+// Noise voor de lake-rand: extra octaven als irregular is gezet
+function lakeNoise(f, noise, x, y) {
+  let n = (noise(x / 12, y / 12 + 500) - 0.5) * 0.3;
+  if (f.irregular) {
+    n += (noise(x / 6, y / 6 + 800) - 0.5) * 0.25;
+    n += (noise(x / 3, y / 3 + 1100) - 0.5) * 0.15;
+  }
+  return n;
+}
+
 // ---------- Bases ----------
 // Willekeurig, minstens 3 T van de rand, niet op een dorp of rivier, en zo ver uit elkaar dat
 // je vanuit je basis (of 3 T eromheen) geen andere basis in je venster ziet (VIEW_CELLS).
-function placeBases(n, rnd, isBorder, villages, rivers, pt, rules) {
+function placeBases(n, rnd, isBorder, villages, rivers, pt, rules, lakeExclude) {
   const hw = BASE_W >> 1, hh = BASE_H >> 1, pad = 3 * T;
   const mx = hw + pad + 14, my = hh + pad + 4; // rand van rots tot 13 dik
   const sepX = BASE_W + pad + VIEW_CELLS.w / 2, sepY = BASE_H + pad + VIEW_CELLS.h / 2;
@@ -531,11 +702,19 @@ function placeBases(n, rnd, isBorder, villages, rivers, pt, rules) {
       const depth = f.depth * H + 12;
       if (f.side === 'south' ? y + hh + DOOR_CLEAR > H - depth - pad : y - hh - DOOR_CLEAR < depth + pad) return true;
     }
+    // niet in of vlak bij een meer (Leningrad)
+    if (lakeExclude?.[y * W + x]) return true;
     return false;
   };
   // §10.7: bases verdeeld over beide kanten van een rivier (om en om)
   const across = rules.basesAcross !== undefined ? rivers[rules.basesAcross] : null;
-  const sideOk = (i, y) => {
+  // verticale rivieren: bases links en rechts (Market Garden met twee rivieren)
+  const lrRivers = rules.basesLeftRight ? rules.basesLeftRight.map((k) => rivers[k]) : null;
+  const sideOk = (i, x, y) => {
+    if (lrRivers) {
+      const rx0 = pt(lrRivers[0].from)[0], rx1 = pt(lrRivers[1].from)[0];
+      return i % 2 === 0 ? x < Math.min(rx0, rx1) : x > Math.max(rx0, rx1);
+    }
     if (!across) return true;
     const ry = pt(across.from)[1];
     return i % 2 === 0 ? y < ry : y > ry;
@@ -550,7 +729,7 @@ function placeBases(n, rnd, isBorder, villages, rivers, pt, rules) {
         let ok = false;
         for (let tries = 0; tries < 50 && !ok; tries++) {
           const x = Math.round(mx + rnd() * (W - 2 * mx)), y = Math.round(my + rnd() * (H - 2 * my));
-          if (blocked(x, y, k, kr) || !sideOk(i, y)) continue;
+          if (blocked(x, y, k, kr) || !sideOk(i, x, y)) continue;
           if (bases.some((b) => Math.abs(b.x - x) < sepX * k && Math.abs(b.y - y) < sepY * k)) continue;
           bases.push({ x, y });
           ok = true;
@@ -817,7 +996,8 @@ function plantBlocks(o, inShape) {
 // gekozen dat elke klasse zijn percentage haalt (plus wat kenmerken al aan die klasse gaven).
 // Met inside (een gebied): alleen die cellen, verdeeld naar de verhoudingen in pct (P = null);
 // ze krijgen een vaste klasse, zodat de verdeling over de rest van de kaart ze meetelt.
-function fillClasses(map, terrain, fixedClass, border, classes, pct, P, seed, inside) {
+function fillClasses(map, terrain, fixedClass, border, classes, pct, P, seed, inside, scale) {
+  for (const c of classes) if (CLASS[c] === undefined) throw new Error(`fillClasses: onbekende klasse '${c}'`);
   const noise = makeNoise(seed ^ 0x27d4eb2f);
   const open = [];
   const have = {};
@@ -829,7 +1009,8 @@ function fillClasses(map, terrain, fixedClass, border, classes, pct, P, seed, in
   const sum = classes.reduce((a, k) => a + (pct[k] || 0), 0) || 1;
   const want = classes.map((k) => (P === null ? ((pct[k] || 0) / sum) * open.length : Math.max(0, ((pct[k] || 0) / 100) * P - (have[k] || 0))));
   const total = want.reduce((a, b) => a + b, 0) || 1;
-  const val = open.map((i) => { const x = i % W, y = (i / W) | 0; return noise(x / 22, y / 22) * 0.75 + noise(x / 7 + 50, y / 7) * 0.25; });
+  const s = scale || 22, f = Math.max(7, Math.round(s / 3));
+  const val = open.map((i) => { const x = i % W, y = (i / W) | 0; return noise(x / s, y / s) * 0.75 + noise(x / f + 50, y / f) * 0.25; });
   const order = open.map((_, k) => k).sort((a, b) => val[a] - val[b]);
   let k = 0, acc = 0;
   for (let c = 0; c < classes.length; c++) {
@@ -967,7 +1148,8 @@ export function ensureThawRoute(map, terrain, bases, isBorder, band = 0) {
 
 // Mijnenvelden: ellipsen ver van de bases, met losse mijnen in het zand. Mijnen zijn geen
 // celtype: je graaft er gewoon doorheen.
-export function addMines(map, bases, rnd, count) {
+export function addMines(map, terrain, bases, rnd, count, mineClass) {
+  const onlyClass = mineClass ? CLASS[mineClass] : undefined;
   const fields = [], mines = [];
   for (let tries = 0; fields.length < count && tries < 40 * count; tries++) {
     const f = {
@@ -983,7 +1165,9 @@ export function addMines(map, bases, rnd, count) {
     for (let y = f.y - f.ry; y <= f.y + f.ry; y++) {
       for (let x = f.x - f.rx; x <= f.x + f.rx; x++) {
         if (!inBounds(x, y) || ((x - f.x) / f.rx) ** 2 + ((y - f.y) / f.ry) ** 2 > 1) continue;
-        if (map[y * W + x] !== DIRT || rnd() > 0.035) continue;
+        const idx = y * W + x;
+        if (map[idx] !== DIRT || rnd() > 0.035) continue;
+        if (onlyClass !== undefined && terrain[idx] !== onlyClass) continue;
         let near = false; // minstens 2 cellen tussen mijnen
         for (let j = -2; j <= 2 && !near; j++) for (let i = -2; i <= 2; i++) if (taken.has((y + j) * W + x + i)) { near = true; break; }
         if (near) continue;

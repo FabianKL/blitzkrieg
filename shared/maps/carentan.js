@@ -5,11 +5,12 @@ export default { // §10.6
   tanks: { A: 'sherman', B: 'panther' },
   desc: {
     setting: 'Juni 1944. D-Day: na de landing in Normandië vechten de geallieerden om het strategische stadje Carentan.',
-    terrain: 'Normandisch bocagelandschap met dichte heggen, moerassen, de rivier de Douve en een dijkweg naar het dorp.',
+    terrain: 'Normandisch bocagelandschap met dichte heggen, moeras langs de dijkweg, de rivier de Douve en weilanden omgeven door bocage.',
     weather: 'Ochtendmist in de eerste ronde, daarna wisselend bewolkt met felle regenbuien met onweer die sporen bij het water wissen.',
     special: 'Antitankgeschut bewaakt het slagveld — twee verborgen kanonnen vuren op tanks in hun boog. Verniel ze voordat ze jou raken.',
   },
-  terrainPercent: { normal: 40, marsh: 15, vegetation: 15, paved: 8, hard: 7, soft: 5, water: 6, rock: 4 },
+  // minder rotsen, meer weilanden
+  terrainPercent: { normal: 43, marsh: 15, vegetation: 15, paved: 8, hard: 7, soft: 5, water: 6, rock: 1 },
   classes: {
     paved: { label: 'Wegen en dorpsstraten', color: '#8c8a80' },
     hard: { label: 'Dijkweg', color: '#9c8f6c' },
@@ -18,15 +19,13 @@ export default { // §10.6
     marsh: { label: 'Moeras', color: '#55696c' },
   },
   rocks: { label: 'Rotsen', color: '#8c8a80', size: [0.5, 1] },
-  // de Douve en het kanaal hebben een vaste breedte; op een grote kaart vullen plassen de 6% water aan
-  water: { label: 'Douve, kanaal en plassen', color: '#1f3440' },
+  water: { label: 'De Douve', color: '#1f3440' },
   vegetation: { type: 'hedge', pattern: 'bocage', spacing: 7, label: 'Heggen (bocage)', color: '#23381b', groundAfter: 'normal' },
   features: [
-    { type: 'area', name: 'moeras', rect: [0, 0.5, 0.5, 1], classes: { marsh: 60, soft: 22, normal: 18 } },
-    { type: 'river', from: [0, 0.92], to: [0.6, 0.92], width: 3, bridges: 'atRoads', wiggle: 0.05 }, // de Douve
-    { type: 'river', from: [0.25, 0.5], to: [0.25, 1], width: 2, bridges: 'atRoads', wiggle: 0.04 }, // kanaal
+    // moeras aan beide kanten van de dijkweg (via dikes op de weg)
+    { type: 'river', from: [0, 0.92], to: [0.6, 0.92], width: 3, bridges: false, wiggle: 0.05 }, // de Douve, geen bruggen
     { type: 'village', at: [0.75, 0.25], size: 0.07, name: 'Carentan', buildings: [5, 7], landmark: 'kerk' },
-    { type: 'road', from: [0, 0.72], to: [0.75, 0.25], width: 2, class: 'hard' }, // dijkweg over het moeras
+    { type: 'road', from: [0, 0.72], to: [0.75, 0.25], width: 2, class: 'hard', dikes: { floodplain: 3, width: 0 } }, // dijkweg met moeras ernaast
     { type: 'road', from: [0.75, 0.25], to: [1, 0.3], width: 2 },
     { type: 'road', from: [0.75, 0.25], to: [0.78, 0], width: 2 },
     { type: 'road', from: [0.75, 0.25], to: [0.9, 1], width: 2 },
@@ -37,6 +36,6 @@ export default { // §10.6
   weather: [
     { label: 'Ochtendmist', untilRound: 1, effect: { visibility: 4 } },
     { label: 'Wisselend bewolkt', from: { round: 2 }, effect: { visibility: 12 } },
-    { label: 'Regenbui', from: { round: 2 }, every: 120, duration: 20, effect: { visibility: 8, trackEraser: 'nearWater', rain: { min: 1, max: 1 }, lightning: { every: 7 } } }, // regenstorm met onweer
+    { label: 'Regenbui', from: { round: 2 }, randomEvery: { min: 30, max: 90 }, duration: 20, effect: { visibility: 8, trackEraser: 'nearWater', rain: { min: 1, max: 1 }, lightning: { every: 7 } } },
   ],
 };

@@ -44,6 +44,7 @@ export function createState() {
     crates: [], // droppings (Market Garden): [x, y, soort, vol]
     bridge: null, // de brug die kan ontploffen (Market Garden): {box, cells, blown}
     ammoDepot: null, // munitiedepot (Grebbeberg): [x, y]
+    stuckBeams: null, // vastgeplakte zoeklichtbundels: Map(beam → {x, y})
     vision: null, // zichtstraal in T volgens het weer (null = standaard)
     roundTick: 0, // tick waarop deze ronde begon (weer per ronde)
     weatherScale: 1, // de tests laten het weer sneller lopen
@@ -67,6 +68,8 @@ function applyHz(state, hz = {}) {
   state.crates = hz.crates || [];
   state.bridge = hz.bridge || null;
   state.ammoDepot = hz.ammoDepot || null;
+  if (hz.stuckBeams) { state.stuckBeams = new Map(hz.stuckBeams.map(([k, x, y]) => [k, { x, y }])); }
+  else { state.stuckBeams = null; }
 }
 
 export function applyInit(state, msg, hooks = {}, now = 0) {
@@ -261,6 +264,8 @@ const ON = {
   c(state, e) { state.world.ice[e.b] = e.n; }, // passage over een ijsvak (barsten)
   w(state, e, c) { e.box = G.breakIce(state.world, e.b, c.changed); }, // ijs gebroken: wak (de server gooide de dobbelsteen)
   W(state, e, c) { G.applyTerrainChange(state.world, e.change, e.extra, c.changed); }, // het weer verandert het terrein
+  sls(state, e) { state.stuckBeams ??= new Map(); state.stuckBeams.set(e.beam, { x: e.x, y: e.y }); }, // zoeklicht plakt vast
+  slr(state, e) { state.stuckBeams?.delete(e.beam); }, // zoeklicht losgelaten
 };
 
 // ---------- Klok: waar staat de server nu, gezien vanaf deze computer ----------

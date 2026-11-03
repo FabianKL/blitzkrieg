@@ -31,9 +31,16 @@ function hash01(n) {
 // Sterkte (verstuiving, regen) na `since` seconden: vloeiend van de ene vaste waarde naar de volgende
 export function driftAt(cfg, since, scale = 1) {
   if (cfg.min === cfg.max) return cfg.min;
-  const u = Math.max(0, since) / ((cfg.period || 1) * scale), i = Math.floor(u), f = u - i;
+  const t = Math.max(0, since);
+  const u = t / ((cfg.period || 1) * scale), i = Math.floor(u), f = u - i;
   const a = hash01(i), b = hash01(i + 1), s = f * f * (3 - 2 * f);
-  return cfg.min + (cfg.max - cfg.min) * (a + (b - a) * s);
+  let v = cfg.min + (cfg.max - cfg.min) * (a + (b - a) * s);
+  // geleidelijke opbouw: drift ramt van min naar het berekende niveau in rampSeconds
+  if (cfg.rampSeconds) {
+    const ramp = Math.min(1, t / (cfg.rampSeconds * scale));
+    v = cfg.min + (v - cfg.min) * ramp;
+  }
+  return v;
 }
 
 // Bliksem (alleen beeld): de tijd is verdeeld in vakken van `every` seconden met in elk vak één
@@ -54,8 +61,11 @@ export function lightningAt(cfg, since, scale = 1) {
 // Is de regel in deze ronde en op dit moment van kracht? Geeft null of {since, left, warn}:
 // since = seconden sinds hij (deze keer) inging, left = seconden tot hij stopt (Infinity),
 // warn = hij begint binnen TRACK_ERASER.warnSeconds (alleen terugkerende regels).
+// roundPattern: [1, 1, 0] → actief in rondes 1, 2, niet 3, weer 4, 5, niet 6, enz.
+// randomEvery: {min, max} → terugkerend met wisselend interval (deterministisch uit hash01)
 export function ruleState(rule, round, tGame, tRound, scale = 1) {
   if (rule.untilRound && round > rule.untilRound) return null;
+  if (rule.roundPattern && !rule.roundPattern[(round - 1) % rule.roundPattern.length]) return null;
   const f = rule.from || {};
   if (f.round && round < f.round) return null;
   let since;
@@ -63,10 +73,27 @@ export function ruleState(rule, round, tGame, tRound, scale = 1) {
   else if (f.secondsInGame !== undefined) since = tGame - f.secondsInGame * scale;
   else since = f.round ? tRound : tGame;
   if (since < 0) return null;
+  if (rule.randomEvery) return randomRuleState(rule, since, scale);
   if (!rule.every) return { since, left: Infinity, warn: false };
   const every = rule.every * scale, dur = rule.duration * scale, p = since % every, start = every - dur;
   if (p >= start) return { since: p - start, left: every - p, warn: false };
   return { since: null, left: start - p, warn: p >= start - TRACK_ERASER.warnSeconds * scale };
+}
+
+// Terugkerend met wisselend interval: elk slot duurt gap + duration, met gap uit hash01
+function randomRuleState(rule, since, scale) {
+  const { min, max } = rule.randomEvery, dur = rule.duration * scale;
+  let t = 0, slot = 0;
+  for (; slot < 200; slot++) {
+    const gap = (min + (max - min) * hash01(slot + 31337)) * scale;
+    if (t + gap + dur > since) {
+      // we zitten in dit slot: vóór of tijdens de bui
+      if (since >= t + gap) return { since: since - t - gap, left: t + gap + dur - since, warn: false };
+      return { since: null, left: t + gap - since, warn: since >= t + gap - TRACK_ERASER.warnSeconds * scale };
+    }
+    t += gap + dur;
+  }
+  return null;
 }
 
 // Alles wat nu geldt: zichtstraal (de kleinste), sporenwisser, onderduiken, vlaggen, de
@@ -76,7 +103,7 @@ export function weatherAt(rules, round, tGame, tRound, scale = 1) {
   let drift = null, stormSeconds = 0;
   for (const rule of rules?.weather || []) {
     const st = ruleState(rule, round, tGame, tRound, scale);
-    if (rule.every && st && (st.since !== null || st.warn)) {
+    if ((rule.every || rule.randomEvery) && st && (st.since !== null || st.warn)) {
       const s = { label: rule.label, active: st.since !== null, warn: st.warn, secs: Math.ceil(st.left) };
       if (!out.storm || (s.active && !out.storm.active)) out.storm = s;
     }
@@ -84,7 +111,17 @@ export function weatherAt(rules, round, tGame, tRound, scale = 1) {
     out.active.push(rule);
     const e = rule.effect || {};
     let vis = e.visibility;
-    if (typeof vis === 'object' && vis) vis = vis.start + (vis.end - vis.start) * Math.min(1, st.since / (vis.overSeconds * scale));
+    if (typeof vis === 'object' && vis) {
+      if (vis.pulse) {
+        const p = vis.pulse, cycle = (p.thickSeconds + p.clearSeconds) * scale;
+        const t = st.since % cycle;
+        vis = t < p.thickSeconds * scale
+          ? p.thick + (p.clear - p.thick) * (t / (p.thickSeconds * scale))
+          : p.clear;
+      } else {
+        vis = vis.start + (vis.end - vis.start) * Math.min(1, st.since / (vis.overSeconds * scale));
+      }
+    }
     if (vis !== undefined) out.visibility = out.visibility === null ? vis : Math.min(out.visibility, vis);
     if (e.trackEraser) out.eraser = e.trackEraser === true ? true : e.trackEraser;
     if (e.burial) { out.burial = true; stormSeconds = rule.duration || 0; }

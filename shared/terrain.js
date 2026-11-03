@@ -262,14 +262,20 @@ export function applyTerrainChange(w, change, extra = {}, onChange) {
   const changed = (i) => { w.track[i] = 0; if (onChange) onChange(i % W, (i / W) | 0); };
   if (change.type === 'thaw') thaw(w, extra.pools || [], onChange);
   else if (change.type === 'inundate') {
-    const x0 = Math.round(change.valley[0] * W), x1 = x0 + Math.round(((change.valley[1] - change.valley[0]) * W * Math.min(extra.stage, change.stages)) / change.stages);
     const nearBase = (x, y) => (extra.bases || []).some((b) => Math.abs(x - b.x) < BASE_W / 2 + 3 * T + 2 && Math.abs(y - b.y) < BASE_H / 2 + DOOR_CLEAR + 2);
-    for (let y = 0; y < H; y++) {
-      for (let x = x0; x < x1; x++) {
-        const i = y * W + x, cls = w.terrain[i];
-        if ((w.map[i] !== DIRT && w.map[i] !== EMPTY) || w.scar[i] || nearBase(x, y)) continue;
-        if (cls === CLASS.marsh) { w.map[i] = WATER; changed(i); } else if (cls === CLASS.normal) { w.terrain[i] = CLASS.marsh; w.map[i] = DIRT; changed(i); }
-      }
+    const flood = (x, y) => {
+      const i = y * W + x, cls = w.terrain[i];
+      if ((w.map[i] !== DIRT && w.map[i] !== EMPTY) || w.scar[i] || nearBase(x, y)) return;
+      if (cls === CLASS.marsh) { w.map[i] = WATER; changed(i); } else if (cls === CLASS.normal) { w.terrain[i] = CLASS.marsh; w.map[i] = DIRT; changed(i); }
+    };
+    if (change.direction === 'south') {
+      // y-gebaseerd: water stijgt van boven (from) naar beneden (to)
+      const y0 = Math.round(change.from * H), y1 = y0 + Math.round(((change.to - change.from) * H * Math.min(extra.stage, change.stages)) / change.stages);
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) flood(x, y);
+    } else {
+      // x-gebaseerd: water stijgt van links naar rechts (origineel)
+      const x0 = Math.round(change.valley[0] * W), x1 = x0 + Math.round(((change.valley[1] - change.valley[0]) * W * Math.min(extra.stage, change.stages)) / change.stages);
+      for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) flood(x, y);
     }
   }
   else if (change.type === 'reclass') {

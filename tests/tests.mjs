@@ -768,7 +768,7 @@ export const tests = [
         const wantWater = cfg.terrainPercent?.water || cfg.features?.some((f) => f.type === 'river' && !f.frozen);
         check(!wantWater === !sum.water, `${id}: ${sum.water} watercellen, ${wantWater ? 'wel' : 'geen'} water verwacht`);
         check(!cfg.vegetation === !sum.veg, `${id}: ${sum.veg} planten`);
-        const wantBuildings = cfg.terrainPercent?.building || cfg.features?.some((f) => f.type === 'village');
+        const wantBuildings = cfg.terrainPercent?.building || cfg.features?.some((f) => f.type === 'village') || cfg.farms;
         check(!wantBuildings === !sum.buildings, `${id}: ${sum.buildings || 0} gebouwen`);
         out.push(`${id}: ${(sum.water / sum.n) | 0} water, ${(sum.veg / sum.n) | 0} planten`);
       }

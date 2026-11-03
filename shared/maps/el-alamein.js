@@ -1,5 +1,4 @@
 // 1942 · Lightfoot — El Alamein. Velden: zie maps/index.js.
-import { storm } from './common.js';
 
 export default { // §10.3
   name: 'El Alamein 1942', style: 'woestijn', header: 'LIGHTFOOT — EL ALAMEIN · OKTOBER 1942',
@@ -7,10 +6,12 @@ export default { // §10.3
   desc: {
     setting: 'Oktober 1942. Operatie Lightfoot: Montgomery doorbreekt Rommels stellingen bij El Alamein in de Noord-Afrikaanse woestijn.',
     terrain: 'Woestijnzand met rotsplateaus, een kustweg langs de Middellandse Zee en palmen langs de kust.',
-    weather: 'Verzengende hitte veroorzaakt luchtspiegelingen. Wisselende woestijnwind laat tunnels dichtwaaien, vooral in los zand; zandstormen verminderen het zicht drastisch.',
-    special: 'De zandmeter loopt op in het losse zand en vreet aan je pantser. Onzichtbare mijnen liggen verborgen in de woestijn.',
+    weather: 'Verzengende hitte veroorzaakt luchtspiegelingen. Korte maar hevige zandstormen bouwen langzaam op en beperken het zicht drastisch.',
+    special: 'De zandmeter loopt op in het losse zand en vreet aan je pantser. Onzichtbare mijnen liggen verborgen in het woestijnzand.',
   },
-  terrainPercent: { soft: 50, hard: 20, paved: 5, rock: 10, water: 10, vegetation: 5 },
+  // hard en soft naast elkaar in de noise-verdeling → aaneengesloten rotsige grond
+  terrainPercent: { hard: 20, soft: 50, paved: 5, rock: 10, water: 10, vegetation: 5 },
+  noiseScale: 35,
   classes: {
     paved: { label: 'Kustweg', color: '#a89c84' },
     hard: { label: 'Rotsige grond', color: '#b39a6a' },
@@ -18,23 +19,25 @@ export default { // §10.3
   },
   rocks: { label: 'Rotsplateaus', color: '#9a9a96', size: [3.5, 6] },
   water: { label: 'Zee', color: '#2f5f7a' },
-  // sprites: struiken en cactussen, en palmen tot 12 cellen van de zee (alleen het plaatje)
   vegetation: { type: 'shrub', label: 'Dorre struiken', color: '#6e6a3c', groundAfter: 'soft', sprites: { struik: 0.65, cactus: 0.35 }, palmCoast: 12 },
   noPonds: true,
   features: [
-    { type: 'sea', side: 'north', depth: 0.13 }, // ~10% van het speelbare deel (zonder de rotsrand)
+    { type: 'sea', side: 'north', depth: 0.13 },
+    // kustweg horizontaal, minstens 1T van de zee (de weg-marge in mapgen.js beschermt dit)
     { type: 'road', from: [0, 0.17], to: [1, 0.17], width: 2, bridges: false },
   ],
-  // per vak (T) zand +soft, op hard/verhard firm; boven danger armorPct% pantser per vak zand, bij 100 snelheid slow
+  // mijnen alleen in woestijnzand (soft)
+  mines: true, mineClass: 'soft',
   meter: { type: 'sand', label: 'Zandmeter', danger: 60, color: '#d8a040', soft: 2, firm: -5, armorPct: 1, slow: 0.7 },
-  // kustweg: duidelijke rijsporen, weinig berm; rotsplateaus met hier en daar een rotsblok
   look: { grade: { saturation: -0.12, contrast: 1.05, tint: '#ffd9a0', tintStrength: 0.18 }, noise: { scale: 12, strength: 0.12 }, weather: 'sand', amount: 14, vignette: 0.35, road: { ruts: 0.3, vergeAmount: 0.25, vergeColor: '#a8875a' } },
   tunnelColor: '#6e5430',
   weather: [
     { label: 'Hitte', effect: { visibility: 10, heatHaze: true, mirages: true } },
-    // stuifzand: wind van licht (tunnel dicht in 2 min) tot matig (45 s); in los zand het snelst
-    { label: 'Woestijnwind', effect: { drift: { min: 0.1, max: 0.6, period: 25, ground: { soft: 1, hard: 0.5, paved: 0.5 } } } },
-    storm('Zandstorm'),
+    // constante woestijnwind die wisselt van licht tot stevig
+    { label: 'Woestijnwind', effect: { drift: { min: 0.15, max: 0.6, period: 30, ground: { soft: 1, hard: 0.5, paved: 0.5 } } } },
+    { label: 'Zandstorm', randomEvery: { min: 45, max: 120 }, duration: 30, effect: {
+      visibility: 2, trackEraser: true, burial: true,
+      drift: { min: 0, max: 1, rampSeconds: 10, ground: { soft: 1, hard: 0.5, paved: 0.5 } },
+    } },
   ],
-  mines: true,
 };

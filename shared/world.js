@@ -208,4 +208,4 @@ export let ICE_BW = Math.ceil(W / ICE_B), ICE_BH = Math.ceil(H / ICE_B); // bijg
 export const iceBlockAt = (x, y) => ((y / ICE_B) | 0) * ICE_BW + ((x / ICE_B) | 0);
 export const isIce = (w, i) => w.map[i] === DIRT && w.terrain[i] === CLASS.ice;
 export const iceStage = (n) => ICE.crackStages.reduce((s, at) => s + (n >= at ? 1 : 0), 0); // 0..3
-export const iceBreakChance = (passes) => Math.min(1, passes * ICE.breakPerPass);
+export const iceBreakChance = (passes, perPass) => Math.min(1, passes * (perPass ?? ICE.breakPerPass));

@@ -40,6 +40,6 @@ export default { // §10.10
     { label: 'Rook boven de stad', untilRound: 1, effect: { visibility: 12 } },
     { label: 'Dichtere rook', from: { round: 2 }, untilRound: 2, effect: { visibility: 8 } },
     { label: 'Dikke rook en regen', from: { round: 3 }, effect: { visibility: 6, rain: { min: 0.3, max: 0.7, period: 20 } } },
-    { label: 'Onweer', from: { round: 3 }, every: 90, duration: 20, effect: { rain: { min: 1, max: 1 }, lightning: { every: 7 } } }, // geen metro (op verzoek)
+    { label: 'Onweer', from: { round: 3 }, randomEvery: { min: 30, max: 90 }, duration: 20, effect: { rain: { min: 1, max: 1 }, lightning: { every: 7 } } }, // geen metro (op verzoek)
   ],
 };

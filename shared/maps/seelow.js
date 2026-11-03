@@ -5,11 +5,14 @@ export default { // §10.9
   tanks: { A: 't34', B: 'panther' },
   desc: {
     setting: 'April 1945. De slag om de Seelower Hoogten: het Rode Leger bestormt de laatste verdedigingslinie voor Berlijn.',
-    terrain: 'Een steile heuvelrug in het westen, moerassen en natte aarde in het dal, de Oder en een kanaal met stalen bruggen.',
+    terrain: 'Een steile heuvelrug in het westen, akkers met boerderijen, en een smalle kronkelende rivier.',
     weather: 'De slag begint in het donker met verblindende zoeklichten. Vanaf ronde 3 breekt de dageraad aan.',
-    special: 'Artilleriebeschietingen. De heuvelrug biedt dekking maar beperkt je routes — zoek de doorgangen.',
+    special: 'Zoeklichten verraden je positie: binnen 2 seconden volgt een artilleriebombardement. De heuvelrug biedt dekking maar beperkt je routes.',
   },
-  terrainPercent: { soft: 30, marsh: 15, hard: 20, normal: 10, rock: 10, vegetation: 5, water: 6, paved: 4 },
+  // meer akkers (15%), minder rotsen; wegen lopen de heuvel op
+  terrainPercent: { soft: 28, marsh: 15, hard: 20, normal: 15, rock: 7, vegetation: 5, water: 6, paved: 4 },
+  noiseScale: 35,
+  farms: { count: { klein: 1, middel: 2, groot: 3 }, class: 'normal' },
   classes: {
     paved: { label: 'Wegen', color: '#5a5650' },
     hard: { label: 'Heuvelrug', color: '#4a4238' },
@@ -18,24 +21,27 @@ export default { // §10.9
     marsh: { label: 'Moeras', color: '#2e3a36' },
   },
   rocks: { label: 'Steile helling', color: '#5a5c5e', in: 'heuvelrug', size: [0.6, 1.5] },
-  water: { label: 'De Oder en een kanaal', color: '#18242c' },
+  water: { label: 'De Oder', color: '#18242c' },
   vegetation: { type: 'tree', label: 'Bosjes op de heuvel', color: '#2a3a26', groundAfter: 'hard', in: 'heuvelrug' },
   noPonds: true,
   features: [
     { type: 'area', name: 'heuvelrug', rect: [0, 0, 0.33, 1], classes: { hard: 80, normal: 20 } },
-    { type: 'area', name: 'dal', rect: [0.5, 0, 1, 1], classes: { soft: 63, marsh: 37 } }, // minder moeras: op grote kaarten neemt de rivier minder van het dal in
-    { type: 'river', from: [0.96, 0], to: [0.96, 1], width: 4, bridges: false, wiggle: 0.03 }, // de Oder
-    { type: 'river', from: [0.72, 0], to: [0.72, 1], width: 2, bridges: 'atRoads', wiggle: 0.04 }, // kanaal
-    { type: 'ridge', from: [0.33, 0], to: [0.33, 1], width: 2, openings: 1, openingWidth: 3, wiggle: 0.15 }, // helling
-    { type: 'road', from: [0.3, 0.3], to: [0.88, 0.3], width: 2 },
-    { type: 'road', from: [0.3, 0.72], to: [0.88, 0.72], width: 2 },
+    { type: 'area', name: 'dal', rect: [0.5, 0, 1, 1], classes: { soft: 63, marsh: 37 } },
+    // één smalle kronkelende rivier van boven naar beneden
+    { type: 'river', from: [0.65, 0], to: [0.65, 1], width: 2, bridges: 'atRoads', wiggle: 0.08 },
+    // helling met meer openingen zodat rotsen niet volledig blokkeren
+    { type: 'ridge', from: [0.33, 0], to: [0.33, 1], width: 2, openings: 3, openingWidth: 2, wiggle: 0.3 },
+    // wegen lopen door de heuvel heen (van links naar rechts)
+    { type: 'road', from: [0.1, 0.3], to: [0.88, 0.3], width: 2 },
+    { type: 'road', from: [0.1, 0.72], to: [0.88, 0.72], width: 2 },
   ],
-  hazard: { type: 'artillery', everySeconds: 60, area: 6, warningSeconds: 3, armorLoss: 30 },
-  // brug: staal over het kanaal
+  // zoeklicht triggert artillerie; daarnaast standaard elke 60 s een willekeurig bombardement
+  hazard: { type: 'artillery', everySeconds: 60, warningSeconds: 3, armorLoss: 30, area: 3,
+    searchlightDelay: 2 },
   look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32, bridge: { kind: 'staal' } },
   tunnelColor: '#1a1410',
   weather: [
-    { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 3, widthT: 4, sweepSeconds: 12, visibility: 12 } } },
+    { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 2, widthT: 4, sweepSeconds: 12, visibility: 12, stickSeconds: 2 } } },
     { label: 'Dageraad', from: { round: 3 }, effect: { visibility: 8 } },
   ],
 };
