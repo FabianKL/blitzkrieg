@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/run.mjs",
+    "test": "node --test tests/auth.mjs && node tests/run.mjs",
+    "test:auth": "node --test tests/auth.mjs",
     "test:gen": "node tests/gen.mjs"
   },
   "dependencies": {

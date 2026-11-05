@@ -20,7 +20,10 @@ export function check(ok, message) {
 export function startServer(port, env = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
-      cwd: ROOT, env: { ...process.env, PORT: String(port), ...env }, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: ROOT, env: {
+        ...process.env, NODE_ENV: 'test', TUNNELER_AUTH: 'local',
+        INVITE_PASSPHRASE: '', SESSION_SECRET: '', APP_ORIGIN: '', PORT: String(port), ...env,
+      }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
     const timer = setTimeout(() => reject(new Error(`server start niet:\n${out}`)), 10000);
