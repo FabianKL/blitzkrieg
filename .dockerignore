@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!server.js
+!auth.js
+!hazards.js
+!shared/
+!shared/**
+!public/
+!public/**

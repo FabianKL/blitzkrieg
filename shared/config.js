@@ -50,6 +50,13 @@ export const NET = {
   renderDelay: 1, histLen: 12, maxPred: 120, smoothMs: 100, messageSeconds: 6,
 };
 
+// Toegang via internet; de geheimen zelf staan uitsluitend in de serveromgeving.
+export const AUTH = {
+  minPassphraseLength: 16, minSecretLength: 32, sessionMs: 8 * 60 * 60 * 1000,
+  failureWindowMs: 60 * 1000, maxFailures: 20, maxBodyBytes: 4096,
+  maxCookieLength: 256, nonceBytes: 16,
+};
+
 // Maten (SPEC-blitzkrieg §5.1): breedtes in de spec staan in T, de breedte van een tank.
 // T is hier in cellen; de tank zelf is 7 lang en 5 breed.
 export const T = 5;
@@ -432,4 +439,3 @@ export const LIGHTNING = { firstAt: 0.05, spread: 0.8, flash: 0.08, gap: 0.16, s
 
 // De kaarten (veldslagen) staan elk in een eigen bestand: zie maps/index.js.
 export { MAPS, MAP_MENU, DEFAULT_MAP } from './maps/index.js';
-

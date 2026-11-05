@@ -145,6 +145,12 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   dichterbij, `?fps=1` toont fps en rekentijd. In een verborgen previewvenster tekent de browser bijna
   niet: meet dan met `blitzView.bench()` in de console.
 - Omgevingsvariabelen heten nog `TUNNELER_SEED`, `TUNNELER_ROUNDS_TO_WIN` en `TUNNELER_WEATHER_SCALE`.
+- Azure-uitrol: `tools/deploy-azure.ps1` (PowerShell 7+) bouwt en publiceert in ACR en deployt Bicep;
+  het vraagt een expliciet abonnements-ID en laat Azure CLI geheimen verborgen opvragen. `-WhatIf`
+  doet geen Azure-aanroepen. `pwsh -NoProfile -File .\tests\deploy-azure.ps1` compileert de echte
+  Bicep-template en test de uitrol met een nagebootste Azure CLI, zonder cloudresources.
+  Een echte uitrol maakt betaalde resources en onderbreekt mogelijk een spel; voer die alleen op
+  uitdrukkelijk verzoek van de eigenaar uit.
 
 `.claude/launch.json` (niet in git) voor de preview:
 ```json

@@ -7,12 +7,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { createAuth } from './auth.js';
 import * as G from './shared/game.js';
 import * as Weather from './shared/weather.js';
 import * as Hazards from './hazards.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+const auth = createAuth();
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -35,6 +37,7 @@ const PAGES = {
   '/retro': 'public/retro.html',
 };
 const server = http.createServer((req, res) => {
+  if (auth.handleHttp(req, res)) return;
   let urlPath;
   try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { urlPath = '/'; }
   const rel = VENDOR[urlPath] || PAGES[urlPath] || (urlPath.startsWith('/shared/') ? urlPath.slice(1) : 'public' + urlPath);
@@ -42,7 +45,7 @@ const server = http.createServer((req, res) => {
   if (!VENDOR[urlPath] && !ALLOWED.some((d) => file.startsWith(d + path.sep))) { res.writeHead(404); res.end(); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end('Niet gevonden'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(data);
   });
 });
@@ -538,12 +541,20 @@ loop();
 // ---------- Netwerk ----------
 // Grote berichten (het instapbericht) gaan gecomprimeerd; de kleine tickberichten niet,
 // dat kost meer rekenwerk dan het bespaart.
-const wss = new WebSocketServer({ server, maxPayload: MAX_PAYLOAD, perMessageDeflate: { threshold: 1024 } });
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD, perMessageDeflate: { threshold: 1024 } });
+server.on('upgrade', (req, socket, head) => {
+  if (!auth.authorizeUpgrade(req, socket)) return;
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+});
 const clampDir = (v) => Math.max(-1, Math.min(1, v | 0));
 
 // Hartslag: een laptop die in slaapstand gaat, houdt anders minutenlang een tank bezet
 setInterval(() => {
   for (const ws of wss.clients) {
+    if (ws.sessionExpires && Date.now() >= ws.sessionExpires) {
+      ws.close(1008, 'Sessie verlopen: meld je opnieuw aan.');
+      continue;
+    }
     if (ws.alive === false) { ws.terminate(); continue; }
     ws.alive = false;
     ws.ping();
@@ -552,6 +563,7 @@ setInterval(() => {
 
 wss.on('connection', (ws, req) => {
   ws.alive = true;
+  ws.sessionExpires = auth.expiresAt(req);
   ws.on('pong', () => { ws.alive = true; });
   // Fouten van één verbinding (te groot bericht, kapot frame) mogen nooit de hele server
   // laten crashen; ws sluit de verbinding zelf en 'close' ruimt de tank op.
