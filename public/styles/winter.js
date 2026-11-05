@@ -313,6 +313,7 @@ function drawFog(cam, now) {
   const { canvas } = view;
   const density = 1 - smooth(fogProgress());
   if (density <= 0.01) return null;
+  if (!cam || !Number.isFinite(cam.x) || !Number.isFinite(cam.y) || !Number.isFinite(cam.w) || !Number.isFinite(cam.h) || !Number.isFinite(cam.Z) || cam.Z <= 0) return null;
   const Z = cam.Z;
   // op een kwart van de resolutie: mist is zacht, dat scheelt veel rekenwerk
   const fw = Math.ceil(canvas.width / 4), fh = Math.ceil(canvas.height / 4);
@@ -331,10 +332,10 @@ function drawFog(cam, now) {
   }
   fctx.globalAlpha = 1;
   // open plek rond je eigen tank
-  const self = view.game.tanks.get(view.game.me);
-  const cx = self && self.rx !== undefined ? self.rx + 0.5 : cam.x + cam.w / 2;
-  const cy = self && self.ry !== undefined ? self.ry + 0.5 : cam.y + cam.h / 2;
-  const sx = ((cx - cam.x) * Z) / 4, sy = ((cy - cam.y) * Z) / 4, rr = (fogClearRadius() * Z) / 4;
+  const self = view.game?.tanks?.get(view.game?.me);
+  const cx = self && Number.isFinite(self.rx) ? self.rx + 0.5 : cam.x + cam.w / 2;
+  const cy = self && Number.isFinite(self.ry) ? self.ry + 0.5 : cam.y + cam.h / 2;
+  const sx = ((cx - cam.x) * Z) / 4, sy = ((cy - cam.y) * Z) / 4, rr = Math.max(1, (fogClearRadius() * Z) / 4);
   const hole = fctx.createRadialGradient(sx, sy, rr * 0.35, sx, sy, rr);
   hole.addColorStop(0, 'rgba(0,0,0,1)');
   hole.addColorStop(1, 'rgba(0,0,0,0)');

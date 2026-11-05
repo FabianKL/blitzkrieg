@@ -81,9 +81,10 @@ export const HINTS = { hearingT: 20, glowSeconds: 3, dustEverySeconds: 10 };
 // Zicht (§9) in de weergave: buiten de zichtcirkel steeds vager en donkerder naar de rand
 // (fade: donkerte aan de rand van het venster, 0..1; blur: vervaging aan de rand, in pixels),
 // buiten je zichtveld (achter gebouwen, begroeiing, rotsen, rook en buiten de kijkboog)
-// donkerder (shadow). contourAlpha: dekking van een contour net buiten de cirkel; naar de
-// rand van het venster loopt hij af tot 0. debug: ?debug=alles toont alles, alleen op localhost.
-export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5 };
+// donkerder (shadow). shadowFalloffT: breedte van de zachte overgang in T-lang naar de
+// donkere zone; contourAlpha: dekking van een contour net buiten de cirkel; naar de rand van
+// het venster loopt hij af tot 0. debug: ?debug=alles toont alles, alleen op localhost.
+export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5, shadowFalloffT: 1 };
 
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };

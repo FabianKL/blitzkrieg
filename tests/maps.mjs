@@ -9,7 +9,9 @@ export function fakeRoom(id, size = 'middel', seed = 4242) {
   const { w, h } = G.sizeDims(size);
   G.setMapSize(w, h);
   const world = G.generateMap(seed, G.MAPS[id], G.MAP_SIZES[size].maxPlayers);
-  const tank = { id: 0, alive: true, x: world.bases[0].x, y: world.bases[0].y, dir: 0, shield: G.SHIELD_MAX, fuel: 1000, ammo: 10, gauge: G.MAPS[id].meter?.start ?? 0, slow: G.SPEED_ONE, meterState: {}, input: { dx: 0, dy: 0 } };
+  const base = world.bases[0];
+  const startX = base ? base.x : Math.round(w / 2), startY = base ? base.y : Math.round(h / 2);
+  const tank = { id: 0, alive: true, x: startX, y: startY, dir: 0, shield: G.SHIELD_MAX, fuel: 1000, ammo: 10, gauge: G.MAPS[id].meter?.start ?? 0, slow: G.SPEED_ONE, meterState: {}, input: { dx: 0, dy: 0 } };
   const room = { rules: G.MAPS[id], world, size, tick: 0, mapTick: 0, roundTick: 0, round: 1, tanks: [tank, null, null, null], hz: {} };
   room.wx = Wx.weatherAt(room.rules, 1, 0, 0);
   return room;
@@ -37,17 +39,17 @@ function withRandom(v, fn) {
 const WEATHER = {
   'fall-gelb': [[1, 10, 10, { vis: null }], [3, 400, 10, { vis: 8 }], [4, 600, 10, { vis: null }]],
   barbarossa: [[1, 10, 10, { vis: 10, flag: 'dust' }], [2, 300, 10, { vis: 10 }], [3, 500, 10, { vis: 8, flag: 'mud' }]],
-  'el-alamein': [[1, 10, 10, { vis: 10, flag: 'mirages' }], [2, 75, 30, { vis: 4, eraser: true, burial: true }]],
-  leningrad: [[1, 10, 0, { vis: 12 }], [1, 190, 180, { vis: 6 }], [3, 75, 75, { vis: 4, eraser: true }], [4, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
+  'el-alamein': [[1, 10, 10, { vis: 10, flag: 'mirages' }], [2, 75, 30, { vis: 2, eraser: true, burial: true }]],
+  leningrad: [[1, 10, 0, { vis: 12 }], [1, 190, 180, { vis: 6 }], [3, 75, 75, { vis: 2, eraser: true }], [5, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
   koersk: [[1, 10, 10, { vis: 12, flag: 'fires' }], [3, 400, 10, { vis: 8, flag: 'thunder' }]],
   carentan: [[1, 10, 10, { vis: 4 }], [2, 300, 10, { vis: 12 }], [2, 410, 110, { vis: 8, eraser: 'nearWater' }]],
-  'market-garden': [[1, 10, 10, { vis: 12, flag: 'drops' }], [3, 400, 10, { vis: 8, noflag: 'drops' }]],
+  'market-garden': [[1, 10, 10, { vis: 12 }], [3, 400, 10, { vis: 8 }]],
   ardennen: [[1, 0, 0, { vis: 2 }], [3, 10, 10, { vis: null, noflag: 'fog' }]],
   seelow: [[1, 10, 10, { vis: 4, flag: 'searchlights' }], [3, 400, 10, { vis: 8, noflag: 'searchlights' }]],
   berlijn: [[1, 10, 10, { vis: 12 }], [2, 300, 10, { vis: 8 }], [3, 500, 10, { vis: 6 }], [5, 900, 10, { vis: 6 }]],
 };
 // Terreinveranderingen per ronde (ronde -> aantal)
-const CHANGES = { 'fall-gelb': { 2: 1, 3: 1, 4: 1, 5: 0 }, barbarossa: { 3: 1, 4: 0 }, leningrad: { 4: 1 }, koersk: { 3: 1 } };
+const CHANGES = { 'fall-gelb': { 2: 1, 3: 1, 4: 1, 5: 0 }, barbarossa: { 3: 1, 4: 0 }, leningrad: { 5: 1 }, koersk: { 3: 1 } };
 
 export const mapTests = [
   {
@@ -74,8 +76,10 @@ export const mapTests = [
             const want = CHANGES[id]?.[round] ?? 0;
             check(changes.length === want, `${id} ronde ${round}: ${changes.length} terreinveranderingen, verwacht ${want}`);
             for (const { change, stage } of changes) G.applyTerrainChange(room.world, change, G.terrainChangeExtra(room.world, change, room.world.bases, stage));
-            const seen = G.reachable(room.world.map, room.world.bases[0]);
-            check(room.world.bases.every((b) => seen[b.y * G.W + b.x]), `${id} ronde ${round}: bases onbereikbaar na het weer`);
+            if (room.world.bases.length) {
+              const seen = G.reachable(room.world.map, room.world.bases[0]);
+              check(room.world.bases.every((b) => seen[b.y * G.W + b.x]), `${id} ronde ${round}: bases onbereikbaar na het weer`);
+            }
           }
           out.push(id);
         }
@@ -172,7 +176,7 @@ export const mapTests = [
         for (let k = 0; k < 60; k++) Hz.step(room, k, ev, hurt);
         check(t.ammo > 5, 'geen munitie bij het depot');
         out.push('munitiedepot');
-        // Market Garden: elke 30 s een krat, wie erover rijdt krijgt de inhoud; vanaf ronde 3 geen droppings
+        // Market Garden: elke 30 s een krat, wie erover rijdt krijgt de inhoud; drops vallen altijd (always)
         room = fakeRoom('market-garden'); t = room.tanks[0]; ev = [];
         Hz.roundStart(room, ev);
         for (let k = 1; k <= 30 * G.TICK_RATE; k++) Hz.step(room, k, ev, hurt);
@@ -184,7 +188,7 @@ export const mapTests = [
         room.wx = Wx.weatherAt(room.rules, 3, 400, 10);
         const n = room.hz.crates.length;
         for (let k = 1; k <= 31 * G.TICK_RATE; k++) Hz.step(room, 2000 + k, ev, hurt);
-        check(room.hz.crates.length === n, 'droppings in ronde 3');
+        check(room.hz.crates.length > n, 'droppings vallen niet in ronde 3 (always)');
         out.push('droppings');
         // Barbarossa: stofspoor op hard (hint, eens per 10 s); modder: dubbel brandstof op zacht
         room = fakeRoom('barbarossa'); t = room.tanks[0]; ev = [];

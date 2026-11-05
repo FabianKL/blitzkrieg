@@ -1006,6 +1006,11 @@ export function startWorld(style, game) {
   const SH = 2, shadowCanvas = document.createElement('canvas'), shctx = shadowCanvas.getContext('2d');
   const maskCanvas = document.createElement('canvas'), maskCtx = maskCanvas.getContext('2d');
   let shadowKey = '', shadowAt = 0, mapVersion = 0, maskTex = null;
+  const smoothstep = (edge0, edge1, x) => {
+    const t = Math.min(1, Math.max(0, (x - edge0) / Math.max(1, edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  };
+  const shadowFalloffCells = () => Math.max(1, Math.round((FOG.shadowFalloffT || 1) * G.T / SH));
   // canvas naar de texture van een sprite (nieuwe texture als de maat veranderde)
   function putCanvas(sprite, c, resized) {
     if (resized || !sprite.texture.source.resource) {
@@ -1018,22 +1023,46 @@ export function startWorld(style, game) {
     const gw = Math.ceil(cam.w / SH) + 2, gh = Math.ceil(cam.h / SH) + 2;
     const turn = me.ang === undefined ? '' : Math.round((me.ang * 90) / Math.PI); // per 2 graden
     const smoke = game.smokes.map((s) => s.until).join('.'), r = visionRadius();
+    const falloff = shadowFalloffCells();
     // bedekte vijanden: de tunnel eronder verbergen in het clean-masker (niet de schaduw)
     let buriedKey = '';
     for (const [id, t] of game.tanks) if (id !== game.me && t.b && t.a) buriedKey += `${id},${t.x},${t.y};`;
-    const key = `${me.x},${me.y},${turn},${Math.round(r)},${x0},${y0},${gw},${gh},${mapVersion},${smoke},${buriedKey}`;
+    const key = `${me.x},${me.y},${turn},${Math.round(r)},${x0},${y0},${gw},${gh},${mapVersion},${smoke},${buriedKey},${falloff}`;
     const now = performance.now();
     if (key !== shadowKey && now - shadowAt > 80) {
       shadowKey = key; shadowAt = now;
       const resized = shadowCanvas.width !== gw || shadowCanvas.height !== gh;
       if (resized) { shadowCanvas.width = maskCanvas.width = gw; shadowCanvas.height = maskCanvas.height = gh; }
       const img = shctx.createImageData(gw, gh), mask = maskCtx.createImageData(gw, gh), a = Math.round(FOG.shadow * 255);
+      const visible = Array.from({ length: gw * gh }, () => 0);
       for (let j = 0; j < gh; j++) {
         for (let i = 0; i < gw; i++) {
-          // het midden van dit beeldpunt van de schaduw (de sprite begint SH / 2 eerder)
-          if (visibleCell(game.map, me, x0 + i * SH, y0 + j * SH, r, game.smokes)) continue;
-          const k = (j * gw + i) * 4;
-          img.data[k + 3] = a;
+          const x = x0 + i * SH, y = y0 + j * SH;
+          const isVisible = visibleCell(game.map, me, x, y, r, game.smokes);
+          if (isVisible) visible[j * gw + i] = 1;
+        }
+      }
+      for (let j = 0; j < gh; j++) {
+        for (let i = 0; i < gw; i++) {
+          const idx = j * gw + i;
+          if (visible[idx]) continue;
+          let minDist = Number.POSITIVE_INFINITY;
+          for (let dy = -falloff; dy <= falloff; dy++) {
+            const yy = j + dy;
+            if (yy < 0 || yy >= gh) continue;
+            for (let dx = -falloff; dx <= falloff; dx++) {
+              const xx = i + dx;
+              if (xx < 0 || xx >= gw) continue;
+              if (!visible[yy * gw + xx]) continue;
+              const dist = Math.hypot(dx, dy);
+              if (dist < minDist) minDist = dist;
+            }
+          }
+          const k = idx * 4;
+          const shadowAlpha = Number.isFinite(minDist)
+            ? a * smoothstep(0, falloff, minDist)
+            : a;
+          img.data[k + 3] = Math.min(255, Math.round(Math.max(0, shadowAlpha)));
           mask.data[k] = mask.data[k + 1] = mask.data[k + 2] = mask.data[k + 3] = 255;
         }
       }

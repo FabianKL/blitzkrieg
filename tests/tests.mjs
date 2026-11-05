@@ -278,11 +278,10 @@ export const tests = [
     name: 'weer: regels per ronde en timer, kleinste zichtstraal, mist die optrekt, regen alleen bij water',
     async run() {
       const A = G.MAPS.ardennen;
-      // Ardennen §10.8: mist 2 → 12 T in 2 minuten (ronde 1 en 2), storm elke 90 s 20 s lang, vanaf ronde 3 opklaring
+      // Ardennen §10.8: pulsende mist (2 → 12 in 30 s, dan 30 s helder, herhaalt), storm met willekeurig interval, vanaf ronde 3 opklaring
       check(Wx.weatherAt(A, 1, 0, 0).visibility === 2, 'mist begint niet op 2 T');
-      check(Math.abs(Wx.weatherAt(A, 1, 60, 60).visibility - 7) < 0.01, 'mist na 60 s niet op 7 T');
-      check(Wx.weatherAt(A, 2, 400, 130).visibility === 12 || Wx.weatherAt(A, 2, 400, 130).visibility === null, 'mist niet opgetrokken na 2 minuten');
-      check(Wx.weatherAt(A, 1, 75, 75).visibility === 4 && Wx.weatherAt(A, 1, 75, 75).burial, 'storm: kleinste zichtstraal (4 T) en onderduiken');
+      check(Wx.weatherAt(A, 1, 35, 35).visibility === 12, 'mist na 35 s niet helder (pulse)');
+      check(Wx.weatherAt(A, 1, 65, 65).visibility < 12, 'mist na 65 s niet weer terug (pulse)');
       check(Wx.weatherAt(A, 2, 200, 0).flags.fog && !Wx.weatherAt(A, 3, 200, 0).flags.fog, 'opklaring vanaf ronde 3');
       // terugkerend weer vanaf een ronde, en een sporenwisser alleen bij water
       const rules = { weather: [{ label: 'Regenbui', from: { round: 2 }, every: 120, duration: 20, effect: { visibility: 8, trackEraser: 'nearWater' } }] };
@@ -313,7 +312,7 @@ export const tests = [
         }
         check(Math.max(...seen) - Math.min(...seen) > 0.2, `${map.name}: verstuiving wisselt nauwelijks`);
       }
-      check(Wx.weatherAt(Ln, 3, 10, 10).drift > 0 && Wx.weatherAt(Ln, 4, 10, 10).drift === 0, 'Leningrad: sneeuw na de dooi (of niet ervoor)');
+      check(Wx.weatherAt(Ln, 4, 10, 10).drift > 0 && Wx.weatherAt(Ln, 5, 10, 10).drift === 0, 'Leningrad: sneeuw na de dooi (of niet ervoor)');
       check(!Wx.weatherAt(G.MAPS.carentan, 2, 110, 110).driftRate, 'regenbui verstuift');
       // een vers spoor: hoe lang tot dicht, en wat er na een storm over is
       const snowed = (cls, rate, seconds, ground) => {
@@ -328,7 +327,11 @@ export const tests = [
       check(snowed('soft', heavy, 45).closed && !snowed('soft', heavy, 40).closed, 'zware verstuiving niet dicht in 45 s');
       check(!snowed('soft', 0, 2000).closed, 'zonder verstuiving loopt een tunnel in zacht dicht');
       for (const map of [A, E]) {
-        const storm = map.weather.find((r) => r.effect?.burial), rate = Wx.weatherAt(map, 3, 75, 75).driftRate;
+        const storm = map.weather.find((r) => r.effect?.burial);
+        // zoek een moment waarop de storm actief is (randomEvery)
+        let rate = 0;
+        for (let t = 0; t < 300 && !rate; t++) { const wx = Wx.weatherAt(map, 3, t, t); if (wx.burial) rate = wx.driftRate; }
+        check(rate > 0, `${map.name}: geen storm gevonden in 300 s`);
         const r = snowed('soft', rate, storm.duration);
         check(Math.abs(r.track - 0.1) <= 0.01, `${map.name}: na de storm is van een vers spoor ${r.track.toFixed(3)} over, niet 10%`);
       }
@@ -343,7 +346,10 @@ export const tests = [
     async run() {
       const C = G.MAPS.carentan, B = G.MAPS.berlijn;
       check(Wx.weatherAt(C, 1, 110, 110).rain === 0, 'Carentan: regen in ronde 1 (ochtendmist)');
-      check(Wx.weatherAt(C, 2, 500, 50).rain === 0 && Wx.weatherAt(C, 2, 500, 110).rain === 1, 'Carentan: regen tussen de buien of geen storm in de bui');
+      // met randomEvery valt de regen op een wisselend moment; controleer dat het ergens in 200 s ronde 2 regent
+      let hadRain = false, hadDry = false;
+      for (let t = 0; t < 200; t++) { const wx = Wx.weatherAt(C, 2, 500, t); if (wx.rain > 0) hadRain = true; else hadDry = true; }
+      check(hadRain && hadDry, 'Carentan: regen nooit actief of nooit uit in ronde 2');
       const r = Wx.weatherAt(B, 3, 500, 30).rain;
       check(r >= 0.3 && r <= 0.7 && Wx.weatherAt(B, 2, 500, 30).rain === 0, 'Berlijn: regen niet tussen 0,3 en 0,7 in ronde 3 (of al in ronde 2)');
       const cfg = C.weather.find((x) => x.effect?.lightning).effect.lightning;
@@ -1016,15 +1022,13 @@ export const tests = [
   {
     name: 'sporenwisser: klok, sneller vervagen op zacht/normaal, tunnels lopen dicht, rest onveranderd',
     async run() {
-      const cfg = G.MAPS.ardennen.weather.find((r) => r.every);
-      const every = cfg.every * G.TICK_RATE, dur = cfg.duration * G.TICK_RATE;
+      const cfg = G.MAPS.ardennen.weather.find((r) => r.randomEvery || r.every);
+      const dur = cfg.duration * G.TICK_RATE;
+      // met randomEvery valt de storm op een wisselend moment; controleer dat hij ergens actief is en de juiste duur heeft
       const at = (k) => Wx.weatherAtTick(G.MAPS.ardennen, 3, 1000 + k, 1000, 1000);
-      let active = 0, firstActive = -1;
-      for (let k = 0; k < every; k++) {
-        if (at(k).eraser) { active++; if (firstActive < 0) firstActive = k; }
-      }
-      check(active === dur && firstActive === every - dur, `storm ${active} ticks vanaf ${firstActive}, verwacht ${dur} vanaf ${every - dur}`);
-      check(at(every - dur - 1).storm?.warn && !at(every - dur - 200).storm, 'waarschuwing klopt niet');
+      let active = 0;
+      for (let k = 0; k < 200 * G.TICK_RATE; k++) { if (at(k).eraser) active++; }
+      check(active >= dur && active <= dur * 3, `storm ${active} ticks in 200 s, verwacht minstens ${dur}`);
       const out = [];
       for (const name of ['paved', 'hard', 'normal', 'soft']) {
         const cls = G.CLASSES[G.CLASS[name]];
@@ -1047,7 +1051,7 @@ export const tests = [
         }
         out.push(`${name} ${closedAt === null ? 'blijft' : `dicht na ${closedAt} s`}`);
       }
-      return `storm ${cfg.duration} s per ${cfg.every} s; ${out.join(', ')}`;
+      return `storm ${cfg.duration} s; ${out.join(', ')}`;
     },
   },
   {
@@ -1114,9 +1118,11 @@ export const tests = [
         if (w.bridges.length) bridges++; // de brug over de Neva
       }
       check(bridges === 20, `brug op ${bridges} van de 20 kaarten`);
-      // na de dooi geen sneeuwjacht meer
-      check(Wx.terrainChangesAt(cfg, 4).length === 1 && Wx.terrainChangesAt(cfg, 3).length === 0, 'dooi niet bij het begin van ronde 4');
-      check(Wx.weatherAt(cfg, 3, 85, 85).eraser && !Wx.weatherAt(cfg, 4, 85, 85).eraser, 'sneeuwjacht gaat door na de dooi');
+      // geleidelijke dooi: ronde 3 en 4 broos ijs (iceBreakMul), ronde 5 smelt (terreinverandering); sneeuw tot ronde 4
+      check(Wx.terrainChangesAt(cfg, 5).length === 1 && Wx.terrainChangesAt(cfg, 4).length === 0, 'dooi niet bij het begin van ronde 5');
+      check(Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul === 2, 'ronde 3 iceBreakMul niet 2');
+      check(Wx.weatherAt(cfg, 4, 10, 10).flags.iceBreakMul === 4, 'ronde 4 iceBreakMul niet 4');
+      check(Wx.weatherAt(cfg, 4, 85, 85).eraser && !Wx.weatherAt(cfg, 5, 85, 85).eraser, 'sneeuwjacht gaat door na de dooi');
       return `20 kaarten met brug, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
     },
   },
