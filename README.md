@@ -10,6 +10,221 @@ toont (bijv. `http://192.168.1.82:3000`). Sta Node.js toe in de Windows-firewall
 wordt. Is poort 3000 bezet, start dan op een andere: `PORT=3001 npm start` (PowerShell:
 `$env:PORT=3001; npm start`). Het originele Tunneler staat op `/retro`.
 
+## Via internet met vrienden (Azure)
+
+De website en de echte simulatie draaien samen in **een Node.js-proces**. Voor een klein groepje
+zijn een resourcegroep, een **Container Apps-omgeving (Consumption)**, een **Container App** en een
+containerregister voldoende. De app krijgt een HTTPS-adres en ondersteunt WSS; een eigen domein,
+database, opslagaccount, Kubernetes, aparte load balancer of Azure SignalR is niet nodig.
+Alle spelers openen hetzelfde adres. De gewone wachtkamer blijft een gezamenlijk spel voor
+maximaal vier spelers (kleine kaart: twee), geen verzameling afzonderlijke uitnodigingskamers.
+
+`infra/main.bicep` begint met **0,5 vCPU / 1 GiB RAM**, een actieve revisie en precies een replica.
+Dit is een startpunt: meet voor gebruik met vier spelers op de grootste kaart of de server
+30 ticks/s blijft halen (ongeveer 33 ms per tick). Verhoog zo nodig de resources.
+Niet horizontaal schalen: alle speltoestand zit in het geheugen. Een herstart, nieuwe versie,
+platformvervanging of uitschakeling verbreekt de verbindingen en wist het lopende spel.
+Werk de app daarom alleen bij tussen spellen. Ook in Single-modus kunnen tijdens een update
+kort oude en nieuwe replicas naast elkaar bestaan; Single-modus is geen gedeelde spelopslag.
+
+### Uitnodigingszin
+
+Lokaal blijft `npm start` zonder aanmelding werken. **Zet de lokale modus niet rechtstreeks op
+internet.** De container gebruikt `NODE_ENV=production` en weigert zonder toegangsinstellingen
+te starten:
+
+| Omgevingsvariabele | Betekenis |
+|---|---|
+| `TUNNELER_AUTH` | `required` voor internet; `local` uitsluitend voor lokaal spelen. Productie staat `local` niet toe. |
+| `APP_ORIGIN` | Exact het HTTPS-adres zonder afsluitende slash, bijvoorbeeld `https://naam.domein`. |
+| `INVITE_PASSPHRASE` | Willekeurige gedeelde uitnodigingszin van minstens 16 tekens. Deel apart van het adres. |
+| `SESSION_SECRET` | Afzonderlijk willekeurig geheim van minstens 32 tekens, nooit aan spelers geven. |
+
+De Azure-template stelt deze waarden in en gebruikt Container Apps-secrets. Sla geheimen niet
+op in de broncode, een parametersbestand, de image, de URL of shellgeschiedenis op. De aanmelding
+geeft een ondertekende cookie (Secure, HttpOnly, SameSite=Strict) die acht uur geldig is.
+Zowel spelbestanden als WebSocket-verbindingen vereisen die cookie; voor nieuwe WebSockets moet
+ook de Origin exact overeenkomen. Bestaande verbindingen sluiten bij het verlopen van de sessie
+uiterlijk bij de volgende hartslag. Meld daarna opnieuw aan en herlaad de pagina.
+Alleen `/login` en de minimale `/healthz`-controle zijn openbaar.
+
+Na twintig foute aanmeldingen binnen een minuut geldt tijdelijk een globale blokkade; deze is
+bewust niet afhankelijk van vervalsbare proxy/IP-headers. Ook de juiste zin kan dan tot het
+einde van die minuut niet aanmelden. De limiet wordt bij een herstart gewist.
+Een gedeelde zin kent geen individuele accounts of intrekking per persoon. Roteer de
+uitnodigingszin of het sessiegeheim en **herstart de actieve revisie** om alle oude sessies
+ongeldig te maken. Dat onderbreekt ook het spel. Alleen een secret wijzigen zonder herstart
+werkt niet door in het bestaande proces.
+
+### Bouwen en deployen met een script
+
+Gebruik `tools/deploy-azure.ps1` vanuit de VS Code-terminal met **PowerShell 7 of nieuwer**.
+Vereist: Azure CLI met Bicep, een Azure-abonnement en rechten om resources en de `AcrPull`-roltoekenning
+te maken (bijvoorbeeld Owner op de resourcegroep; voor een nieuwe resourcegroep zijn ook
+voldoende rechten op het abonnement nodig). Alleen Contributor is voor de roltoekenning niet genoeg.
+
+```powershell
+az login
+pwsh -NoProfile -File .\tools\deploy-azure.ps1 `
+  -SubscriptionId '<abonnement-id>' `
+  -RegistryName '<globaal-unieke-registernaam>'
+```
+
+Het script toont het doel en vraagt bevestiging: het maakt **betaalde resources** en uploadt de
+spelbroncode naar je eigen Azure-register. Het:
+
+1. controleert het expliciete abonnement en compileert beide Bicep-templates;
+2. maakt of actualiseert de resourcegroep en het register;
+3. bouwt de Linux/amd64-image **in ACR** en publiceert die automatisch, met een nieuwe unieke tag;
+4. deployt `infra/main.bicep`;
+5. controleert de HTTPS-gezondheidsroute en toont `GameUrl` en de gebruikte image.
+
+Een lokale Docker-engine is hiervoor niet nodig. Het script gebruikt de projectmap naast het
+script als buildcontext, ook als je het vanuit een andere werkmap aanroept. Iedere Azure-opdracht
+krijgt het opgegeven abonnements-ID mee; je standaardabonnement wordt niet gewijzigd.
+De standaardwaarden zijn resourcegroep `blitzkrieg-vrienden`, regio `westeurope` en app `blitzkrieg`.
+Je kunt ze veranderen met `-ResourceGroup`, `-Location` en `-AppName`.
+De registernaam bevat 5-50 kleine letters of cijfers en moet globaal uniek zijn.
+
+Vooraf alleen het doel bekijken, **zonder Azure-aanroepen of kosten**:
+
+```powershell
+pwsh -NoProfile -File .\tools\deploy-azure.ps1 `
+  -SubscriptionId '<abonnement-id>' `
+  -RegistryName '<globaal-unieke-registernaam>' -WhatIf
+```
+
+Deze `-WhatIf` is geen Azure-wijzigingsanalyse of kostenraming: hij toont alleen wat het script
+zou uitvoeren. Met `-Confirm:$false` kun je de bevestigingsvraag overslaan, maar niet de
+beveiligde invoer van geheimen. Voer het script interactief uit, niet als onbeheerde CI-job.
+
+Azure CLI vraagt bij de spel-deployment verborgen om `invitePassphrase` en `sessionSecret`.
+Voer de waarden daar in, niet als opdrachtargument of in een parameterbestand. Het script
+leest of bewaart deze waarden niet zelf. De bestaande Bicep-parameters zijn `@secure()`.
+Bewaar je gekozen waarden in een wachtwoordmanager voor volgende uitvoeringen.
+
+Elke uitvoering bouwt een nieuwe image en kan een bestaand spel onderbreken. Deploy daarom
+alleen tussen spellen. Bij een fout stopt het script direct; al gemaakte resources en geuploade
+images blijven bestaan en kunnen kosten geven. Er is bewust geen automatische verwijdering.
+De HTTPS-gezondheidscontrole bewijst niet dat een langdurige WSS-sessie met vier spelers werkt;
+controleer dat apart na de eerste echte uitrol.
+
+### Handmatig inrichten (alternatief)
+
+Vereist: Azure CLI met Bicep en Container Apps-ondersteuning, een gekozen abonnement, en rechten om
+resources te maken en de rol `AcrPull` toe te kennen. De commands hieronder maken **betaalde
+resources** en uploaden de spelbroncode naar je eigen Azure Container Registry. Voer ze alleen
+uit in het bedoelde abonnement. Er wordt geen lokale Docker-engine gebruikt: ACR bouwt de image.
+
+PowerShell, vanuit de projectmap:
+
+```powershell
+az login
+az account set --subscription '<abonnement-id>'
+$groep = 'blitzkrieg-vrienden'
+$regio = 'westeurope' # kies een regio dicht bij de spelers
+$register = '<globaal-unieke-naam-met-letters-en-cijfers>'
+$app = 'blitzkrieg'
+$tag = 'spel-v1' # gebruik voor elke nieuwe versie een nieuwe tag
+
+az group create --name $groep --location $regio
+az deployment group create --resource-group $groep --template-file .\infra\registry.bicep --parameters registryName=$register
+az acr build --registry $register --image "blitzkrieg:$tag" .
+$image = "${register}.azurecr.io/blitzkrieg:$tag"
+
+az deployment group create --resource-group $groep --template-file .\infra\main.bicep --parameters appName=$app registryName=$register image=$image
+```
+
+Laat de laatste opdracht de ontbrekende beveiligde parameters `invitePassphrase` en
+`sessionSecret` interactief vragen. Geef ze niet als argument mee en gebruik geen `--debug`.
+Als je omgeving geen veilige invoer ondersteunt, gebruik dan de beveiligde parametervelden van
+Azure Portal voor een aangepaste ARM-deployment; geen bestand met platte geheimen als uitweg.
+De uitvoer bevat `gameUrl`. Open die URL, meld aan, en controleer met vrienden op verschillende
+internetverbindingen of een spel langer dan tien minuten zonder onderbreking werkt.
+De pull-identiteit heeft alleen `AcrPull`; de admin-account van ACR staat uit. Nieuwe
+roltoekenningen kunnen even nodig hebben om effectief te worden; controleer de provisioningstatus
+en probeer een mislukte deployment zo nodig opnieuw.
+
+De template laat `appLogsConfiguration` weg om logopslag uit te schakelen en maakt geen
+Log Analytics-workspace aan. De tekst `'none'` als bestemming wordt door de Azure-API geweigerd,
+ook als Bicep die accepteert. Voor onderzoek zijn consolelogs live beschikbaar via
+`az containerapp logs show --resource-group $groep --name $app --follow`.
+Voor langdurige opslag kun je logging toevoegen; begrens dan ingestie en bewaartermijn.
+
+### Spelavond starten en stoppen
+
+De eerste deployment start de app. Controleer voor het spelen de replica en het HTTPS-adres:
+
+```powershell
+az containerapp show --resource-group $groep --name $app --query properties.configuration.ingress.fqdn -o tsv
+$revisie = az containerapp show --resource-group $groep --name $app --query properties.latestReadyRevisionName -o tsv
+az containerapp replica list --resource-group $groep --name $app --revision $revisie -o table
+```
+
+Na de spelavond verwijder je **alleen de Container App** om zeker te zijn dat geen gameserver
+blijft draaien of door een bezoeker opnieuw ontwaakt:
+
+```powershell
+az containerapp delete --resource-group $groep --name $app --yes
+az containerapp list --resource-group $groep --query "[].name" -o tsv
+```
+
+Controleer dat de app niet meer in de lijst staat. Register, omgeving en pull-identiteit blijven
+bestaan. Start de volgende spelavond met dezelfde `main.bicep`-deployment uit het vorige blok;
+de image hoeft niet opnieuw gebouwd te worden. De beveiligde parameters worden opnieuw gevraagd.
+Gebruik dezelfde appnaam en omgeving om hetzelfde adres terug te krijgen.
+Alleen `minReplicas=0` instellen is geen uitschakelaar: HTTP-verkeer kan de app weer starten.
+
+### Kosten en validatie
+
+Bij 0,5 vCPU / 1 GiB komt **100 draaiuren** overeen met de maandelijkse gratis Consumption-grant
+van 180.000 vCPU-seconden en 360.000 GiB-seconden. Die grant geldt **per abonnement**, wordt met
+andere apps gedeeld, en is geen garantie op een gratis totaalbedrag. Ook opstarten, testen,
+updates en wachten voor/na het spelen tellen mee.
+
+**ACR Basic blijft geld kosten terwijl het spel uitstaat**; ook imagebuilds, uitgaand verkeer en
+eventuele logs kunnen kosten geven. Er is geen vaste abonnementsprijs voor deze hele opzet.
+Controleer de actuele regioprijzen en maak in Azure Cost Management een budget met waarschuwing
+voor deze resourcegroep. Een budgetwaarschuwing stopt resources niet automatisch.
+Gebruik indien beschikbaar een geschikt bestaand register om een extra vast registerbedrag te
+vermijden; deze templates verwachten ACR in dezelfde resourcegroep.
+
+Bronnen: [ingress en WebSockets](https://learn.microsoft.com/azure/container-apps/ingress-overview),
+[Consumption-facturering](https://learn.microsoft.com/azure/container-apps/billing),
+[actuele prijzen](https://azure.microsoft.com/pricing/details/container-apps/).
+
+`npm run test:auth` controleert de toegangspoort en vier aangemelde bots op de echte server.
+`npm test` voert deze tests en daarna de bestaande speltests uit. De bestaande bots gebruiken
+expliciet een lokale testomgeving; productietoegang wordt apart met cookies en Origin getest.
+De automatisering heeft afzonderlijke tests, zonder cloudresources. Deze vereisen PowerShell 7
+en Azure CLI met Bicep: ze compileren de echte template en controleren dat logopslag en een
+Log Analytics-workspace ontbreken. De deploymentaanroepen gebruiken een nagebootste Azure CLI:
+
+```powershell
+pwsh -NoProfile -File .\tests\deploy-azure.ps1
+```
+
+De Azure-templates kunnen zonder deployment worden gecontroleerd met:
+
+```powershell
+az bicep build --file .\infra\registry.bicep --stdout | Out-Null
+az bicep build --file .\infra\main.bicep --stdout | Out-Null
+docker build --tag blitzkrieg:controle .
+```
+
+Als Docker het standaardregister niet kan bereiken, maar Windows een vertrouwde npm-spiegel
+gebruikt, geef dan de register-URL mee (zonder gebruikersnaam, wachtwoord of token):
+
+```powershell
+$npmRegister = npm config get registry
+docker build --tag blitzkrieg:controle --build-arg "NPM_CONFIG_REGISTRY=$npmRegister" .
+```
+
+De containerbuild vereist een draaiende Docker-engine. Compileren en lokale tests bewijzen niet
+dat cloudrollen, WSS-ingress, lange sessies of de gekozen Azure-capaciteit al in Azure zijn getest.
+
+## Besturing
+
 Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging. Terug in je eigen basis
 tank, repareer en herlaad je.
 
@@ -143,6 +358,7 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
 npm test            # alle tests (testserver met vaste kaart, snelle weerklok, 2 rondes om te winnen;
                     # tests zonder server lopen tegelijk in worker-threads, ~1,5 minuut)
 npm test -- ijs     # alleen tests met 'ijs' in de naam
+npm run test:auth   # alleen toegangspoort en aangemelde multiplayer
 npm run test:gen    # de grote generatietest: elke map 100 keer, 4 groottes, 2/3/4 spelers
 npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
 ```
@@ -219,6 +435,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
 | `public/view/tanks-view.js` | Tanks als container: twee rupsen (`TilingSprite`, schuiven mee met rijden en draaien) en de romp erboven, schaduw met `tank.png`; anders `tank.png` of de getekende tank. |
 | `tools/maak-tanks.mjs` | Knipt de tanksprites uit de vellen in `input/tanks/` (tank, romp, rupsstrook) en meet `tank.json`: `node tools/maak-tanks.mjs`. |
+| `tools/deploy-azure.ps1` | Automatiseert registry, imagebouw/publicatie en Azure-deployment; vraagt geheimen via Azure CLI en ondersteunt `-WhatIf`. |
+| `tests/deploy-azure.ps1` | Controleert de gecompileerde Bicep-template en deploymentautomatisering zonder cloudresources. |
 | `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld: depots, kratten met parachute en het munitiedepot als sprite uit de atlas, anders getekend). |
 | `public/view/ground-gpu.js` | De grond op de videokaart: één mesh met een eigen shader (terreinklassen met texturen, tunnels, rots, water, ijs, puin, schone kaart buiten je zicht). |
 | `public/view/bridges-view.js` | Bruggen als sprite (begin, herhaald middenstuk, eind) in de richting van de weg, met schaduw; het wrak als de brug bij Arnhem ontploft. |
@@ -263,4 +481,3 @@ potnaam van retro.
   de tegels eromheen opnieuw op.
 - **Robuust**: berichten max. 4 KB, max. 60 berichten/s per speler, hartslag elke 5 s ruimt
   verbindingen van slapende laptops op, en een fout in één verbinding laat de server niet crashen.
-
