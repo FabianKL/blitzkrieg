@@ -41,7 +41,8 @@ te starten:
 | `SESSION_SECRET` | Afzonderlijk willekeurig geheim van minstens 32 tekens, nooit aan spelers geven. |
 
 De Azure-template stelt deze waarden in en gebruikt Container Apps-secrets. Sla geheimen niet
-op in de broncode, een parametersbestand, de image, de URL of shellgeschiedenis op. De aanmelding
+op in de broncode, een gecommit bestand, de image, de URL of shellgeschiedenis.
+Een lokaal invoerbestand buiten de repo is mogelijk; zie hieronder. De aanmelding
 geeft een ondertekende cookie (Secure, HttpOnly, SameSite=Strict) die acht uur geldig is.
 Zowel spelbestanden als WebSocket-verbindingen vereisen die cookie; voor nieuwe WebSockets moet
 ook de Origin exact overeenkomen. Bestaande verbindingen sluiten bij het verlopen van de sessie
@@ -95,13 +96,41 @@ pwsh -NoProfile -File .\tools\deploy-azure.ps1 `
 ```
 
 Deze `-WhatIf` is geen Azure-wijzigingsanalyse of kostenraming: hij toont alleen wat het script
-zou uitvoeren. Met `-Confirm:$false` kun je de bevestigingsvraag overslaan, maar niet de
-beveiligde invoer van geheimen. Voer het script interactief uit, niet als onbeheerde CI-job.
+zou uitvoeren. Met `-Confirm:$false` kun je de bevestigingsvraag overslaan. Zonder invoerbestand
+blijft de beveiligde invoer van geheimen nodig. Het script regelt geen onbeheerde Azure-aanmelding
+voor CI; `az login` en de juiste rechten blijven vereist.
 
 Azure CLI vraagt bij de spel-deployment verborgen om `invitePassphrase` en `sessionSecret`.
-Voer de waarden daar in, niet als opdrachtargument of in een parameterbestand. Het script
-leest of bewaart deze waarden niet zelf. De bestaande Bicep-parameters zijn `@secure()`.
+Voer de waarden daar in, nooit als opdrachtargument. Zonder invoerbestand leest of bewaart het
+script deze waarden niet zelf. De bestaande Bicep-parameters zijn `@secure()`.
 Bewaar je gekozen waarden in een wachtwoordmanager voor volgende uitvoeringen.
+
+#### Alle waarden via een lokaal invoerbestand
+
+Kopieer `infra/deploy-input.example.json` naar een plaats **buiten de repo**, bijvoorbeeld
+`C:\Blitzkrieg\azure-input.local.json`. Vul `SubscriptionId`, `RegistryName` en de twee
+`parameters`-velden in: `invitePassphrase.value` (minstens 16 tekens) en
+`sessionSecret.value` (minstens 32 tekens). Gebruik twee verschillende geheimen.
+`ResourceGroup`, `Location` en `AppName` zijn optioneel en hebben dezelfde standaardwaarden
+als de losse argumenten.
+
+```powershell
+pwsh -NoProfile -File .\tools\deploy-azure.ps1 `
+  -ConfigFile 'C:\Blitzkrieg\azure-input.local.json'
+```
+
+Je hoeft de instellingen en geheimen dan niet bij elke uitvoering opnieuw in te voeren.
+De bevestiging voor betaalde resources blijft; `-Confirm:$false` slaat die over.
+`-WhatIf` leest en valideert het bestand, maar doet geen Azure-aanroepen.
+Combineer `-ConfigFile` niet met losse instellingen zoals `-SubscriptionId` of `-RegistryName`.
+Relatieve bestandspaden worden vanuit de huidige terminalmap opgezocht.
+
+**Dit bestand is niet versleuteld.** `@secure()` in Bicep versleutelt het lokale bestand niet.
+Beperk de toegang tot je eigen account en deel of commit het nooit. Het script weigert bestanden
+binnen de repo en paden via symbolische koppelingen of junctions; `azure-input.local.json` staat
+ook in `.gitignore` als extra bescherming. Het script maakt geen kopie of tijdelijk geheimenbestand:
+Azure CLI leest alleen het onderdeel `parameters` rechtstreeks uit het bestand. De andere velden
+zijn instellingen voor het script. Geheimwaarden komen niet als opdrachtargument mee.
 
 Elke uitvoering bouwt een nieuwe image en kan een bestaand spel onderbreken. Deploy daarom
 alleen tussen spellen. Bij een fout stopt het script direct; al gemaakte resources en geuploade
@@ -138,7 +167,8 @@ az deployment group create --resource-group $groep --template-file .\infra\main.
 Laat de laatste opdracht de ontbrekende beveiligde parameters `invitePassphrase` en
 `sessionSecret` interactief vragen. Geef ze niet als argument mee en gebruik geen `--debug`.
 Als je omgeving geen veilige invoer ondersteunt, gebruik dan de beveiligde parametervelden van
-Azure Portal voor een aangepaste ARM-deployment; geen bestand met platte geheimen als uitweg.
+Azure Portal voor een aangepaste ARM-deployment, of de expliciete `-ConfigFile`-route hierboven.
+Ook bij die bestandsroute moeten de leesbare geheimen buiten de repo blijven.
 De uitvoer bevat `gameUrl`. Open die URL, meld aan, en controleer met vrienden op verschillende
 internetverbindingen of een spel langer dan tien minuten zonder onderbreking werkt.
 De pull-identiteit heeft alleen `AcrPull`; de admin-account van ACR staat uit. Nieuwe
@@ -435,7 +465,8 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
 | `public/view/tanks-view.js` | Tanks als container: twee rupsen (`TilingSprite`, schuiven mee met rijden en draaien) en de romp erboven, schaduw met `tank.png`; anders `tank.png` of de getekende tank. |
 | `tools/maak-tanks.mjs` | Knipt de tanksprites uit de vellen in `input/tanks/` (tank, romp, rupsstrook) en meet `tank.json`: `node tools/maak-tanks.mjs`. |
-| `tools/deploy-azure.ps1` | Automatiseert registry, imagebouw/publicatie en Azure-deployment; vraagt geheimen via Azure CLI en ondersteunt `-WhatIf`. |
+| `tools/deploy-azure.ps1` | Automatiseert registry, imagebouw/publicatie en Azure-deployment; ondersteunt verborgen invoer, `-ConfigFile` en `-WhatIf`. |
+| `infra/deploy-input.example.json` | Voorbeeld zonder geheimwaarden; kopieer dit buiten de repo en vul daar de Azure-instellingen en geheimen in. |
 | `tests/deploy-azure.ps1` | Controleert de gecompileerde Bicep-template en deploymentautomatisering zonder cloudresources. |
 | `public/view/` | Delen van de weergave: `side-panel.js` (minikaart, legenda, tankkaart) en `hazards-view.js` (gevaren en laadplekken in beeld: depots, kratten met parachute en het munitiedepot als sprite uit de atlas, anders getekend). |
 | `public/view/ground-gpu.js` | De grond op de videokaart: één mesh met een eigen shader (terreinklassen met texturen, tunnels, rots, water, ijs, puin, schone kaart buiten je zicht). |

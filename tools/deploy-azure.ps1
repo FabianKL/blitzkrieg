@@ -3,32 +3,42 @@
 Bouwt en publiceert de spelimage en rolt de Azure-infrastructuur uit.
 .DESCRIPTION
 Voer eerst az login uit. ACR bouwt de image en slaat hem op; Docker is niet nodig.
-Azure CLI vraagt de twee beveiligde Bicep-parameters interactief op.
-Het script schrijft geen geheimen naar bestanden of opdrachtargumenten.
+Azure CLI vraagt de twee beveiligde Bicep-parameters interactief op, of leest ze
+via ConfigFile uit een lokaal JSON-bestand buiten de repo. Dat bestand bevat leesbare geheimen.
+Het script schrijft geen geheimwaarden naar opdrachtargumenten of extra bestanden.
 .EXAMPLE
 .\tools\deploy-azure.ps1 -SubscriptionId '<abonnement-id>' -RegistryName '<unieke-registernaam>'
 .EXAMPLE
 .\tools\deploy-azure.ps1 -SubscriptionId '<abonnement-id>' -RegistryName '<unieke-registernaam>' -WhatIf
+.EXAMPLE
+.\tools\deploy-azure.ps1 -ConfigFile 'C:\Blitzkrieg\azure-input.local.json'
 #>
 
 #requires -Version 7.0
-[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'Interactive')]
 param(
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, ParameterSetName = 'Interactive')]
     [guid]$SubscriptionId,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, ParameterSetName = 'Interactive')]
     [ValidatePattern('^[a-z0-9]{5,50}$', Options = 'None')]
     [string]$RegistryName,
 
+    [Parameter(ParameterSetName = 'Interactive')]
     [ValidatePattern('^(?!-)(?!.*\.$)[a-zA-Z0-9_().-]{1,90}$')]
     [string]$ResourceGroup = 'blitzkrieg-vrienden',
 
+    [Parameter(ParameterSetName = 'Interactive')]
     [ValidatePattern('^[a-z0-9]+$', Options = 'None')]
     [string]$Location = 'westeurope',
 
+    [Parameter(ParameterSetName = 'Interactive')]
     [ValidatePattern('^(?!.*--)[a-z][a-z0-9-]{0,22}[a-z0-9]$', Options = 'None')]
-    [string]$AppName = 'blitzkrieg'
+    [string]$AppName = 'blitzkrieg',
+
+    [Parameter(Mandatory, ParameterSetName = 'File')]
+    [ValidateNotNullOrEmpty()]
+    [string]$ConfigFile
 )
 
 Set-StrictMode -Version Latest
@@ -49,9 +59,87 @@ function Invoke-AzureCli {
     if ($Capture) { return ($output -join [Environment]::NewLine).Trim() }
 }
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$secureParameters = @()
+$noPrompt = 'false'
+if ($PSCmdlet.ParameterSetName -eq 'File') {
+    if (-not (Test-Path -LiteralPath $ConfigFile -PathType Leaf)) {
+        throw 'ConfigFile moet een bestaand JSON-bestand zijn.'
+    }
+    $file = Get-Item -LiteralPath $ConfigFile
+    if ($file -isnot [IO.FileInfo] -or $file.Extension -ine '.json') {
+        throw 'ConfigFile moet een bestaand JSON-bestand zijn.'
+    }
+    if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'ConfigFile mag geen symbolische koppeling zijn.'
+    }
+    for ($directory = $file.Directory; $null -ne $directory; $directory = $directory.Parent) {
+        if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Bewaar ConfigFile buiten symbolische koppelingen en junctions.'
+        }
+    }
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if ($file.FullName.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+        throw 'Bewaar ConfigFile buiten de repo: het bevat leesbare geheimen.'
+    }
+    try {
+        $config = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($file.FullName)) -AsHashtable
+    } catch [ArgumentException] {
+        throw 'ConfigFile bevat geen geldige JSON. De inhoud wordt niet getoond omdat die geheimen kan bevatten.'
+    }
+    if ($config -isnot [System.Collections.IDictionary]) { throw 'ConfigFile moet een JSON-object bevatten.' }
+    $settings = @{
+        SubscriptionId = $SubscriptionId; RegistryName = $RegistryName
+        ResourceGroup = $ResourceGroup; Location = $Location; AppName = $AppName
+    }
+    foreach ($key in $config.Keys) {
+        if ($key -cne 'parameters' -and @($settings.Keys) -cnotcontains $key) {
+            throw 'ConfigFile bevat onbekende eigenschappen. Gebruik de namen uit het voorbeeldbestand.'
+        }
+    }
+    foreach ($name in @('SubscriptionId', 'RegistryName')) {
+        if (-not $config.Contains($name)) { throw "ConfigFile mist $name." }
+    }
+    foreach ($name in @($settings.Keys)) {
+        if (-not $config.Contains($name)) { continue }
+        $value = $config[$name]
+        if ($value -isnot [string]) { throw "ConfigFile moet een tekstwaarde voor $name bevatten." }
+        if ($name -eq 'SubscriptionId') {
+            $id = [guid]::Empty
+            if (-not [guid]::TryParse($value, [ref]$id)) { throw 'ConfigFile bevat geen geldig abonnements-ID.' }
+            $settings[$name] = $id
+        } else {
+            $pattern = $MyInvocation.MyCommand.Parameters[$name].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidatePatternAttribute] }
+            if (-not [regex]::IsMatch($value, $pattern.RegexPattern, $pattern.Options)) {
+                throw "ConfigFile bevat een ongeldige waarde voor $name."
+            }
+            $settings[$name] = $value
+        }
+    }
+    $secrets = $config['parameters']
+    if ($secrets -isnot [System.Collections.IDictionary] -or $secrets.Count -ne 2) {
+        throw 'ConfigFile moet onder parameters uitsluitend invitePassphrase en sessionSecret bevatten.'
+    }
+    foreach ($secret in @(@{ Name = 'invitePassphrase'; Minimum = 16 }, @{ Name = 'sessionSecret'; Minimum = 32 })) {
+        $parameter = $secrets[$secret.Name]
+        if ($parameter -isnot [System.Collections.IDictionary] -or $parameter.Count -ne 1 -or
+            -not $parameter.Contains('value') -or $parameter['value'] -isnot [string] -or
+            $parameter['value'].Length -lt $secret.Minimum) {
+            throw "ConfigFile moet $($secret.Name) met een tekstwaarde van minstens $($secret.Minimum) tekens bevatten."
+        }
+    }
+    $SubscriptionId = $settings.SubscriptionId
+    $RegistryName = $settings.RegistryName
+    $ResourceGroup = $settings.ResourceGroup
+    $Location = $settings.Location
+    $AppName = $settings.AppName
+    $secureParameters = @("@$($file.FullName)")
+    $noPrompt = 'true'
+    Write-Warning 'ConfigFile bevat leesbare geheimen. Beperk de bestandstoegang en deel of commit het bestand nooit.'
+}
 if ($SubscriptionId -eq [guid]::Empty) { throw 'Geef een geldig abonnements-ID op, niet uitsluitend nullen.' }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
 $registryTemplate = Join-Path $repoRoot 'infra' 'registry.bicep'
 $gameTemplate = Join-Path $repoRoot 'infra' 'main.bicep'
 $scope = @('--subscription', $SubscriptionId.ToString(), '--only-show-errors')
@@ -98,13 +186,19 @@ Invoke-AzureCli -CliArguments (@(
     '--image', "blitzkrieg:$imageTag", '--file', 'Dockerfile', '--platform', 'linux/amd64', $repoRoot
 ) + $scope)
 
-Write-Host '4/5: spel deployen. Azure CLI vraagt nu verborgen om invitePassphrase en sessionSecret; de lengte-eisen staan in de Bicep-template.'
-# Laat Azure CLI de secureString-parameters opvragen; geef hun waarden nooit als argument mee.
+if ($secureParameters.Count) {
+    Write-Host '4/5: spel deployen met de beveiligde parameters uit ConfigFile.'
+} else {
+    Write-Host '4/5: spel deployen. Azure CLI vraagt nu verborgen om invitePassphrase en sessionSecret; de lengte-eisen staan in de Bicep-template.'
+}
+# Alleen de bestandsnaam of de verborgen invoer gaat naar Azure CLI, nooit geheimwaarden als argument.
 $gameUrl = Invoke-AzureCli -Capture -CliArguments (@(
     'deployment', 'group', 'create', '--resource-group', $ResourceGroup,
     '--name', "$AppName-game", '--template-file', $gameTemplate,
-    '--mode', 'Incremental', '--no-prompt', 'false',
-    '--parameters', "appName=$AppName", "registryName=$RegistryName", "image=$image", "location=$Location",
+    '--mode', 'Incremental', '--no-prompt', $noPrompt,
+    '--parameters'
+) + $secureParameters + @(
+    "appName=$AppName", "registryName=$RegistryName", "image=$image", "location=$Location",
     '--query', 'properties.outputs.gameUrl.value', '--output', 'tsv'
 ) + $scope)
 $gameOrigin = $null

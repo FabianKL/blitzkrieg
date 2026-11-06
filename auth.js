@@ -55,7 +55,7 @@ export function createAuth(env = process.env, now = Date.now) {
     try { pathname = new URL(req.url, origin).pathname; }
     catch { reply(res, 400, 'Ongeldige URL.'); return true; }
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (pathname === '/healthz' && ['GET', 'HEAD'].includes(req.method)) {
       reply(res, 200, 'ok');
