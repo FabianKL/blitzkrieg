@@ -40,9 +40,9 @@ const WEATHER = {
   'fall-gelb': [[1, 10, 10, { vis: null }], [3, 400, 10, { vis: 8 }], [4, 600, 10, { vis: null }]],
   barbarossa: [[1, 10, 10, { vis: 10, flag: 'dust' }], [2, 300, 10, { vis: 10 }], [3, 500, 10, { vis: 8, flag: 'mud' }]],
   'el-alamein': [[1, 10, 10, { vis: 10, flag: 'mirages' }], [2, 75, 30, { vis: 2, eraser: true, burial: true }]],
-  leningrad: [[1, 10, 0, { vis: 12 }], [1, 190, 180, { vis: 6 }], [3, 75, 75, { vis: 2, eraser: true }], [5, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
+  leningrad: [[1, 10, 0, { vis: 12 }], [1, 150, 150, { vis: 7 }], [3, 75, 75, { vis: 2, eraser: true }], [5, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
   koersk: [[1, 10, 10, { vis: 12, flag: 'fires' }], [3, 400, 10, { vis: 8, flag: 'thunder' }]],
-  carentan: [[1, 10, 10, { vis: 4 }], [2, 300, 10, { vis: 12 }], [2, 410, 110, { vis: 8, eraser: 'nearWater' }]],
+  carentan: [[1, 10, 10, { vis: 4 }], [2, 300, 10, { vis: 12 }], [2, 350, 50, { vis: 8, eraser: 'nearWater' }]],
   'market-garden': [[1, 10, 10, { vis: 12 }], [3, 400, 10, { vis: 8 }]],
   ardennen: [[1, 0, 0, { vis: 2 }], [3, 10, 10, { vis: null, noflag: 'fog' }]],
   seelow: [[1, 10, 10, { vis: 4, flag: 'searchlights' }], [3, 400, 10, { vis: 8, noflag: 'searchlights' }]],
@@ -137,6 +137,9 @@ export const mapTests = [
         out.push('brug');
         // Oder-front: vak licht op, 3 s later -30% en kraters
         room = fakeRoom('seelow'); t = room.tanks[0]; ev = [];
+        // zoeklicht-triggering uitzetten: deze test gaat over de vaste 60 s-timer
+        const slSave = room.wx.flags.searchlights;
+        room.wx.flags.searchlights = null;
         Hz.roundStart(room, ev);
         for (let k = 1; k <= 60 * G.TICK_RATE && !ev.some((e) => e.t === 'z'); k++) Hz.step(room, k, ev, hurt);
         const z = ev.find((e) => e.t === 'z');

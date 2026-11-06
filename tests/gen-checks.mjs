@@ -41,8 +41,9 @@ export function checkGeneratedMap(id, w, players, size) {
     const margin = MARGIN + (w.unavoidable?.[k] ?? extra) + toleranceOf(rules) + 0.01;
     check(Math.abs((shares[k] || 0) - p) <= margin, `${tag}: ${k} ${(shares[k] || 0).toFixed(1)}%, verwacht ${p} ± ${margin.toFixed(1)}`);
   }
-  // bases (§6.2)
-  check(w.bases.length === players, `${tag}: ${w.bases.length} bases, verwacht ${players}`);
+  // bases (§6.2) — noBases kaarten hebben geen bases
+  const expectBases = rules.noBases ? 0 : players;
+  check(w.bases.length === expectBases, `${tag}: ${w.bases.length} bases, verwacht ${expectBases}`);
   const hw = G.BASE_W >> 1, hh = G.BASE_H >> 1;
   for (const b of w.bases) {
     for (let y = b.y - hh - 3 * T; y <= b.y + hh + 3 * T; y++) {
@@ -70,8 +71,10 @@ export function checkGeneratedMap(id, w, players, size) {
     }
   }
   // route tussen elk paar bases (begroeiing, gebouwen, ijs en doorwaadbare plekken tellen als passeerbaar)
-  const seen = G.reachable(w.map, w.bases[0]);
-  check(w.bases.every((b) => seen[b.y * G.W + b.x]), `${tag}: niet alle bases bereikbaar`);
+  if (w.bases.length) {
+    const seen = G.reachable(w.map, w.bases[0]);
+    check(w.bases.every((b) => seen[b.y * G.W + b.x]), `${tag}: niet alle bases bereikbaar`);
+  }
   // bruggen minstens 3 T breed (de maat langs de rivier; de andere is de oversteek)
   for (const br of w.bridges) {
     if (br.cells < 4 * T * T) continue; // weg over het puntje van een rivier, geen echte brug

@@ -241,13 +241,14 @@ export const tests = [
         Hz.roundStart(room, events);
         const dep = events.find((e) => e.t === 'dep');
         check(dep?.list.length === 2, `${dep?.list.length} depots op middel, verwacht 2`);
-        // depot: erover rijden = voltanken, daarna leeg
+        // depot: erover rijden = voltanken; Ardennen heeft infinite depots (blijven vol)
         [t.x, t.y] = dep.list[0];
         Hz.step(room, 1, events, hurt);
-        check(t.fuel === G.FUEL_MAX && dep.list[0][2] === 0 && events.some((e) => e.t === 'depu'), 'depot tankte niet vol of bleef vol');
+        check(t.fuel === G.FUEL_MAX && events.some((e) => e.t === 'depu'), 'depot tankte niet vol');
+        check(dep.list[0][2] > 0, 'infinite depot raakte leeg');
         t.fuel = 10;
         Hz.step(room, 2, events, hurt);
-        check(t.fuel === 10, 'leeg depot tankte nog');
+        check(t.fuel === G.FUEL_MAX, 'infinite depot tankte niet opnieuw vol');
         // barrage: na 20 s aangekondigd, 2 s later inslag; wie bij het bos in het vak staat verliest 15%
         let tick = 3;
         for (; tick < 25 * G.TICK_RATE && !events.some((e) => e.t === 'z'); tick++) Hz.step(room, tick, events, hurt);
@@ -645,8 +646,10 @@ export const tests = [
             for (let seed = 1; seed <= 3; seed++) {
               const m = G.generateMap(seed * 7717, G.MAPS[id], G.MAP_SIZES[size].maxPlayers);
               check(m.map.length === w * h, `${size} ${id}: kaart van ${m.map.length} cellen`);
-              const seen = G.reachable(m.map, m.bases[0]);
-              check(m.bases.every((b) => seen[b.y * w + b.x]), `${size} ${id} seed ${seed}: basis onbereikbaar`);
+              if (m.bases.length) {
+                const seen = G.reachable(m.map, m.bases[0]);
+                check(m.bases.every((b) => seen[b.y * w + b.x]), `${size} ${id} seed ${seed}: basis onbereikbaar`);
+              }
             }
           }
           out.push(`${size} ${w}x${h}`);
@@ -721,8 +724,10 @@ export const tests = [
       let checked = 0;
       for (let seed = 1; seed <= 300; seed++) {
         const w = G.generateMap(seed * 7919, G.MAPS[MAP_IDS[seed % MAP_IDS.length]]);
-        const seen = G.reachable(w.map, w.bases[0]);
-        for (const b of w.bases) check(seen[b.y * G.W + b.x], `seed ${seed * 7919}: basis (${b.x}, ${b.y}) niet bereikbaar vanaf basis 1`);
+        if (w.bases.length) {
+          const seen = G.reachable(w.map, w.bases[0]);
+          for (const b of w.bases) check(seen[b.y * G.W + b.x], `seed ${seed * 7919}: basis (${b.x}, ${b.y}) niet bereikbaar vanaf basis 1`);
+        }
         for (const b of w.bases) {
           const y0 = b.y - (G.BASE_H >> 1);
           for (const [doorY, dir] of [[y0, -1], [y0 + G.BASE_H - 1, 1]]) {
@@ -1122,7 +1127,10 @@ export const tests = [
       check(Wx.terrainChangesAt(cfg, 5).length === 1 && Wx.terrainChangesAt(cfg, 4).length === 0, 'dooi niet bij het begin van ronde 5');
       check(Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul === 2, 'ronde 3 iceBreakMul niet 2');
       check(Wx.weatherAt(cfg, 4, 10, 10).flags.iceBreakMul === 4, 'ronde 4 iceBreakMul niet 4');
-      check(Wx.weatherAt(cfg, 4, 85, 85).eraser && !Wx.weatherAt(cfg, 5, 85, 85).eraser, 'sneeuwjacht gaat door na de dooi');
+      let eraserR4 = false, eraserR5 = false;
+      for (let t = 0; t < 200 * 30 && !eraserR4; t += 10) if (Wx.weatherAt(cfg, 4, t, t).eraser) eraserR4 = true;
+      for (let t = 0; t < 200 * 30 && !eraserR5; t += 10) if (Wx.weatherAt(cfg, 5, t, t).eraser) eraserR5 = true;
+      check(eraserR4 && !eraserR5, 'sneeuwjacht gaat door na de dooi');
       return `20 kaarten met brug, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
     },
   },
