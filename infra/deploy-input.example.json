@@ -1,0 +1,15 @@
+{
+  "SubscriptionId": "<abonnement-id>",
+  "RegistryName": "<globaal-unieke-registernaam>",
+  "ResourceGroup": "blitzkrieg-vrienden",
+  "Location": "westeurope",
+  "AppName": "blitzkrieg",
+  "parameters": {
+    "invitePassphrase": {
+      "value": ""
+    },
+    "sessionSecret": {
+      "value": ""
+    }
+  }
+}

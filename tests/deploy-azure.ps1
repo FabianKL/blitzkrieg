@@ -71,8 +71,28 @@ function Invoke-TestDeployment([hashtable]$Overrides = @{}) {
         RegistryName = 'voorbeeld123'
         Confirm = $false
     }
+    if ($Overrides.ContainsKey('ConfigFile')) {
+        $parameters.Remove('SubscriptionId')
+        $parameters.Remove('RegistryName')
+    }
     foreach ($key in $Overrides.Keys) { $parameters[$key] = $Overrides[$key] }
     & $script:deployScript @parameters 6>$null 3>$null
+}
+
+function New-TestConfig([hashtable]$Overrides = @{}, [string]$Extension = '.json') {
+    $config = @{
+        SubscriptionId = $script:subscription
+        RegistryName = 'voorbeeld123'
+        parameters = @{
+            invitePassphrase = @{ value = 'uitsluitend-test-uitnodigingszin' }
+            sessionSecret = @{ value = 'uitsluitend-test-sessiegeheim-met-voldoende-tekens' }
+        }
+    }
+    foreach ($key in $Overrides.Keys) { $config[$key] = $Overrides[$key] }
+    $path = Join-Path ([IO.Path]::GetTempPath()) "blitzkrieg invoer $([guid]::NewGuid().ToString('N'))$Extension"
+    $global:DeploymentTestState.ConfigFiles.Add($path)
+    $config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding utf8
+    return $path
 }
 
 function Test-Deployment([string]$Name, [scriptblock]$Body) {
@@ -86,6 +106,7 @@ function Test-Deployment([string]$Name, [scriptblock]$Body) {
         HealthFailure = $false
         HealthContent = 'ok'
         MissingCli = $false
+        ConfigFiles = [System.Collections.Generic.List[string]]::new()
     }
     try {
         & $Body
@@ -94,6 +115,9 @@ function Test-Deployment([string]$Name, [scriptblock]$Body) {
         $script:failed++
         Write-Host "FOUT: $Name - $($_.Exception.Message)"
     } finally {
+        foreach ($path in $global:DeploymentTestState.ConfigFiles) {
+            Remove-Item -LiteralPath $path
+        }
         Remove-Variable -Name DeploymentTestState -Scope Global
     }
 }
@@ -242,6 +266,145 @@ Test-Deployment 'netwerkfout of onverwachte gezondheidsinhoud geeft geen succesv
     $global:DeploymentTestState.HealthFailure = $false
     $global:DeploymentTestState.HealthContent = '<html>Geen spelserver</html>'
     Assert-Throws { Invoke-TestDeployment } 'gezondheidscontrole geeft geen geldige spelserver'
+}
+
+Test-Deployment 'invoerbestand levert instellingen en geheimen zonder geheimwaarden in argumenten of uitvoer' {
+    $invite = 'uitsluitend-test-met-"aanhaling"\en-achterstreep'
+    $secret = "uitsluitend-test-sessiegeheim`nmet-voldoende-tekens"
+    $fileSubscription = '22222222-2222-2222-2222-222222222222'
+    $global:DeploymentTestState.AccountId = $fileSubscription
+    $path = New-TestConfig @{
+        SubscriptionId = $fileSubscription
+        ResourceGroup = 'andere-groep'; Location = 'northeurope'; AppName = 'ander-spel'
+        parameters = @{ invitePassphrase = @{ value = $invite }; sessionSecret = @{ value = $secret } }
+    }
+    $before = (Get-FileHash -LiteralPath $path).Hash
+    $output = @(& $script:deployScript -ConfigFile $path -Confirm:$false *>&1)
+    $text = $output | Out-String
+    foreach ($value in @($invite, $secret)) {
+        Assert-True (-not $text.Contains($value)) 'Een geheim staat in de uitvoer.'
+        foreach ($call in $global:DeploymentTestState.Calls) {
+            Assert-True (-not ($call -join ' ').Contains($value)) 'Een geheim staat in CLI-argumenten.'
+        }
+    }
+    $main = $global:DeploymentTestState.Calls[6]
+    Assert-True ($main -contains "@$path") 'Azure CLI krijgt het originele bestand niet rechtstreeks.'
+    Assert-True ((Get-Argument $main '--no-prompt') -eq 'true') 'Geheimen worden ondanks het invoerbestand opnieuw gevraagd.'
+    Assert-True ($main -contains 'appName=ander-spel') 'De appnaam ontbreekt.'
+    Assert-True ($main -contains 'location=northeurope') 'De regio ontbreekt.'
+    Assert-True ((Get-Argument $main '--resource-group') -eq 'andere-groep') 'De verkeerde resourcegroep is gebruikt.'
+    Assert-True ((Get-FileHash -LiteralPath $path).Hash -eq $before) 'Het invoerbestand is gewijzigd.'
+    foreach ($call in $global:DeploymentTestState.Calls) {
+        if ($call[0] -eq 'bicep') { continue }
+        Assert-True ((Get-Argument $call '--subscription') -eq $fileSubscription) 'Een aanroep mist het abonnement uit het bestand.'
+    }
+}
+
+Test-Deployment 'invoerbestand gebruikt dezelfde standaardwaarden en ondersteunt relatieve paden met spaties' {
+    $path = New-TestConfig
+    Push-Location (Split-Path -Parent $path)
+    try { $result = Invoke-TestDeployment @{ ConfigFile = (Split-Path -Leaf $path) } }
+    finally { Pop-Location }
+    Assert-True ($result.ResourceGroup -eq 'blitzkrieg-vrienden') 'De standaardresourcegroep wijkt af.'
+    $main = $global:DeploymentTestState.Calls[6]
+    Assert-True ($main -contains "@$path") 'Het relatieve pad is niet absoluut doorgegeven.'
+    Assert-True ($main -contains 'appName=blitzkrieg' -and $main -contains 'location=westeurope') 'De standaardapp of regio wijkt af.'
+}
+
+Test-Deployment 'WhatIf met invoerbestand doet geen Azure-aanroepen' {
+    $path = New-TestConfig
+    $null = Invoke-TestDeployment @{ ConfigFile = $path; WhatIf = $true }
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'WhatIf heeft Azure CLI aangeroepen.'
+    Assert-True ($global:DeploymentTestState.HealthCalls -eq 0) 'WhatIf heeft een gezondheidscontrole gedaan.'
+}
+
+Test-Deployment 'invoerbestand kan niet met losse instellingen worden gecombineerd' {
+    $path = New-TestConfig
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path; RegistryName = 'anderregister' } } 'parameter set'
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Gemengde invoer leidde tot Azure-aanroepen.'
+}
+
+Test-Deployment 'invoerbestand moet een JSON-bestand buiten de repo zijn' {
+    $example = Join-Path (Split-Path -Parent $PSScriptRoot) 'infra' 'deploy-input.example.json'
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $example } } 'buiten de repo'
+    $other = New-TestConfig -Extension '.txt'
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $other } } 'bestaand JSON-bestand'
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $PSScriptRoot } } 'bestaand JSON-bestand'
+    $missing = Join-Path ([IO.Path]::GetTempPath()) "$([guid]::NewGuid()).json"
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $missing } } 'bestaand JSON-bestand'
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Een onveilig of ontbrekend bestand leidde tot Azure-aanroepen.'
+}
+
+Test-Deployment 'ongeldige JSON lekt de bestandsinhoud niet in de foutmelding' {
+    $path = New-TestConfig
+    $marker = 'uitsluitend-test-geheim-dat-niet-in-een-fout-mag-staan'
+    Set-Content -LiteralPath $path -Value "{`"$marker`": ongeldige-json}"
+    $output = @()
+    try {
+        $output = @(& $script:deployScript -ConfigFile $path -Confirm:$false *>&1)
+        throw 'Ongeldige JSON is geaccepteerd.'
+    } catch {
+        Assert-True ($_.Exception.Message -match 'geen geldige JSON') 'De JSON-fout ontbreekt.'
+        Assert-True (-not ($_ | Out-String).Contains($marker)) 'De foutmelding bevat geheime bestandsinhoud.'
+        Assert-True (-not ($output | Out-String).Contains($marker)) 'De uitvoer bevat geheime bestandsinhoud.'
+    }
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Na ongeldige JSON is Azure aangeroepen.'
+}
+
+Test-Deployment 'invoerbestand weigert ontbrekende en onbekende velden' {
+    foreach ($name in @('SubscriptionId', 'RegistryName', 'parameters')) {
+        $path = New-TestConfig
+        $config = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json -AsHashtable
+        $config.Remove($name)
+        $config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path
+        Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'ConfigFile'
+    }
+    $path = New-TestConfig @{ onbekend = 'waarde' }
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'onbekende eigenschappen'
+    foreach ($json in @('[]', 'null', '"tekst"', '42')) {
+        Set-Content -LiteralPath $path -Value $json
+        Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'JSON-object'
+    }
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Ongeldige velden leidden tot Azure-aanroepen.'
+}
+
+Test-Deployment 'instellingen uit het bestand volgen dezelfde validatie als losse argumenten' {
+    foreach ($invalid in @(
+        @{ SubscriptionId = 'geen-guid' }, @{ SubscriptionId = [guid]::Empty.ToString() },
+        @{ RegistryName = 'Ongeldig' }, @{ RegistryName = @('array') },
+        @{ ResourceGroup = '-ongeldig' }, @{ Location = 'West Europe' }, @{ AppName = 'dubbel--streepje' }
+    )) {
+        $path = New-TestConfig $invalid
+        Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'ConfigFile|geldig abonnements-ID'
+    }
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Ongeldige instellingen leidden tot Azure-aanroepen.'
+}
+
+Test-Deployment 'geheimen moeten tekstwaarden met de juiste minimumlengte zijn' {
+    foreach ($parameters in @(
+        @{ invitePassphrase = @{ value = ('i' * 15) }; sessionSecret = @{ value = ('s' * 32) } },
+        @{ invitePassphrase = @{ value = ('i' * 16) }; sessionSecret = @{ value = ('s' * 31) } },
+        @{ invitePassphrase = @{ value = 123456789 }; sessionSecret = @{ value = ('s' * 32) } },
+        @{ invitePassphrase = ('i' * 16); sessionSecret = @{ value = ('s' * 32) } },
+        @{ invitePassphrase = @{ value = ('i' * 16) }; sessionSecret = @{ reference = 'niet-ondersteund' } },
+        @{ invitePassphrase = @{ value = ('i' * 16) }; sessionSecret = @{ value = ('s' * 32) }; image = @{ value = 'onverwacht' } }
+    )) {
+        $path = New-TestConfig @{ parameters = $parameters }
+        Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'ConfigFile'
+    }
+    Assert-True ($global:DeploymentTestState.Calls.Count -eq 0) 'Ongeldige geheimen leidden tot Azure-aanroepen.'
+    $path = New-TestConfig @{ parameters = @{
+        invitePassphrase = @{ value = ('i' * 16) }; sessionSecret = @{ value = ('s' * 32) }
+    } }
+    $null = Invoke-TestDeployment @{ ConfigFile = $path }
+    Assert-True ($global:DeploymentTestState.HealthCalls -eq 1) 'Geldige minimumlengtes zijn niet geaccepteerd.'
+}
+
+Test-Deployment 'CLI-fout met invoerbestand geeft geen succesvolle deployment terug' {
+    $path = New-TestConfig
+    $global:DeploymentTestState.FailAt = 7
+    Assert-Throws { Invoke-TestDeployment @{ ConfigFile = $path } } 'Azure CLI mislukt:.*exitcode 17'
+    Assert-True ($global:DeploymentTestState.HealthCalls -eq 0) 'Na een deploymentfout is succes gecontroleerd.'
 }
 
 if ($failed) { throw "$failed deploymenttests mislukt." }

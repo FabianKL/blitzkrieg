@@ -5,6 +5,8 @@ node_modules/
 .claude/
 .vscode/
 .env
+# uitsluitend lokale Azure-invoer (bewaar het echte bestand buiten de repo)
+azure-input.local.json
 
 # logs en tijdelijke bestanden
 *.log

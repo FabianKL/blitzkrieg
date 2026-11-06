@@ -67,6 +67,7 @@ test('toegang: alleen formulier en gezondheidscontrole zijn openbaar', async (t)
   const page = await f.request('/login');
   assert.equal(page.response.status, 200);
   assert.match(page.text, /type="password"/);
+  assert.equal(page.response.headers.get('referrer-policy'), 'same-origin');
   assert.match(page.response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
   assert.equal((await f.request('/healthz')).text, 'ok');
   for (const path of ['/shared/config.js', '/vendor/pixi.mjs', '/assets/manifest.json', '/shell.js']) {
