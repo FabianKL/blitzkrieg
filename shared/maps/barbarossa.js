@@ -5,7 +5,7 @@ export default { // §10.2
   tanks: { A: 't34', B: 'panther' },
   desc: {
     setting: 'Zomer 1941. Operatie Barbarossa: de Duitse Wehrmacht valt de Sovjet-Unie binnen over de eindeloze Russische vlakte.',
-    terrain: 'Open, droge steppe met akkers, berkenbossen en een zandweg door een klein dorp.',
+    terrain: 'Open, droge steppe met akkers, berkenbossen en verspreide boerderijen. Een rivier doorkruist het landschap van noord naar zuid.',
     weather: 'Hittegolven met stofwolken in de eerste rondes. Daarna breekt het modderseizoen aan: de harde grond wordt drassig.',
     special: 'Het modderseizoen verandert het slagveld: droge vlakte en akkers worden zachte modder die je tank vertraagt.',
   },
@@ -18,17 +18,17 @@ export default { // §10.2
     hard: { label: 'Droge, harde vlakte', color: '#c2a868' },
     normal: { label: 'Akkers', color: '#8f8a48' },
     soft: { label: 'Zandige plekken (later modder)', color: '#5a4632' },
+    ford: { label: 'Doorwaadbare plek', color: '#6a8a7a' },
   },
   rocks: { label: 'Rotsblokken', color: '#8d8a80' },
   water: { label: 'Plassen en meren', color: '#4a6a6a' },
   vegetation: { type: 'birch', label: 'Berkenbossen', color: '#5f7a3a', groundAfter: 'normal' },
   noPonds: true,
   features: [
-    { type: 'road', from: [0, 0.5], to: [1, 0.5], width: 2 },
-    { type: 'village', at: [0.5, 0.5], size: 0.07, name: 'Dorp', layout: 'row', buildings: [3, 5] },
-    // 2-3 aaneengesloten waterlichamen (korte brede rivierlijnen)
-    { type: 'river', from: [0.2, 0.25], to: [0.35, 0.55], width: 3, bridges: false, wiggle: 0.06 },
-    { type: 'river', from: [0.7, 0.4], to: [0.85, 0.7], width: 3, bridges: false, wiggle: 0.06 },
+    // één rivier van noord naar zuid, met bruggen en een doorwaadbare plek
+    { type: 'river', from: [0.5, 0], to: [0.5, 1], width: 3, bridges: 2, wiggle: 0.15, fords: { middel: 1, groot: 2 } },
+    { type: 'road', from: [0, 0.35], to: [1, 0.35], width: 2 },
+    { type: 'road', from: [0, 0.7], to: [1, 0.7], width: 2 },
   ],
   look: { grade: { saturation: -0.05, tint: '#ffe6b8', tintStrength: 0.12 }, noise: { strength: 0.1 }, weather: 'dust', amount: 6 },
   tunnelColor: '#3e3022',

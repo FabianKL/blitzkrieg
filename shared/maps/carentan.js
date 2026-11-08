@@ -5,12 +5,11 @@ export default { // §10.6
   tanks: { A: 'sherman', B: 'panther' },
   desc: {
     setting: 'Juni 1944. D-Day: na de landing in Normandië vechten de geallieerden om het strategische stadje Carentan.',
-    terrain: 'Normandisch bocagelandschap met dichte heggen, moeras langs de dijkweg, de rivier de Douve en weilanden omgeven door bocage.',
+    terrain: 'Normandisch bocagelandschap met dichte heggen rond de weilanden, moeras en modder langs de dijkweg.',
     weather: 'Ochtendmist in de eerste ronde, daarna wisselend bewolkt met felle regenbuien met onweer die sporen bij het water wissen.',
     special: 'Antitankgeschut bewaakt het slagveld — twee verborgen kanonnen vuren op tanks in hun boog. Verniel ze voordat ze jou raken.',
   },
-  // minder rotsen, meer weilanden
-  terrainPercent: { normal: 43, marsh: 15, vegetation: 15, paved: 8, hard: 7, soft: 5, water: 6, rock: 1 },
+  terrainPercent: { normal: 46, marsh: 17, vegetation: 15, paved: 8, hard: 7, soft: 6, rock: 1 },
   classes: {
     paved: { label: 'Wegen en dorpsstraten', color: '#8c8a80' },
     hard: { label: 'Dijkweg', color: '#9c8f6c' },
@@ -19,17 +18,15 @@ export default { // §10.6
     marsh: { label: 'Moeras', color: '#55696c' },
   },
   rocks: { label: 'Rotsen', color: '#8c8a80', size: [0.5, 1] },
-  water: { label: 'De Douve', color: '#1f3440' },
-  vegetation: { type: 'hedge', pattern: 'bocage', spacing: 7, label: 'Heggen (bocage)', color: '#23381b', groundAfter: 'normal' },
+  vegetation: { type: 'hedge', pattern: 'bocage', spacing: 7, label: 'Heggen (bocage)', color: '#23381b', groundAfter: 'normal', excludeClasses: ['marsh', 'soft'] },
   features: [
-    // moeras aan beide kanten van de dijkweg (via dikes op de weg)
-    { type: 'river', from: [0, 0.92], to: [0.6, 0.92], width: 3, bridges: false, wiggle: 0.05 }, // de Douve, geen bruggen
     { type: 'village', at: [0.75, 0.25], size: 0.07, name: 'Carentan', buildings: [5, 7], landmark: 'kerk' },
     { type: 'road', from: [0, 0.72], to: [0.75, 0.25], width: 2, class: 'hard', dikes: { floodplain: 3, width: 0 } }, // dijkweg met moeras ernaast
     { type: 'road', from: [0.75, 0.25], to: [1, 0.3], width: 2 },
     { type: 'road', from: [0.75, 0.25], to: [0.78, 0], width: 2 },
     { type: 'road', from: [0.75, 0.25], to: [0.9, 1], width: 2 },
   ],
+  sideRoadZone: [0.5, 0, 1, 1],
   hazard: { type: 'atGuns', count: 2, coneDegrees: 45, rangeT: 10, everySeconds: 4, armorLoss: 25, hp: 4 },
   look: { grade: { saturation: -0.05, tint: '#e6f0e0', tintStrength: 0.08 }, noise: { strength: 0.08 } },
   tunnelColor: '#4a3a22',

@@ -105,15 +105,15 @@ function freeSpot(w, x, y, r) {
 // Munitie wordt niet in de basis aangevuld (refill.ammo false), alleen bij het depot in Rhenen
 const ammoDepot = {
   roundStart(room) {
-    const v = room.world.villages?.find((d) => d.depot === 'ammo');
-    room.hz.ammoDepot = v ? [v.x, v.y] : null;
+    const vs = room.world.villages?.filter((d) => d.depot === 'ammo') || [];
+    room.hz.ammoDepots = vs.map((v) => [v.x, v.y]);
   },
   step(room, tick) {
-    const d = room.hz.ammoDepot, cfg = room.rules.scarce;
-    if (!d || tick % Math.round(G.TICK_RATE / cfg.perSecond)) return;
-    for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= cfg.radiusT * G.T) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+    const ds = room.hz.ammoDepots, cfg = room.rules.scarce;
+    if (!ds?.length || tick % Math.round(G.TICK_RATE / cfg.perSecond)) return;
+    for (const d of ds) for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= cfg.radiusT * G.T) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
   },
-  snapshot(room) { return { ammoDepot: room.hz.ammoDepot }; },
+  snapshot(room) { return { ammoDepots: room.hz.ammoDepots }; },
 };
 
 // ---------- Rook (Grebbeberg: brandende boerderijen in de vallei; Arnhem: boven de stad;
@@ -287,13 +287,16 @@ const airDrops = {
     const cfg = room.rules.scarce, hz = room.hz, w = room.world;
     if ((room.wx?.flags.drops || cfg.always) && tick >= hz.nextDrop) {
       hz.nextDrop = tick + ticks(cfg.everySeconds);
-      for (let tries = 0; tries < 300; tries++) {
-        const x = Math.floor(rnd() * G.W), y = Math.floor(rnd() * G.H), v = w.map[y * G.W + x];
-        if ((v !== G.DIRT && v !== G.EMPTY) || w.border?.[y * G.W + x]) continue;
-        const crate = [x, y, rnd() < 0.5 ? 'fuel' : 'ammo', 1];
-        hz.crates.push(crate);
-        events.push({ t: 'drop', k: hz.crates.length - 1, c: crate });
-        break;
+      const count = cfg.dropCount || 1;
+      for (let d = 0; d < count; d++) {
+        for (let tries = 0; tries < 300; tries++) {
+          const x = Math.floor(rnd() * G.W), y = Math.floor(rnd() * G.H), v = w.map[y * G.W + x];
+          if ((v !== G.DIRT && v !== G.EMPTY) || w.border?.[y * G.W + x]) continue;
+          const crate = [x, y, rnd() < 0.5 ? 'fuel' : 'ammo', 1];
+          hz.crates.push(crate);
+          events.push({ t: 'drop', k: hz.crates.length - 1, c: crate });
+          break;
+        }
       }
     }
     hz.crates.forEach((c, k) => {
@@ -344,16 +347,14 @@ const artillery = {
           events.push({ t: 'slr', beam });
         }
       }
-      // detectie: welke bundel bevat een tank? (gebruik stuckBeams zodat vastgeplakte bundels meebewegen)
+      // detectie: welke spot bevat een tank? (gebruik stuckBeams zodat vastgeplakte spots meebewegen)
       const beams = searchlightBeams(slCfg, tick - room.mapTick, hz.stuckBeams);
-      const half = (slCfg.widthT * G.T) / 2;
       for (const t of room.tanks) {
         if (!t?.alive) continue;
         for (let k = 0; k < beams.length; k++) {
           if (hz.stuckBeams.has(k)) continue;
           const b = beams[k];
-          const dx = t.x - b.x0, dy = t.y - b.y0, along = dx * Math.cos(b.ang) + dy * Math.sin(b.ang);
-          if (along > 0 && Math.abs(-dx * Math.sin(b.ang) + dy * Math.cos(b.ang)) <= half) {
+          if (((t.x - b.cx) / b.rx) ** 2 + ((t.y - b.cy) / b.ry) ** 2 <= 1) {
             const stickSec = slCfg.stickSeconds ?? cfg.searchlightDelay;
             hz.stuckBeams.set(k, { tankId: t.id, x: t.x, y: t.y, until: tick + ticks(stickSec) });
             events.push({ t: 'sls', beam: k, x: t.x, y: t.y });

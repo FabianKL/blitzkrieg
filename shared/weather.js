@@ -129,7 +129,14 @@ export function weatherAt(rules, round, tGame, tRound, scale = 1) {
     if (e.rain) out.rain = Math.max(out.rain, driftAt(e.rain, st.since, scale));
     if (e.lightning) out.lightning = Math.max(out.lightning, lightningAt(e.lightning, st.since, scale));
     for (const [k, v] of Object.entries(e)) if (!OWN.has(k)) out.flags[k] = v;
-    if (typeof e.visibility === 'object') out.flags.fogProgress = Math.min(1, st.since / (e.visibility.overSeconds * scale));
+    if (typeof e.visibility === 'object') {
+      if (e.visibility.overSeconds) {
+        out.flags.fogProgress = Math.min(1, st.since / (e.visibility.overSeconds * scale));
+      } else if (e.visibility.pulse) {
+        const p = e.visibility.pulse;
+        out.flags.fogProgress = p.clear > p.thick ? Math.min(1, (vis - p.thick) / (p.clear - p.thick)) : 0;
+      }
+    }
   }
   if (drift) Object.assign(out, driftRate(drift, out.drift, out.burial && stormSeconds));
   return out;

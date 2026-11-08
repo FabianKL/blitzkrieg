@@ -59,7 +59,7 @@ export function createSidePanel(v) {
     const now = performance.now();
     if (!miniCanvas || !game.map || now - lastMini < 100) return;
     lastMini = now;
-    const on = G.minimapOn(game.rules);
+    const on = G.minimapOn(game.rules) && !game.weather?.flags?.hidesMinimap;
     if (miniCanvas.hidden === on) {
       miniCanvas.hidden = !on;
       for (const el of document.querySelectorAll('[data-minimap]')) el.hidden = !on;
@@ -83,7 +83,7 @@ export function createSidePanel(v) {
       g.fillText(kind === 'fuel' ? 'B' : 'M', x, y + 0.4 * px);
     };
     for (const [x, y, full] of game.depots) if (full) icon(x, y, 'fuel');
-    if (game.ammoDepot) icon(game.ammoDepot[0], game.ammoDepot[1], 'ammo');
+    for (const d of game.ammoDepots) icon(d[0], d[1], 'ammo');
     for (const c of game.crates) if (c && c[3]) icon(c[0], c[1], c[2]);
     // je eigen basis: een ring eromheen, zodat je hem altijd terugvindt
     const mine = v.bases[game.me];

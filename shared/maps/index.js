@@ -24,6 +24,8 @@
 // De kleuren (SPEC-blitzkrieg §10) zijn voor de weergave; de spelregels gebruiken alleen de klassen.
 
 import retro from './retro.js';
+import tunnelerZomer from './tunneler-zomer.js';
+import tunnelerWinter from './tunneler-winter.js';
 import fallGelb from './fall-gelb.js';
 import barbarossa from './barbarossa.js';
 import elAlamein from './el-alamein.js';
@@ -38,6 +40,8 @@ import berlijn from './berlijn.js';
 // Het mapmenu (§3, §10): alle maps in chronologische volgorde. Maps die nog niet in MAPS staan,
 // zijn in het menu zichtbaar maar uitgeschakeld.
 export const MAP_MENU = [
+  { id: 'tunneler-zomer', year: 0, mission: 'Tunneler', name: 'Zomer' },
+  { id: 'tunneler-winter', year: 0, mission: 'Tunneler', name: 'Winter' },
   { id: 'fall-gelb', year: 1940, mission: 'Fall Gelb', name: 'Grebbeberg' },
   { id: 'barbarossa', year: 1941, mission: 'Barbarossa', name: 'Russische vlakte' },
   { id: 'el-alamein', year: 1942, mission: 'Lightfoot', name: 'El Alamein' },
@@ -53,6 +57,8 @@ export const DEFAULT_MAP = 'ardennen';
 
 export const MAPS = {
   retro,
+  'tunneler-zomer': tunnelerZomer,
+  'tunneler-winter': tunnelerWinter,
   'fall-gelb': fallGelb,
   barbarossa,
   'el-alamein': elAlamein,

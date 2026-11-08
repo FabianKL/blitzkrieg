@@ -43,7 +43,7 @@ export function createState() {
     guns: [], // zichtbaar antitankgeschut (Carentan): {k, x, y, ang, hp}
     crates: [], // droppings (Market Garden): [x, y, soort, vol]
     bridge: null, // de brug die kan ontploffen (Market Garden): {box, cells, blown}
-    ammoDepot: null, // munitiedepot (Grebbeberg): [x, y]
+    ammoDepots: [], // munitiedepots (Grebbeberg): [[x, y], ...]
     stuckBeams: null, // vastgeplakte zoeklichtbundels: Map(beam → {x, y})
     vision: null, // zichtstraal in T volgens het weer (null = standaard)
     roundTick: 0, // tick waarop deze ronde begon (weer per ronde)
@@ -67,7 +67,7 @@ function applyHz(state, hz = {}) {
   state.guns = hz.guns || [];
   state.crates = hz.crates || [];
   state.bridge = hz.bridge || null;
-  state.ammoDepot = hz.ammoDepot || null;
+  state.ammoDepots = hz.ammoDepots || [];
   if (hz.stuckBeams) { state.stuckBeams = new Map(hz.stuckBeams.map(([k, x, y]) => [k, { x, y }])); }
   else { state.stuckBeams = null; }
 }
@@ -77,6 +77,7 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.mapW = msg.w ?? G.BASE_W_CELLS;
   state.mapH = msg.h ?? G.BASE_H_CELLS;
   G.setMapSize(state.mapW, state.mapH, G.edgeBand(G.MAPS[msg.mapId ?? msg.room])); // kaartgrootte (en onbegaanbare rand) van dit potje
+  G.applyTerrainOverrides(G.MAPS[msg.mapId ?? msg.room]);
   state.size = msg.size;
   state.mapId = msg.mapId ?? msg.room;
   state.lobby = !!msg.lobby;

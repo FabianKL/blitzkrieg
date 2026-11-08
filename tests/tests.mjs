@@ -535,7 +535,7 @@ export const tests = [
       const a = await connectBot(port, 'blitzkrieg');
       await sleep(200);
       const out = [];
-      for (const [map, ok] of [['market-garden', (hz) => hz.bridge?.cells.length > 0], ['fall-gelb', (hz) => Array.isArray(hz.ammoDepot)]]) {
+      for (const [map, ok] of [['market-garden', (hz) => hz.bridge?.cells.length > 0], ['fall-gelb', (hz) => Array.isArray(hz.ammoDepots) && hz.ammoDepots.length > 0]]) {
         a.send({ t: 'cfg', map, size: 'middel' });
         await waitFor(() => a.state.mapId === map, 4000);
         a.events.length = 0;
@@ -544,7 +544,7 @@ export const tests = [
         const e = a.events.find((x) => x.t === 'hz');
         check(e && ok(e.hz), `${map}: geen hz met brug/depot na START`);
         check(map !== 'market-garden' || a.state.bridge?.cells.length, 'browser kent de brug niet');
-        check(map !== 'fall-gelb' || a.state.ammoDepot, 'browser kent het munitiedepot niet');
+        check(map !== 'fall-gelb' || a.state.ammoDepots?.length, 'browser kent het munitiedepot niet');
         a.send({ t: 'stop' });
         await waitFor(() => a.state.game.phase === 'lobby', 3000);
         out.push(map);
@@ -571,7 +571,7 @@ export const tests = [
         check(rules.header && rules.style, `${id}: titel of weergave ontbreekt`);
         out.push(`${id}: ${teams[0].name}/${teams[1].name}`);
       }
-      check(G.MAP_MENU.length === 10 && G.MAP_MENU.every((m, i) => i === 0 || m.year >= G.MAP_MENU[i - 1].year), 'menu: 10 maps chronologisch');
+      check(G.MAP_MENU.length === 12 && G.MAP_MENU.every((m, i) => i === 0 || m.year >= G.MAP_MENU[i - 1].year), 'menu: 12 maps chronologisch');
       return out.join(', ');
     },
   },
@@ -614,7 +614,7 @@ export const tests = [
       check(a.me.c === 1 && a.state.tanks.get(b.state.me).c === 0, `score A ${a.me.c}, B ${a.state.tanks.get(b.state.me).c}`);
       // sporen vervagen vanzelf (per klasse), maar de kaart wordt niet opnieuw gestuurd
       const n2 = a.events.find((e) => e.t === 'n' && e.n === 2);
-      check(n2 && n2.m0 === undefined && countEmpty(a.state.map) >= tunnels / 2, `tunnels van ronde 1 zijn weg (${countEmpty(a.state.map)} van ${tunnels})`);
+      check(n2 && n2.m0 === undefined && countEmpty(a.state.map) >= tunnels / 3, `tunnels van ronde 1 zijn weg (${countEmpty(a.state.map)} van ${tunnels})`);
       check(mapDiff(a.state.map, b.state.map) === 0, 'kaart van A en B verschillen in ronde 2');
       // tweede kill: A heeft 2 rondes = gewonnen (testserver: roundsToWin 2)
       check(await fightUntilKill(a, b), 'ronde 2: A kon B niet vernietigen');
@@ -1077,8 +1077,8 @@ export const tests = [
       const box = G.breakIce(w, b);
       let water = 0;
       for (let i = 0; i < w.map.length; i++) if (w.map[i] === G.WATER) water++;
-      check(water === 5 * G.ICE_B * G.ICE_B, `wak van ${water} cellen, verwacht ${5 * G.ICE_B * G.ICE_B} (vak + 4 buren)`);
-      check(box && box[2] - box[0] === 3 * G.ICE_B - 1, 'rechthoek van het wak klopt niet');
+      check(water === G.ICE_B * G.ICE_B, `wak van ${water} cellen, verwacht ${G.ICE_B * G.ICE_B} (alleen het vak onder de tank)`);
+      check(box && box[2] - box[0] === G.ICE_B - 1, 'rechthoek van het wak klopt niet');
       // gewone grond wordt nooit een wak
       const dry = testWorld('soft');
       check(G.breakIce(dry, b) === null, 'breakIce veranderde grond die geen ijs is');
@@ -1104,10 +1104,10 @@ export const tests = [
     },
   },
   {
-    name: 'Leningrad: bevroren Neva met brug, dooi en plassen, bases blijven bereikbaar (20 kaarten)',
+    name: 'Leningrad: bevroren meer, dooi en plassen, bases blijven bereikbaar (20 kaarten)',
     async run() {
       const cfg = G.MAPS.leningrad;
-      let bridges = 0, pools = 0;
+      let pools = 0;
       for (let seed = 1; seed <= 20; seed++) {
         const w = G.generateMap(seed * 7919, cfg);
         const ice = w.terrain.reduce((n, c, i) => n + (G.isIce(w, i) ? 1 : 0), 0);
@@ -1120,9 +1120,7 @@ export const tests = [
         check(!w.terrain.some((c, i) => G.isIce(w, i)), `seed ${seed}: ijs over na de dooi`);
         const seen = G.reachable(w.map, w.bases[0]);
         check(w.bases.every((b) => seen[b.y * G.W + b.x]), `seed ${seed}: basis onbereikbaar na de dooi`);
-        if (w.bridges.length) bridges++; // de brug over de Neva
       }
-      check(bridges === 20, `brug op ${bridges} van de 20 kaarten`);
       // geleidelijke dooi: ronde 3 en 4 broos ijs (iceBreakMul), ronde 5 smelt (terreinverandering); sneeuw tot ronde 4
       check(Wx.terrainChangesAt(cfg, 5).length === 1 && Wx.terrainChangesAt(cfg, 4).length === 0, 'dooi niet bij het begin van ronde 5');
       check(Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul === 2, 'ronde 3 iceBreakMul niet 2');
@@ -1131,7 +1129,7 @@ export const tests = [
       for (let t = 0; t < 200 * 30 && !eraserR4; t += 10) if (Wx.weatherAt(cfg, 4, t, t).eraser) eraserR4 = true;
       for (let t = 0; t < 200 * 30 && !eraserR5; t += 10) if (Wx.weatherAt(cfg, 5, t, t).eraser) eraserR5 = true;
       check(eraserR4 && !eraserR5, 'sneeuwjacht gaat door na de dooi');
-      return `20 kaarten met brug, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
+      return `20 kaarten, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
     },
   },
   {

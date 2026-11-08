@@ -103,6 +103,23 @@ export const CLASSES = CLASS_NAMES.map((name) => {
 export const TUNNEL_COST = { speed: Math.round(TUNNEL.speed * SPEED_ONE), fuel: TUNNEL.fuel };
 export const trackStage = (v) => v >> STAGE_SHIFT;
 
+// Per-map overschrijvingen van terreinklassen (bv. El Alamein: rotsige grond zonder sporen/tunnels).
+// Bewaart de oorspronkelijke waarden zodat een volgende kaart weer schoon begint.
+const CLASS_DEFAULTS = CLASSES.map((c) => ({ track: c.track, fade: c.fade, min: c.min, noTunnel: c.noTunnel, erasable: c.erasable }));
+export function applyTerrainOverrides(rules) {
+  for (let i = 0; i < CLASSES.length; i++) Object.assign(CLASSES[i], CLASS_DEFAULTS[i]);
+  const ov = rules?.terrainOverride;
+  if (!ov) return;
+  const u16 = (v) => Math.round(v * TRACK_ONE);
+  for (const [name, patch] of Object.entries(ov)) {
+    const idx = CLASS[name];
+    if (idx === undefined) continue;
+    const c = CLASSES[idx];
+    if (patch.track !== undefined) c.track = u16(patch.track);
+    if (patch.noTunnel !== undefined) c.noTunnel = !!patch.noTunnel;
+  }
+}
+
 // ---------- Tankvorm per richting ----------
 // Een gedraaide rechthoek van 5 breed en 7 lang. Dezelfde vorm wordt gebruikt
 // om te botsen, te graven en (op de client) om de sprite te tekenen, zodat

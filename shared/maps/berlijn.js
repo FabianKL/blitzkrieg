@@ -1,6 +1,7 @@
 // 1945 · Val van Berlijn — Berlijn. Velden: zie maps/index.js.
 
 export default { // §10.10
+  hidden: true, // niet zichtbaar in de mapkeuze
   name: 'Berlijn 1945', style: 'zomer', header: 'VAL VAN BERLIJN — BERLIJN · APRIL 1945',
   tanks: { A: 't34', B: 'panther' },
   desc: {

@@ -11,8 +11,8 @@ export default { // §10.8
     special: 'Artilleriebombardementen in drie zwaartegraden: licht, gemiddeld en zwaar. Dennenbomen worden verwoest door inslagen. Brandstofdepots zijn je enige bron.',
   },
   // bijna geen bevroren grond (3%), veel meer sneeuw; minder rotsen, meer bos; geen water
-  terrainPercent: { soft: 49, hard: 5, vegetation: 30, paved: 8, rock: 2, water: 2 },
-  tolerance: { klein: 1, default: 0 },
+  terrainPercent: { soft: 49, hard: 5, vegetation: 30, paved: 8, rock: 2, water: 0 },
+  tolerance: { klein: 1, default: 0, extragroot: 2 },
   classes: {
     paved: { label: 'Bosweg en Bastogne', color: '#9b9184' },
     hard: { label: 'Bevroren grond', color: '#bccfda' },

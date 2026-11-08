@@ -21,16 +21,20 @@ game.visionOverlay = true;
 window.blitz = { game }; // voor de console en de tests
 touchControls($('panel'), game, $('view'));
 
-// ZICHT AAN/UIT
+// ZICHT AAN/UIT — knoppen in de balk en in de lobby delen dezelfde toggle
 const VISION_KEY = 'blitzkrieg.zicht';
 try { game.visionOverlay = localStorage.getItem(VISION_KEY) !== 'uit'; } catch { /* geen opslag */ }
-const visionLabel = () => { $('vision').textContent = game.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT'; };
-visionLabel();
-$('vision').addEventListener('click', () => {
-  $('vision').blur();
+const visionBtns = [$('vision'), $('lobby-vision')].filter(Boolean);
+const syncVisionLabels = () => {
+  const txt = game.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT';
+  for (const b of visionBtns) b.textContent = txt;
+};
+syncVisionLabels();
+for (const btn of visionBtns) btn.addEventListener('click', () => {
+  btn.blur();
   game.visionOverlay = !game.visionOverlay;
   try { localStorage.setItem(VISION_KEY, game.visionOverlay ? 'aan' : 'uit'); } catch {}
-  visionLabel();
+  syncVisionLabels();
 });
 
 // ---------- Lobby ----------
@@ -41,6 +45,7 @@ const TEAM_COLORS = ['var(--red)', 'var(--gold)', '#4a8a4a', '#6a6aaa'];
 for (const m of G.MAP_MENU) {
   const built = Object.hasOwn(G.MAPS, m.id);
   const rules = G.MAPS[m.id];
+  if (rules?.hidden) continue; // verborgen maps (bijv. Berlijn) niet in de lijst
   const icon = STYLE_ICON[rules?.style] || '☀';
   const item = document.createElement('div');
   item.className = `lobby-map-item${built ? '' : ' off'}`;

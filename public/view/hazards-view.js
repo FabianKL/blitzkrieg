@@ -6,7 +6,7 @@
 // Depots, het munitiedepot, kratten en parachutes zijn sprites als de atlas ze heeft (PROPS),
 // anders getekend.
 import * as G from '/shared/game.js';
-import { searchlightBeams, sightAt, contourAlpha } from '/shared/vision.js';
+import { sightAt, contourAlpha } from '/shared/vision.js';
 import { pack, REFILL_COLORS } from '/render-common.js';
 import { PROPS } from '/shared/config.js';
 import { spritePool } from '/pixi-scene.js';
@@ -38,7 +38,7 @@ export function createHazardView(v) {
       s.position.set(x, y - 5.5);
     };
     for (const [x, y, full] of game.depots) if (full) marker(x, y, 'fuel');
-    if (game.ammoDepot) marker(game.ammoDepot[0], game.ammoDepot[1] + 0.5, 'ammo');
+    for (const d of game.ammoDepots) marker(d[0], d[1] + 0.5, 'ammo');
     for (const c of game.crates) if (c && c[3]) marker(c[0], c[1], c[2]);
     badges.end();
   }
@@ -82,8 +82,9 @@ export function createHazardView(v) {
 
   // Gevaren en schaarse middelen die als ding op de kaart staan
   function drawObjectsOfHazards() {
-    if (game.ammoDepot && !prop('munitie-depot', game.ammoDepot[0], game.ammoDepot[1])) { // munitiekisten (Grebbeberg)
-      const [x, y] = game.ammoDepot;
+    for (const d of game.ammoDepots) { // munitiekisten (Grebbeberg)
+      if (prop('munitie-depot', d[0], d[1])) continue;
+      const [x, y] = d;
       for (let k = 0; k < 3; k++) {
         marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 1.4).fill(0x6a5a2a);
         marks.rect(x - 3 + k * 2.2, y - 1, 1.8, 0.35).fill(0xc9a43a);
@@ -168,22 +169,9 @@ export function createHazardView(v) {
       if (Math.random() < 0.4) particles.spawn('smoke', t.rx, t.ry, 1, { speed: 1, life: 2, r0: 1, r1: 3.5 });
     }
   }
-  // Zoeklichten (Oder-front): bundels vanaf de rechterrand; daarin is alles licht
-  function drawSearchlights() {
-    lights.clear();
-    const cfg = game.weather?.flags.searchlights;
-    if (!cfg) return;
-    const half = (cfg.widthT * G.T) / 2;
-    for (const b of searchlightBeams(cfg, game.tick - game.mapTick, game.stuckBeams)) {
-      const Lb = G.W * 1.3, c = Math.cos(b.ang), s = Math.sin(b.ang);
-      lights.poly([
-        b.x0 - s * half, b.y0 + c * half,
-        b.x0 + c * Lb - s * half * 1.6, b.y0 + s * Lb + c * half * 1.6,
-        b.x0 + c * Lb + s * half * 1.6, b.y0 + s * Lb - c * half * 1.6,
-        b.x0 + s * half, b.y0 - c * half,
-      ]).fill({ color: 0xfffad2, alpha: b.stuck ? 0.45 : 0.35 });
-    }
-  }
+  // Zoeklichten: ovale vlekken worden nu getekend in world-view.js (blindG), want lights
+  // heeft soms geen parent door de PixiJS-lifecycle. Deze functie ruimt alleen op.
+  function drawSearchlights() { lights.clear(); }
   // Woestijnhallucinaties (El Alamein): buiten je zichtcirkel soms een valse contour, ergens waar
   // een echte ook zou kunnen staan (in je kijkboog, vrije zichtlijn); per speler anders en niet
   // gesynchroniseerd (§6.4)

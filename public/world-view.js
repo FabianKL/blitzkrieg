@@ -38,7 +38,7 @@
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
-import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt } from '/shared/vision.js';
+import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt, searchlightBeams } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
@@ -152,6 +152,7 @@ export function startWorld(style, game) {
   const stage = new Container(), world = stage.addChild(new Container());
   const L = {};
   for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
+  L.searchlights = world.addChild(new Container());
   L.ui = stage.addChild(new Container());
   // Rand van de kaart (EDGE, G.BAND): over alles in de onbegaanbare strook een verloop van helder
   // (binnenrand, zacht begin: geen lijn) naar zwart (buitenrand), en zwart buiten de kaart. Zo lijkt
@@ -350,6 +351,7 @@ export function startWorld(style, game) {
   const setOverlay = createOverlay($('overlay'));
   function loadMap(map) {
     G.setMapSize(game.mapW, game.mapH, G.edgeBand(game.rules)); // deze module kan een eigen kopie van game.js hebben (iframe)
+    G.applyTerrainOverrides(game.rules);
     layoutEdge();
     const specs = G.teamsFor(game.rules);
     if (specs && style.teamLook) {
@@ -388,8 +390,10 @@ export function startWorld(style, game) {
     side.buildLegend();
   }
 
+  let mapReady = false;
+
   const hooks = {
-    onMap: loadMap,
+    onMap(map) { mapReady = false; loadMap(map); mapReady = true; },
     onDig: (x, y) => {
       side.paintMini(x, y); mapVersion++;
       gpu.markCell(x, y);
@@ -469,6 +473,7 @@ export function startWorld(style, game) {
   const visionSprite = L.fog.addChild(new Sprite(textureOf(visionCanvas)));
   visionSprite.anchor.set(0.5);
   const lights = L.fog.addChild(new Graphics());
+  const spotG = L.searchlights.addChild(new Graphics());
   const overlaySprite = L.ui.addChild(new Sprite());
   const eraserG = L.ui.addChild(new Graphics());
   // Sneeuw, zand en regen vallen vóór de mist, de schaduw en de stormwaas (view/weather-view.js)
@@ -477,6 +482,7 @@ export function startWorld(style, game) {
     stormOf: () => eraserInfo(game), onThunder: (s) => { shake = Math.max(shake, s); },
   });
   const eraserLabel = createLabel(L.ui);
+  const blindOverlay = L.ui.addChild(new Graphics());
   const hintSprites = spritePool(L.ui.addChild(new Container()), TEX.fadeX, (s) => s.anchor.set(0));
   const hintCorners = spritePool(L.ui.addChild(new Container()), TEX.soft);
   const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
@@ -765,6 +771,18 @@ export function startWorld(style, game) {
     if (overlayOn) drawFog(me, cam);
     mirageSprites.end();
     hz.drawSearchlights();
+    // Zoeklichtspots (op de kaart) en verblinding (schermvullend als je erin staat)
+    spotG.clear();
+    blindOverlay.clear();
+    const slCfg = game.weather?.flags.searchlights;
+    if (slCfg) {
+      for (const b of searchlightBeams(slCfg, game.tick - game.mapTick, game.stuckBeams)) {
+        spotG.ellipse(b.cx, b.cy, b.rx, b.ry).fill({ color: 0xfffad2, alpha: b.stuck ? 0.45 : 0.35 });
+      }
+      if (me && searchlightAt(slCfg, game.tick - game.mapTick, me.x, me.y)) {
+        blindOverlay.rect(0, 0, canvas.width, canvas.height).fill({ color: 0xffffff, alpha: 0.55 + 0.15 * Math.sin(now / 200) });
+      }
+    }
     drawStyleOverlay(cam, now);
     updateFilters(now);
     const pu = postFilter.resources.postUniforms.uniforms;
@@ -1207,7 +1225,7 @@ export function startWorld(style, game) {
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
-    if (game.map) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
+    if (game.map && mapReady) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
     side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
     gpu.flushSwatches(); // legenda: uitsnedes van de grond
@@ -1285,7 +1303,7 @@ export function startWorld(style, game) {
   };
   // De kaart kan er al zijn (kaartwissel, of de stijl laadde later dan het instapbericht). Pas na
   // deze functie, want de stijl heeft zijn view dan nog niet (view = startWorld(...)).
-  if (game.map) queueMicrotask(() => { if (alive) { loadMap(game.map); hooks.onStatus(game.status); } });
+  if (game.map) queueMicrotask(() => { if (alive) { mapReady = false; loadMap(game.map); mapReady = true; hooks.onStatus(game.status); } });
   if (DEBUG_HOST) window.blitzView = view; // voor bench() in de console
   return view;
 }

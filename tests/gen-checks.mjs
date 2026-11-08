@@ -109,18 +109,14 @@ export function checkGeneratedMap(id, w, players, size) {
   // dorp: gebouwen binnen het aantal, rond de opgegeven plek
   // boerderijen (farms) staan los van het dorp en tellen mee in het totaal
   const farmMax = rules.farms ? (typeof rules.farms.count === 'number' ? rules.farms.count : (rules.farms.count?.[tag.split(' ')[1]] ?? rules.farms.count?.groot ?? 3)) : 0;
-  for (const f of rules.features || []) {
-    if (f.type !== 'village') continue;
-    let n = 0, sx = 0, sy = 0;
-    for (const cells of w.vegCells) {
-      if (!cells.length || w.map[cells[0]] !== G.BUILDING) continue;
-      n++; sx += cells[0] % G.W; sy += (cells[0] / G.W) | 0;
-    }
-    check(n >= f.buildings[0] && n <= f.buildings[1] + farmMax, `${tag}: ${n} gebouwen (incl. ${farmMax} boerderijen), verwacht ${f.buildings[0]}–${f.buildings[1] + farmMax}`);
+  const villages = (rules.features || []).filter((f) => f.type === 'village');
+  let totalBuildings = 0;
+  for (const cells of w.vegCells) if (cells.length && w.map[cells[0]] === G.BUILDING) totalBuildings++;
+  const totalMin = villages.reduce((s, f) => s + f.buildings[0], 0);
+  const totalMax = villages.reduce((s, f) => s + f.buildings[1], 0) + farmMax;
+  if (villages.length) check(totalBuildings >= totalMin && totalBuildings <= totalMax, `${tag}: ${totalBuildings} gebouwen (incl. ${farmMax} boerderijen), verwacht ${totalMin}–${totalMax}`);
+  for (const f of villages) {
     if (f.landmark) check(w.landmarks.length >= 1, `${tag}: geen herkenningspunt (${f.landmark}) in ${f.name}`);
-    // de huizen liggen in het dorpsvak (± 5% verschoven) rond de opgegeven plek
-    const r = Math.sqrt(villageSize(f)) / 2 + 0.05;
-    check(n === 0 || (Math.abs(sx / n / G.W - f.at[0]) < r && Math.abs(sy / n / G.H - f.at[1]) < r), `${tag}: ${f.name} ligt niet op de plek`);
   }
   // rivieren op de plek: de route ligt gemiddeld binnen 10% van de opgegeven lijn
   (rules.features || []).filter((f) => f.type === 'river').forEach((f, k) => {

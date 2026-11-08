@@ -53,9 +53,9 @@ export function hitObstacle(w, x, y, onFell) {
 export function breakIce(w, b, onChange) {
   const bx = b % ICE_BW, by = (b / ICE_BW) | 0;
   let box = null;
-  for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const cx = bx + dx, cy = by + dy;
-    if (cx < 0 || cy < 0 || cx >= ICE_BW || cy >= ICE_BH) continue;
+  // alleen het vak direct onder de tank breekt, niet de buurvakken
+  {
+    const cx = bx, cy = by;
     for (let y = cy * ICE_B; y < Math.min(H, (cy + 1) * ICE_B); y++) {
       for (let x = cx * ICE_B; x < Math.min(W, (cx + 1) * ICE_B); x++) {
         const i = y * W + x;

@@ -9,8 +9,8 @@ export default { // §10.1
     weather: 'Vanaf ronde 2 stijgt het inundatiewater in de vallei. In ronde 3 maakt regen het zicht slechter.',
     special: 'Munitie alleen bij het depot in Rhenen. Het stijgende water maakt de vallei steeds moeilijker begaanbaar — maar over de heuvel ben je sneller.',
   },
-  terrainPercent: { normal: 43, soft: 17, hard: 10, vegetation: 11, marsh: 7, rock: 4, paved: 8 },
-  tolerance: { klein: 3, default: 0 },
+  terrainPercent: { normal: 34, soft: 17, hard: 10, vegetation: 22, marsh: 7, rock: 2, paved: 8 },
+  tolerance: { klein: 5, default: 6 },
   classes: {
     paved: { label: 'Wegen en het dorp', color: '#c8b48a' },
     hard: { label: 'Droge grond op de heuvel', color: '#9c9462' },
@@ -28,9 +28,10 @@ export default { // §10.1
     { type: 'area', name: 'heuvel', rect: [0.1, 0.5, 0.9, 1], classes: { hard: 20, normal: 80 } },
     // rivier in de onbegaanbare bovenrand (bron van het inundatiewater, 2T breed)
     { type: 'river', from: [0, 0.01], to: [1, 0.01], width: 2, bridges: false, inEdge: true },
-    { type: 'village', at: [0.5, 0.7], size: 0.07, name: 'Rhenen', buildings: [4, 6], landmark: 'kerk', depot: 'ammo' },
+    { type: 'village', at: [0.35, 0.7], size: 0.07, name: 'Rhenen', buildings: [4, 6], landmark: 'kerk', depot: 'ammo' },
+    { type: 'village', at: [0.65, 0.7], size: 0.05, name: 'Achterberg', buildings: [2, 4], depot: 'ammo' },
     // weg van vallei naar het dorp op de heuvel, en een weg over de heuvel
-    { type: 'road', from: [0.5, 0.1], to: [0.5, 0.7], width: 2 },
+    { type: 'road', from: [0.5, 0.1], to: [0.35, 0.7], width: 2 },
     { type: 'road', from: [0.2, 0.8], to: [0.8, 0.8], width: 2 },
   ],
   refill: { ammo: false },

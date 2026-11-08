@@ -10,14 +10,15 @@ export default { // §10.3
     special: 'De zandmeter loopt op in het losse zand en vreet aan je pantser. Onzichtbare mijnen liggen verborgen in het woestijnzand.',
   },
   // hard en soft naast elkaar in de noise-verdeling → aaneengesloten rotsige grond
-  terrainPercent: { hard: 20, soft: 50, paved: 5, rock: 10, water: 10, vegetation: 5 },
+  terrainPercent: { hard: 28, soft: 47, paved: 5, rock: 5, water: 10, vegetation: 5 },
+  terrainOverride: { hard: { track: 0, noTunnel: true } }, // geen sporen/tunnels op rotsige grond
   noiseScale: 35,
   classes: {
     paved: { label: 'Kustweg', color: '#a89c84' },
     hard: { label: 'Rotsige grond', color: '#b39a6a' },
     soft: { label: 'Woestijnzand', color: '#d8bc80' },
   },
-  rocks: { label: 'Rotsplateaus', color: '#9a9a96', size: [3.5, 6] },
+  rocks: { label: 'Rotsplateaus', color: '#9a9a96', size: [2, 4] },
   water: { label: 'Zee', color: '#2f5f7a' },
   vegetation: { type: 'shrub', label: 'Dorre struiken', color: '#6e6a3c', groundAfter: 'soft', sprites: { struik: 0.65, cactus: 0.35 }, palmCoast: 12 },
   noPonds: true,
@@ -36,7 +37,7 @@ export default { // §10.3
     // constante woestijnwind die wisselt van licht tot stevig
     { label: 'Woestijnwind', effect: { drift: { min: 0.15, max: 0.6, period: 30, ground: { soft: 1, hard: 0.5, paved: 0.5 } } } },
     { label: 'Zandstorm', randomEvery: { min: 45, max: 120 }, duration: 30, effect: {
-      visibility: 2, trackEraser: true, burial: true,
+      visibility: 2, trackEraser: true, burial: true, hidesMinimap: true,
       drift: { min: 0, max: 1, rampSeconds: 10, ground: { soft: 1, hard: 0.5, paved: 0.5 } },
     } },
   ],

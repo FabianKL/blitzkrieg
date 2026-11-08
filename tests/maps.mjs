@@ -174,8 +174,8 @@ export const mapTests = [
         // Grebbeberg: munitie alleen bij het depot in Rhenen
         let room = fakeRoom('fall-gelb'), t = room.tanks[0], ev = [];
         Hz.roundStart(room, ev);
-        check(room.rules.refill.ammo === false && room.hz.ammoDepot, 'geen munitiedepot');
-        [t.x, t.y] = room.hz.ammoDepot; t.ammo = 0;
+        check(room.rules.refill.ammo === false && room.hz.ammoDepots?.length, 'geen munitiedepot');
+        [t.x, t.y] = room.hz.ammoDepots[0]; t.ammo = 0;
         for (let k = 0; k < 60; k++) Hz.step(room, k, ev, hurt);
         check(t.ammo > 5, 'geen munitie bij het depot');
         out.push('munitiedepot');

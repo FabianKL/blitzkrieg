@@ -303,7 +303,8 @@ const fctx = fogCanvas.getContext('2d');
 function fogProgress() {
   const wx = view.game.weather;
   if (!wx?.flags.fog) return 1; // mist volgens het weer (Ardennen: ronde 1 en 2)
-  return wx.flags.fogProgress ?? 1;
+  const p = wx.flags.fogProgress;
+  return Number.isFinite(p) ? p : 1;
 }
 const smooth = (t) => t * t * (3 - 2 * t);
 const fogClearRadius = () => FOG_CLEAR_START + (FOG_CLEAR_END - FOG_CLEAR_START) * smooth(fogProgress());

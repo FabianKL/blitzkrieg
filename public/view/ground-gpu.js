@@ -451,7 +451,10 @@ void main() {
     col = iceAt(p, depthAt(uv), stress);
   }
   else if (cls == ICE && c == WATER) col = wakAt(p, f.g, thrW, depthAt(uv));
-  else if ((flags & 128) != 0 && c == DIRT) col = (flags & 64) != 0 ? iceAt(p, depthAt(uv), 0.0) : waterUnder(p, depthAt(uv));
+  else if ((flags & 128) != 0 && c == DIRT) {
+    col = (flags & 64) != 0 ? iceAt(p, depthAt(uv), 0.0) : waterUnder(p, depthAt(uv));
+    if (uRoadC.z > 0.0) col = roadAt(col, p, uv, ip); // weg loopt door onder de brug
+  }
   else if (cls == FORD && c == DIRT) col = fordAt(p, tm);
   else if (c == DIRT) {
     col = groundAt(p);

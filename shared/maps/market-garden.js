@@ -26,10 +26,10 @@ export default { // §10.7
   noBases: true,
   features: [
     // twee verticale rivieren: rivier-uiterwaard-dijk-polder aan beide kanten
-    { type: 'river', from: [0.35, 0], to: [0.35, 1], width: 3, bridges: 'atRoads', wiggle: 0.03,
+    { type: 'river', from: [0.35, 0], to: [0.35, 1], width: 3, bridges: 'atRoads', wiggle: 0.06,
       fords: { klein: 1, middel: 2, groot: 3, extragroot: 3 },
       dikes: { floodplain: 1, width: 1 } },
-    { type: 'river', from: [0.65, 0], to: [0.65, 1], width: 3, bridges: 'atRoads', wiggle: 0.03,
+    { type: 'river', from: [0.65, 0], to: [0.65, 1], width: 3, bridges: 'atRoads', wiggle: 0.06,
       fords: { klein: 1, middel: 2, groot: 3, extragroot: 3 },
       dikes: { floodplain: 1, width: 1 } },
     { type: 'road', from: [0.5, 0], to: [0.5, 1], width: 2 },
@@ -37,7 +37,7 @@ export default { // §10.7
     { type: 'village', at: [0.8, 0.3], size: { klein: 0.14, middel: 0.09 }, name: 'Arnhem', buildings: [4, 8], landmark: 'kerk' },
   ],
   hazard: { type: 'bridgeBlast', armorLoss: 40, chance: 0.1, chanceStep: 0.05 },
-  scarce: { type: 'airDrops', everySeconds: 30, fuel: 0.4, ammo: 25, always: true },
+  scarce: { type: 'airDrops', everySeconds: 30, fuel: 0.4, ammo: 25, always: true, dropCount: 3 },
   refill: { fuel: false, ammo: false, armor: false },
   look: { noise: { strength: 0.08 }, bridge: { kind: 'staal' } },
   tunnelColor: '#4a3a22',

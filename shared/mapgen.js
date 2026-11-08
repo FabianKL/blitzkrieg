@@ -237,7 +237,7 @@ function tryMap(seed, rules, players) {
   const roads = [];
   of('road').forEach((f, k) => {
     const width = f.width * T;
-    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 700 + k, 0.1);
+    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 700 + k, 0.1, false);
     roads.push({ path, width, class: f.class || 'paved' });
     stroke(path, width / 2, (i) => {
       if (!open(i)) return;
@@ -287,17 +287,21 @@ function tryMap(seed, rules, players) {
     let P0 = 0, paved = 0;
     for (let i = 0; i < N; i++) if (!border[i]) { P0++; if (terrain[i] === CLASS.paved && fixedClass[i]) paved++; }
     const want = (((rules.terrainPercent.paved || 0) - 1) / 100) * P0;
+    const srz = rules.sideRoadZone; // [x0, y0, x1, y1] genormaliseerd, alleen hier zijwegen
     for (let k = 0; paved < want && k < 12; k++) {
       const side = Math.floor(rnd() * 4), u = 0.1 + rnd() * 0.8;
-      const a = pt([[u, 0], [u, 1], [0, u], [1, u]][side]);
+      const af = [[u, 0], [u, 1], [0, u], [1, u]][side];
+      if (srz && (af[0] < srz[0] || af[0] > srz[2] || af[1] < srz[1] || af[1] > srz[3])) continue;
+      const a = pt(af);
       let best = null, bd = Infinity;
       for (let i = 0; i < N; i += 7) {
         if (terrain[i] !== CLASS.paved || !fixedClass[i] || bridgeCells[i]) continue;
+        if (srz) { const bx = (i % W) / (W - 1), by = ((i / W) | 0) / (H - 1); if (bx < srz[0] || bx > srz[2] || by < srz[1] || by > srz[3]) continue; }
         const d = Math.hypot((i % W) - a[0], ((i / W) | 0) - a[1]);
         if (d < bd) { bd = d; best = [i % W, (i / W) | 0]; }
       }
-      if (!best || bd < 6 * T) continue;
-      const path = routePath(a, best, zone, roadWidth / 2 + 1, noise, 900 + k, 0.1);
+      if (!best || bd < 8 * T) continue; // minstens 8T lang, anders is het een stomp stukje
+      const path = routePath(a, best, zone, roadWidth / 2 + 1, noise, 900 + k, 0.1, false);
       roads.push({ path, width: roadWidth, class: 'paved' });
       stroke(path, roadWidth / 2, (i) => {
         if (!open(i) || map[i] === WATER || map[i] === BUILDING || map[i] === ROCK || (terrain[i] === CLASS.ice && fixedClass[i])) return;
@@ -509,7 +513,22 @@ function tryMap(seed, rules, players) {
   };
   const rk = rules.rocks || {};
   const freeNoRoad = (fn) => (i) => fn(i) && !roadPadding[i];
-  blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeNoRoad(freeIn(rk.in)), rk.in && areaOf(rk.in));
+  if (rk.edge) {
+    // Randrotsen: een ring van rots net binnen de onbegaanbare strook, met noise voor onregelmatigheid
+    const thickness = 3 * T;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (border[i] || zone[i] || map[i] === BASE) continue;
+      const dx = Math.min(x - band, W - 1 - band - x);
+      const dy = Math.min(y - band, H - 1 - band - y);
+      const dist = Math.min(dx, dy);
+      if (dist >= thickness) continue;
+      const n = noise(x / 6 + 77, y / 6 + 33) * 0.5 + 0.5;
+      if (dist < thickness * n) { map[i] = ROCK; have.rock++; }
+    }
+  } else {
+    blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeNoRoad(freeIn(rk.in)), rk.in && areaOf(rk.in));
+  }
   if (!rules.noPonds) blobs(WATER, 'water', target('water'), 0.8 * T, 2 * T, 53, (i) => free(i) && !parkMask[i] && !roadPadding[i]);
   const vcfg = rules.vegetation;
   if (vcfg && pct.vegetation) {
@@ -523,6 +542,14 @@ function tryMap(seed, rules, players) {
   for (const a of areas) fillClasses(map, terrain, fixedClass, border, Object.keys(a.f.classes), a.f.classes, null, seed + 17, (i) => inArea(a, i));
   for (const p of parks) for (let i = 0; i < N; i++) if (parkMask[i] && map[i] === DIRT && !fixedClass[i] && CLASS.normal !== undefined) { terrain[i] = CLASS.normal; fixedClass[i] = 1; }
   fillClasses(map, terrain, fixedClass, border, groundClasses, pct, P, seed, undefined, rules.noiseScale);
+
+  // begroeiing weghalen op uitgesloten terreinklassen (bv. bocage niet op moeras)
+  if (vcfg?.excludeClasses) {
+    const ex = new Set(vcfg.excludeClasses.map((n) => CLASS[n]));
+    for (let i = 0; i < N; i++) {
+      if (map[i] === VEG && ex.has(terrain[i])) { map[i] = DIRT; veg[i] = 0; }
+    }
+  }
 
   // akkerblokken: houd de N grootste aaneengesloten stukken, zet fragmenten om
   if (rules.farms) consolidateAndPlaceFarms(rules.farms);
@@ -771,7 +798,7 @@ function countIn(v, test) {
 
 // Route van a naar b over een grof rooster (4 cellen), om de beschermde zone heen (met marge),
 // met een beetje ruis zodat hij natuurlijk slingert. Geeft punten in cellen.
-function routePath(a, b, zone, margin, noise, salt, wiggle) {
+function routePath(a, b, zone, margin, noise, salt, wiggle, smooth = true) {
   const C = 4, gw = Math.ceil(W / C), gh = Math.ceil(H / C), M = Math.ceil(margin / C);
   const blocked = new Uint8Array(gw * gh);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (zone[y * W + x]) {
@@ -808,9 +835,10 @@ function routePath(a, b, zone, margin, noise, salt, wiggle) {
   if (pts.length < 2) return [a, b];
   pts.reverse();
   pts[0] = a; pts[pts.length - 1] = b;
-  // gladstrijken
-  for (let pass = 0; pass < 3; pass++) {
-    for (let k = 1; k < pts.length - 1; k++) pts[k] = [(pts[k - 1][0] + pts[k][0] * 2 + pts[k + 1][0]) / 4, (pts[k - 1][1] + pts[k][1] * 2 + pts[k + 1][1]) / 4];
+  if (smooth) {
+    for (let pass = 0; pass < 3; pass++) {
+      for (let k = 1; k < pts.length - 1; k++) pts[k] = [(pts[k - 1][0] + pts[k][0] * 2 + pts[k + 1][0]) / 4, (pts[k - 1][1] + pts[k][1] * 2 + pts[k + 1][1]) / 4];
+    }
   }
   return pts;
 }
@@ -831,7 +859,13 @@ function bridgeLine(b, mask, iceMask, roads, lines) {
   const line = !dir && lines.find(([p, q]) => inside([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]));
   if (line) dir = [line[1][0] - line[0][0], line[1][1] - line[0][1]];
   if (!dir) dir = b.x1 - b.x0 >= b.y1 - b.y0 ? [1, 0] : [0, 1];
-  const L = Math.hypot(dir[0], dir[1]) || 1, dx = dir[0] / L, dy = dir[1] / L;
+  // snap naar de dichtstbijzijnde van de 8 rijrichtingen
+  const ang = Math.atan2(dir[1], dir[0]);
+  const oct = Math.round(ang / (Math.PI / 4));
+  const DIRS8 = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+  const sd = DIRS8[((oct % 8) + 8) % 8];
+  const sL = Math.hypot(sd[0], sd[1]);
+  const dx = sd[0] / sL, dy = sd[1] / sL;
   const ox = (b.x0 + b.x1) / 2, oy = (b.y0 + b.y1) / 2;
   let s0 = Infinity, s1 = -Infinity, l0 = Infinity, l1 = -Infinity, ice = 0;
   for (const i of b.list) {

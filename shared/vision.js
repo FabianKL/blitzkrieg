@@ -72,32 +72,31 @@ export function hintDirection(dx, dy) {
   return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
 }
 
-// Zoeklichten (Oder-front, §10.9): beams bundels vanaf de rechterrand, elk widthT breed, die
-// heen en weer zwaaien (één zwaai per sweepSeconds). Server en clients rekenen dezelfde stand
-// uit de tijd sinds het begin van het spel (ticks). Geeft per bundel {x0, y0, ang}.
-// stuckBeams: Map(beamIndex → {x, y}) — bundels die op een tank zijn vastgeplakt
+// Zoeklichten (Oder-front, §10.9): ovale vlekken die onafhankelijk over de kaart scannen.
+// Elke vlek beweegt in een Lissajous-patroon (sin/cos met eigen frequenties) zodat ze
+// niet synchroon lopen. Deterministisch: server en client berekenen dezelfde positie.
+// stuckBeams: Map(spotIndex → {x, y}) — spots die op een tank zijn vastgeplakt
 export function searchlightBeams(cfg, ticks, stuckBeams) {
   const out = [], t = ticks / G.TICK_RATE;
-  for (let k = 0; k < cfg.beams; k++) {
-    const y0 = ((k + 0.5) / cfg.beams) * G.H;
-    const x0 = G.W - 1;
+  const n = cfg.beams || 2;
+  const rx = ((cfg.lengthT || cfg.widthT) * G.T) / 2;
+  const ry = (cfg.widthT * G.T) / 2;
+  for (let k = 0; k < n; k++) {
     const stuck = stuckBeams?.get(k);
     if (stuck) {
-      out.push({ x0, y0, ang: Math.atan2(stuck.y - y0, stuck.x - x0), stuck: true });
+      out.push({ cx: stuck.x, cy: stuck.y, rx, ry, stuck: true });
     } else {
-      const phase = (t / cfg.sweepSeconds) * Math.PI * 2 + k * 2.1;
-      out.push({ x0, y0, ang: Math.PI + Math.sin(phase) * 0.55 });
+      const cx = G.W * 0.5 + G.W * 0.35 * Math.sin(t / cfg.sweepSeconds * (0.7 + k * 0.4) * Math.PI * 2 + k * 2.1);
+      const cy = G.H * 0.5 + G.H * 0.35 * Math.sin(t / cfg.sweepSeconds * (0.5 + k * 0.3) * Math.PI * 2 + k * 1.7 + 0.8);
+      out.push({ cx, cy, rx, ry, stuck: false });
     }
   }
   return out;
 }
-// Ligt (x, y) in een bundel?
+// Ligt (x, y) in een spot?
 export function searchlightAt(cfg, ticks, x, y, stuckBeams) {
-  const half = (cfg.widthT * G.T) / 2;
-  return searchlightBeams(cfg, ticks, stuckBeams).some((b) => {
-    const dx = x - b.x0, dy = y - b.y0, along = dx * Math.cos(b.ang) + dy * Math.sin(b.ang);
-    return along > 0 && Math.abs(-dx * Math.sin(b.ang) + dy * Math.cos(b.ang)) <= half;
-  });
+  return searchlightBeams(cfg, ticks, stuckBeams).some((b) =>
+    ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 <= 1);
 }
 
 // Geluid: alleen binnen gehoorafstand (HINTS.hearingT in T)
