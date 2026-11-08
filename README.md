@@ -255,8 +255,9 @@ dat cloudrollen, WSS-ingress, lange sessies of de gekozen Azure-capaciteit al in
 
 ## Besturing
 
-Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging. Terug in je eigen basis
-tank, repareer en herlaad je.
+Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = inzoomen en
+0 = uitzoomen. De zoom verandert alleen jouw weergave. Terug in je eigen basis tank, repareer en
+herlaad je.
 
 Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de knoppen verschijnen bij
 de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
@@ -395,7 +396,8 @@ npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
 Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwikkelen (alleen op
 localhost, in de adresbalk):
 - `?debug=alles` toont alle tanks en zet het zicht uit;
-- `?zoom=3` zet de camera dichter op je tank (om details te bekijken);
+- `?zoom=3` zet bij het laden de camera dichter op je tank (om details te bekijken); tijdens het
+  spel kun je dit op localhost direct aanpassen met `blitzView.setZoom(3)` in de browserconsole;
 - `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
 - `?kijk=0.5,0.45` zet de camera op die plek van de kaart (fractie van breedte en hoogte) in plaats
   van op je tank, om water, ijs of bruggen te bekijken zonder erheen te rijden (in de console:

@@ -2,6 +2,7 @@
 // weergave van de kaart. De stijl (zomer, winter, woestijn) is een tekenmodule in styles/; wisselt
 // de host naar een kaart met een andere stijl, dan wordt alleen de weergave vervangen.
 import * as G from '/shared/game.js';
+import { CAMERA_ZOOM } from '/shared/config.js';
 import { connect } from '/net.js';
 import { touchControls } from '/touch.js';
 
@@ -161,6 +162,18 @@ function showView() {
   });
   return true;
 }
+
+addEventListener('keydown', (event) => {
+  if (game.status !== 'playing' || game.lobby || !view) return;
+  const tag = event.target?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const delta = event.code === 'Digit9' || event.code === 'Numpad9' ? CAMERA_ZOOM.step
+    : event.code === 'Digit0' || event.code === 'Numpad0' ? -CAMERA_ZOOM.step
+      : 0;
+  if (!delta) return;
+  event.preventDefault();
+  if (!event.repeat) view.zoomBy(delta);
+});
 
 // ---------- Lobby bijwerken ----------
 let lastBriefMap = '';

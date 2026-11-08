@@ -37,7 +37,7 @@
 //   burialColor                kleur van de hoop sneeuw, zand of stof op je ingesneeuwde tank (BURIAL)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, FOG, HINTS, LOOK, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, CAMERA_ZOOM, FOG, HINTS, LOOK, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt, searchlightBeams } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
@@ -918,7 +918,7 @@ export function startWorld(style, game) {
   const debugParam = (k) => new URLSearchParams(location.search).get(k);
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
-  const ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
+  let ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
   // ?kijk=0.5,0.45: de camera kijkt naar die plek (fractie van de kaart) in plaats van naar je tank;
   // in de console ook blitzView.lookAt(0.5, 0.45), en lookAt() weer terug naar je tank
   let FOCUS = (DEBUG_HOST && debugParam('kijk')?.split(',').map(Number)) || null;
@@ -1286,6 +1286,12 @@ export function startWorld(style, game) {
     eraserInfo: () => eraserInfo(game),
     bench: (n) => (DEBUG_HOST && renderer ? bench(n) : null),
     lookAt: (fx, fy) => { if (DEBUG_HOST) FOCUS = fx === undefined ? null : [fx, fy]; },
+    setZoom(value) {
+      if (!Number.isFinite(value) || value <= 0) throw new RangeError('Zoom moet een positief getal zijn');
+      ZOOM = Math.max(CAMERA_ZOOM.min, Math.min(CAMERA_ZOOM.max, value));
+      return ZOOM;
+    },
+    zoomBy(delta) { return view.setZoom(ZOOM + delta); },
     // effect afspelen om te bekijken (localhost): blitzView.play('explosie', x, y, {size: 14, add: true})
     play: (name, x, y, o) => DEBUG_HOST && fx.play(name, x, y, o),
     assets: () => assetReport, // welke texturen en sprites er gebruikt worden (de rest is procedureel of de oude tekening)

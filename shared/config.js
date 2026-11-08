@@ -96,6 +96,9 @@ export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5, shado
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
 
+// Lokale camerazoom tijdens het spelen: 9 zoomt in, 0 zoomt uit.
+export const CAMERA_ZOOM = { step: 0.1, min: 0.5, max: 4 };
+
 // Uiterlijk per kaart (alleen de weergave, public/world-view.js; de spelregels kijken er niet
 // naar). Een kaart overschrijft dit met look: {...}; grade en noise worden per veld gemengd.
 //   light       schaduw van tanks, bases, bomen en rotsen: verschuiving in cellen (dx, dy) en

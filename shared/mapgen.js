@@ -514,17 +514,18 @@ function tryMap(seed, rules, players) {
   const rk = rules.rocks || {};
   const freeNoRoad = (fn) => (i) => fn(i) && !roadPadding[i];
   if (rk.edge) {
-    // Randrotsen: een ring van rots net binnen de onbegaanbare strook, met noise voor onregelmatigheid
-    const thickness = 3 * T;
+    // Solide rotsrand zoals het originele Tunneler: wisselende dikte, volledig dicht
+    const edgeW = (u, side) => 4 + noise(u / 11, side * 97) * 7 + noise(u / 3, side * 97 + 41) * 2;
+    const rkLeft = Float32Array.from({ length: H }, (_, y) => band + edgeW(y, 0));
+    const rkRight = Float32Array.from({ length: H }, (_, y) => band + edgeW(y, 1));
+    const rkTop = Float32Array.from({ length: W }, (_, x) => band + edgeW(x, 2));
+    const rkBottom = Float32Array.from({ length: W }, (_, x) => band + edgeW(x, 3));
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x;
       if (border[i] || zone[i] || map[i] === BASE) continue;
-      const dx = Math.min(x - band, W - 1 - band - x);
-      const dy = Math.min(y - band, H - 1 - band - y);
-      const dist = Math.min(dx, dy);
-      if (dist >= thickness) continue;
-      const n = noise(x / 6 + 77, y / 6 + 33) * 0.5 + 0.5;
-      if (dist < thickness * n) { map[i] = ROCK; have.rock++; }
+      if (x < rkLeft[y] || W - 1 - x < rkRight[y] || y < rkTop[x] || H - 1 - y < rkBottom[x]) {
+        map[i] = ROCK; have.rock++;
+      }
     }
   } else {
     blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeNoRoad(freeIn(rk.in)), rk.in && areaOf(rk.in));
