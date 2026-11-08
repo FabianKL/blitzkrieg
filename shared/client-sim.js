@@ -31,6 +31,8 @@ export function createState() {
     names: new Map(), // id → spelersnaam
     rounds: G.DEFAULT_ROUNDS, // gewonnen rondes om te winnen
     settings: { ...G.DEFAULT_SETTINGS }, // lobby-instellingen
+    playerCount: G.MAX_PLAYERS, // hoeveel spelers meedoen (2, 3 of 4)
+    gameMode: 'ffa', // 'ffa' of 'teams' (alleen bij 4 spelers)
     max: { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX }, // effectieve maxima
     landmarks: [], // herkenningspunten in dorpen: {kind, x, y}
     roads: [], // middellijnen van de wegen (weergave): {p: [[x, y], ...], w: breedte, c: klasse}
@@ -86,6 +88,8 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.rounds = msg.rounds ?? G.DEFAULT_ROUNDS;
   state.settings = msg.settings ?? { ...G.DEFAULT_SETTINGS };
   state.max = msg.max ?? { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX };
+  state.playerCount = msg.playerCount ?? G.MAX_PLAYERS;
+  state.gameMode = msg.gameMode ?? 'ffa';
   state.landmarks = msg.lm || [];
   state.roads = msg.rd || [];
   state.bridges = msg.br || [];

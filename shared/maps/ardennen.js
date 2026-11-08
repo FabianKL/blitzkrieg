@@ -12,7 +12,7 @@ export default { // §10.8
   },
   // bijna geen bevroren grond (3%), veel meer sneeuw; minder rotsen, meer bos; geen water
   terrainPercent: { soft: 49, hard: 5, vegetation: 30, paved: 8, rock: 2, water: 0 },
-  tolerance: { klein: 1, default: 0, extragroot: 2 },
+  tolerance: { klein: 1, default: 0, groot: 2, extragroot: 3 },
   classes: {
     paved: { label: 'Bosweg en Bastogne', color: '#9b9184' },
     hard: { label: 'Bevroren grond', color: '#bccfda' },

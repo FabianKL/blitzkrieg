@@ -1268,7 +1268,7 @@ export function startWorld(style, game) {
 
   // Rondenummer en hoe je wint, linksonder in beeld
   function drawRoundLabel() {
-    const goal = G.scoreMode(game.tanks.size) === 'rounds' ? `${G.GAME.roundsToWin} RONDES WINT` : `${G.GAME.killsToWin} KILLS WINT`;
+    const goal = G.scoreMode(game.tanks.size, game.gameMode) === 'rounds' ? `${game.rounds} RONDES WINT` : `${game.rounds} KILLS WINT`;
     const s = devicePixelRatio || 1;
     roundLabel.set(`RONDE ${game.game.round} · ${goal}`, { size: 12 * s, pad: 8 * s, h: 22 * s });
     roundLabel.at(8 * s, canvas.height - 30 * s);

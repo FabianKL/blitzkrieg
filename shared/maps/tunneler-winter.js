@@ -1,7 +1,7 @@
 // Tunneler-modus: winterstijl. Simpel terrein, rotsrand, kogels graven, lichte sneeuwval.
 
 export default {
-  name: 'Tunneler (winter)', style: 'winter', header: 'TUNNELER — WINTER',
+  name: 'Tunneler (winter)', style: 'winter', header: 'TUNNELER — WINTER', maxPlayers: 2,
   tanks: { A: 't34', B: 'panther' },
   desc: {
     setting: 'Tunneler in de winterstijl. Twee tanks, bevroren grond, een rotsrand — en kogels graven tunnels.',

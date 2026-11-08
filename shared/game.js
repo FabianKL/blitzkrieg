@@ -26,22 +26,29 @@ export function teamsFor(rules) {
 }
 
 // ---------- Spel en rondes (§2) ----------
-// Telwijze: bij hoogstens 2 spelers gewonnen rondes, daarboven kills
-export const scoreMode = (players) => (players <= 2 ? 'rounds' : 'kills');
+// Telwijze: bij teams of hoogstens 2 spelers gewonnen rondes, daarboven kills
+export const scoreMode = (players, gameMode) => (gameMode === 'teams' || players <= 2 ? 'rounds' : 'kills');
 // Score die iedereen ziet, volgens de telwijze van nu
-export const score = (t, players) => (scoreMode(players) === 'rounds' ? t.rounds : t.kills);
+export const score = (t, players, gameMode) => (scoreMode(players, gameMode) === 'rounds' ? t.rounds : t.kills);
 
-// Wie wint de ronde die net eindigt? players = [{id, alive}]. Alleen bij precies 2 spelers:
-// wie als enige nog leeft. Tegelijk dood, of meer spelers (dan tellen kills): niemand (-1).
-export function roundWinner(players) {
-  if (players.length !== 2) return -1;
+// Wie wint de ronde die net eindigt? players = [{id, alive}].
+// FFA 2 spelers: wie als enige leeft. FFA 3-4: maar 1 levend. Teams: een team wint als
+// beide tegenstanders dood zijn (speler 0,2 = team 0; speler 1,3 = team 1).
+export function roundWinner(players, gameMode) {
+  if (gameMode === 'teams') {
+    const team = [0, 1].map((t) => players.filter((p) => p.id % 2 === t));
+    const dead = team.map((t) => t.every((p) => !p.alive));
+    if (dead[0] && !dead[1]) return team[1][0].id;
+    if (dead[1] && !dead[0]) return team[0][0].id;
+    return -1;
+  }
   const alive = players.filter((t) => t.alive);
   return alive.length === 1 ? alive[0].id : -1;
 }
 
 // Heeft iemand het spel gewonnen? players = [{id, rounds, kills}]. Geeft id of -1.
-export function gameWinner(players, cfg = GAME) {
-  const mode = scoreMode(players.length);
+export function gameWinner(players, cfg = GAME, gameMode = 'ffa') {
+  const mode = scoreMode(players.length, gameMode);
   const best = players.find((t) => (mode === 'rounds' ? t.rounds >= cfg.roundsToWin : t.kills >= cfg.killsToWin));
   return best ? best.id : -1;
 }

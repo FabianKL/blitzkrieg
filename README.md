@@ -348,7 +348,9 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
   geeft geen richtingshint.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard
   daardoor meer dan 8% (bv. Ardennen ~13%), en dat gaat van de andere klassen af. De test houdt daar
-  rekening mee; Ardennen klein heeft daarvoor 1 procentpunt extra marge (`tolerance`).
+  rekening mee; Ardennen klein heeft daarvoor 1 procentpunt extra marge, groot 2 en extra groot 3
+  procentpunt (`tolerance`). De Ardennenkaart heeft geen water; terreintests voor water gebruiken
+  Barbarossa.
 - **Berlijn met 4 spelers**: de vrije zones rond de bases (~13% van de stad) mogen geen huizen hebben,
   dus ~25% gebouwen in plaats van 30% (ruimere marge in de config). De Spree en het kanaal zijn iets
   smaller (2 en 1,5 T), anders is het water ~12% in plaats van 7%. Er is **geen metro** (op verzoek).

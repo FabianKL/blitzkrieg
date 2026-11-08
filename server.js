@@ -89,6 +89,7 @@ function getRoom(name, size) {
       name, lobby, mapId, rules: G.MAPS[mapId], tick: 0, bullets: [], nextBulletId: 1, pendingEvents: [],
       tanks: new Array(G.MAX_PLAYERS).fill(null), host: -1,
       rounds: GAME.roundsToWin, settings: { ...G.DEFAULT_SETTINGS },
+      playerCount: G.MAX_PLAYERS, gameMode: 'ffa',
     };
     rooms.set(name, room);
     if (lobby) { room.size = G.DEFAULT_SIZE; newWorld(room); }
@@ -96,6 +97,7 @@ function getRoom(name, size) {
   const wanted = Object.hasOwn(G.MAP_SIZES, size) ? size : G.DEFAULT_SIZE;
   if (!room.lobby && !room.tanks.some(Boolean) && room.size !== wanted) {
     room.size = wanted;
+    room.playerCount = Math.min(room.playerCount, G.MAP_SIZES[wanted].maxPlayers);
     newWorld(room);
   }
   return room;
@@ -115,7 +117,21 @@ function configure(room, t, msg) {
   const mapId = String(msg.map ?? room.mapId);
   const size = String(msg.size ?? room.size);
   if (!Object.hasOwn(G.MAPS, mapId) || mapId === 'retro' || !Object.hasOwn(G.MAP_SIZES, size)) return;
-  if (room.tanks.filter(Boolean).length > G.MAP_SIZES[size].maxPlayers) return;
+  // playerCount en gameMode
+  const rules = G.MAPS[mapId];
+  const maxForSize = G.MAP_SIZES[size].maxPlayers;
+  const maxForMap = rules?.maxPlayers ?? G.MAX_PLAYERS;
+  const effectiveMax = Math.min(maxForSize, maxForMap);
+  let pc = Number(msg.playerCount) || effectiveMax;
+  if (![2, 3, 4].includes(pc)) pc = effectiveMax;
+  pc = Math.min(pc, effectiveMax);
+  let gm = String(msg.gameMode ?? room.gameMode);
+  if (gm !== 'ffa' && gm !== 'teams') gm = 'ffa';
+  if (gm === 'teams' && pc !== 4) gm = 'ffa';
+  // te veel spelers al verbonden
+  if (room.tanks.filter(Boolean).length > pc) return;
+  room.playerCount = pc;
+  room.gameMode = gm;
   // rondes
   const rounds = Number(msg.rounds);
   if (G.ROUND_OPTIONS.includes(rounds)) room.rounds = rounds;
@@ -137,7 +153,7 @@ function configure(room, t, msg) {
     room.pendingEvents.push({ t: 'err', msg: 'De bases passen niet op deze kaartgrootte: kies een grotere kaart.' });
     return;
   }
-  // alleen rondes of instellingen veranderd: iedereen bijwerken
+  // alleen rondes, instellingen of speleraantal veranderd: iedereen bijwerken
   for (const o of room.tanks) if (o) sendInit(room, o);
 }
 
@@ -173,8 +189,9 @@ function useRoom(room) {
 function makeWorld(room) {
   useRoom(room);
   const seed = FIXED_SEED ?? (Math.random() * 2 ** 32) >>> 0;
+  const bases = room.gameMode === 'teams' ? 2 : room.playerCount;
   try {
-    return { world: G.generateMap(seed, room.rules, G.MAP_SIZES[room.size].maxPlayers), seed }; // zoveel bases als er spelers mogen
+    return { world: G.generateMap(seed, room.rules, bases), seed };
   } catch (err) {
     if (err.message !== 'BASES') throw err;
     return null;
@@ -220,7 +237,8 @@ function spawn(room, t) {
       break;
     }
   } else {
-    const b = room.world.bases[t.id];
+    const baseIdx = room.gameMode === 'teams' ? t.id % 2 : t.id;
+    const b = room.world.bases[baseIdx];
     x = b.x; y = b.y;
   }
   Object.assign(t, {
@@ -253,9 +271,16 @@ function hurt(room, t, pct, events) {
 // het spel gewonnen is, en dan even pauzeren (of de winnaar tonen).
 function endRound(room, events) {
   const players = room.tanks.filter(Boolean);
-  room.roundWinner = G.roundWinner(players);
-  if (room.roundWinner >= 0) room.tanks[room.roundWinner].rounds++;
-  room.winner = G.gameWinner(players, { ...GAME, roundsToWin: room.rounds });
+  room.roundWinner = G.roundWinner(players, room.gameMode);
+  if (room.roundWinner >= 0) {
+    if (room.gameMode === 'teams') {
+      const winTeam = room.roundWinner % 2;
+      for (const t of room.tanks) if (t && t.id % 2 === winTeam) t.rounds++;
+    } else {
+      room.tanks[room.roundWinner].rounds++;
+    }
+  }
+  room.winner = G.gameWinner(players, { ...GAME, roundsToWin: room.rounds, killsToWin: room.rounds }, room.gameMode);
   room.bullets = [];
   if (room.winner >= 0) {
     room.phase = 'over';
@@ -303,7 +328,7 @@ function sendInit(room, t) {
   const init = {
     t: 'init', you: t.id, k: room.tick, w: G.W, h: G.H, size: room.size,
     map: G.toBase64(G.rleEncode(room.world.map)),
-    tanks: players.map((o) => ({ i: o.id, ...(o === t || !Object.keys(o.sent).length ? tankFields(o, players.length, max.fuel) : o.sent) })),
+    tanks: players.map((o) => ({ i: o.id, ...(o === t || !Object.keys(o.sent).length ? tankFields(o, players.length, max.fuel, room.gameMode) : o.sent) })),
     bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, d: b.d, i: b.owner })),
     terrain: G.toBase64(G.rleEncode(room.world.terrain)),
     track: G.toBase64(G.rleEncode16(room.world.track)), // exacte sporen, daarna rekent de client zelf mee
@@ -316,6 +341,7 @@ function sendInit(room, t) {
     lobby: room.lobby, host: hostOf(room),
     names: room.tanks.filter(Boolean).map((o) => ({ i: o.id, name: o.name || '' })),
     rounds: room.rounds, settings: room.settings, max,
+    playerCount: room.playerCount, gameMode: room.gameMode,
     lm: room.world.landmarks || [], // herkenningspunten (kerk) in dorpen
     // middellijnen van de wegen (alleen voor de weergave): punten op 0,1 cel, breedte, klasse
     rd: (room.world.roads || []).map((r) => ({ p: r.path.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), w: r.width, c: r.class })),
@@ -368,10 +394,10 @@ function iceStep(room, t, events) {
 
 // Velden die naar alle clients gaan. Brandstof als percentage: verandert minder vaak = minder bytes.
 // c = score volgens de telwijze van nu (gewonnen rondes bij 2 spelers, anders kills).
-function tankFields(t, players, fuelMax) {
+function tankFields(t, players, fuelMax, gameMode) {
   return {
     x: t.x, y: t.y, d: t.dir, a: t.alive ? 1 : 0,
-    f: Math.ceil((t.fuel * 100) / fuelMax), s: t.shield, m: t.ammo, c: G.score(t, players), b: t.buried ? 1 : 0,
+    f: Math.ceil((t.fuel * 100) / fuelMax), s: t.shield, m: t.ammo, c: G.score(t, players, gameMode), b: t.buried ? 1 : 0,
     g: Math.round(t.gauge ?? 0), v: t.slow ?? G.SPEED_ONE,
   };
 }
@@ -404,7 +430,14 @@ function step(room) {
     for (const t of live) stepTank(room, t, live, events);
     // gevaren en schaarse middelen van deze kaart
     if (room.settings?.hazards !== 0) Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
-    if (live.filter((t) => !t.alive).length > deaths) endRound(room, events);
+    if (live.filter((t) => !t.alive).length > deaths) {
+      const cfg = { ...GAME, roundsToWin: room.rounds, killsToWin: room.rounds };
+      const winner = G.gameWinner(live, cfg, room.gameMode);
+      const roundDone = room.gameMode === 'teams'
+        ? G.roundWinner(live, 'teams') >= 0
+        : live.filter((t) => t.alive).length <= 1 || winner >= 0;
+      if (roundDone) endRound(room, events);
+    }
   } else for (const t of live) t.selfDestruct = false;
 
   // Graaf de tankvorm uit op de huidige plek en richting (clients doen exact hetzelfde)
@@ -506,7 +539,7 @@ function stepTank(room, t, live, events) {
 function sendTick(room, live, events) {
   const p = [];
   for (const t of live) {
-    const cur = tankFields(t, live.length, effectiveMax(room).fuel);
+    const cur = tankFields(t, live.length, effectiveMax(room).fuel, room.gameMode);
     const entry = { i: t.id };
     let changed = false;
     for (const k in cur) {
@@ -574,7 +607,7 @@ wss.on('connection', (ws, req) => {
   const room = getRoom(params.get('room'), params.get('size'));
   useRoom(room);
   const slot = room.tanks.findIndex((t) => !t);
-  if (slot < 0 || slot >= G.MAP_SIZES[room.size].maxPlayers) {
+  if (slot < 0 || slot >= room.playerCount) {
     ws.send(JSON.stringify({ t: 'full' }));
     ws.close();
     return;

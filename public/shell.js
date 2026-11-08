@@ -60,11 +60,52 @@ for (const m of G.MAP_MENU) {
 for (const [id, s] of Object.entries(G.MAP_SIZES)) {
   $('lobby-size').add(new Option(`${s.label}${s.maxPlayers < G.MAX_PLAYERS ? ` (${s.maxPlayers} sp.)` : ''}`, id));
 }
-$('lobby-size').addEventListener('change', () => { sendConfig(); $('lobby-size').blur(); });
+$('lobby-size').addEventListener('change', () => { syncPlayerDropdown(); sendConfig(); $('lobby-size').blur(); });
+
+// Spelers-dropdown
+for (const n of [2, 3, 4]) $('lobby-playercount').add(new Option(`${n}`, n));
+$('lobby-playercount').value = String(G.MAX_PLAYERS);
+$('lobby-playercount').addEventListener('change', () => { syncModeDropdown(); sendConfig(); $('lobby-playercount').blur(); });
+
+// Modus-dropdown (alleen bij 4 spelers)
+$('lobby-mode').add(new Option('Ieder voor zich', 'ffa'));
+$('lobby-mode').add(new Option('Teams', 'teams'));
+$('lobby-mode').addEventListener('change', () => { syncRoundsLabel(); sendConfig(); $('lobby-mode').blur(); });
+
+function effectiveMaxPlayers() {
+  const size = $('lobby-size').value;
+  const mapId = game.mapId || G.DEFAULT_MAP;
+  const rules = G.MAPS[mapId];
+  const maxForSize = G.MAP_SIZES[size]?.maxPlayers ?? G.MAX_PLAYERS;
+  const maxForMap = rules?.maxPlayers ?? G.MAX_PLAYERS;
+  return Math.min(maxForSize, maxForMap);
+}
+
+function syncPlayerDropdown() {
+  const max = effectiveMaxPlayers();
+  let cur = Number($('lobby-playercount').value);
+  for (const opt of $('lobby-playercount').options) opt.disabled = Number(opt.value) > max;
+  if (cur > max) { cur = max; $('lobby-playercount').value = String(cur); }
+  syncModeDropdown();
+}
+
+function syncModeDropdown() {
+  const pc = Number($('lobby-playercount').value);
+  $('lobby-mode-label').hidden = pc !== 4;
+  if (pc !== 4) $('lobby-mode').value = 'ffa';
+  syncRoundsLabel();
+}
+
+function syncRoundsLabel() {
+  const pc = Number($('lobby-playercount').value);
+  const gm = $('lobby-mode').value;
+  const isKills = gm === 'ffa' && pc > 2;
+  $('lobby-rounds-label').firstChild.textContent = isKills ? 'KILLS ' : 'RONDES ';
+}
 
 // Rondes-dropdown
 for (const r of G.ROUND_OPTIONS) {
-  $('lobby-rounds').add(new Option(`${r} ronde${r > 1 ? 's' : ''}`, r));
+  $('lobby-rounds').add(new Option(`${r}`, r));
 }
 $('lobby-rounds').addEventListener('change', () => { sendConfig(); $('lobby-rounds').blur(); });
 
@@ -104,6 +145,8 @@ function sendConfig(mapOverride) {
     map: mapOverride || game.mapId,
     size: $('lobby-size').value,
     rounds: Number($('lobby-rounds').value),
+    playerCount: Number($('lobby-playercount').value),
+    gameMode: $('lobby-mode').value,
     settings,
   });
 }
@@ -217,10 +260,12 @@ function updateBriefing() {
 function updatePlayers() {
   const el = $('lobby-players');
   let html = '';
+  const isTeams = game.gameMode === 'teams';
   for (const [id] of game.tanks) {
     const name = game.names.get(id) || `Speler ${id + 1}`;
     const isHost = id === game.host;
-    html += `<span class="lobby-player"><span class="lobby-dot" style="background:${TEAM_COLORS[id] || TEAM_COLORS[0]}"></span>${isHost ? '★ ' : ''}${esc(name)}</span>`;
+    const teamLabel = isTeams ? `<span class="lobby-team">${id % 2 === 0 ? 'A' : 'B'}</span> ` : '';
+    html += `<span class="lobby-player"><span class="lobby-dot" style="background:${TEAM_COLORS[id] || TEAM_COLORS[0]}"></span>${isHost ? '★ ' : ''}${teamLabel}${esc(name)}</span>`;
   }
   el.innerHTML = html;
 }
@@ -233,6 +278,10 @@ function syncLobbyControls(isHost) {
   // dropdowns syncen met de server
   if ($('lobby-size').value !== game.size) $('lobby-size').value = game.size;
   if ($('lobby-rounds').value !== String(game.rounds)) $('lobby-rounds').value = String(game.rounds);
+  // spelers en modus syncen
+  if ($('lobby-playercount').value !== String(game.playerCount)) $('lobby-playercount').value = String(game.playerCount);
+  if ($('lobby-mode').value !== (game.gameMode || 'ffa')) $('lobby-mode').value = game.gameMode || 'ffa';
+  syncPlayerDropdown();
   const players = game.tanks.size;
   for (const opt of $('lobby-size').options) opt.disabled = G.MAP_SIZES[opt.value].maxPlayers < players && opt.value !== game.size;
   // instellingen syncen

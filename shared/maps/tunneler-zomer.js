@@ -1,7 +1,7 @@
 // Tunneler-modus: zomerstijl. Simpel terrein, rotsrand, kogels graven.
 
 export default {
-  name: 'Tunneler (zomer)', style: 'zomer', header: 'TUNNELER — ZOMER',
+  name: 'Tunneler (zomer)', style: 'zomer', header: 'TUNNELER — ZOMER', maxPlayers: 2,
   tanks: { A: 'sherman', B: 'panther' },
   desc: {
     setting: 'Tunneler in de zomerstijl. Twee tanks, weilanden, een rotsrand — en kogels graven tunnels.',

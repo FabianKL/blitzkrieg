@@ -960,8 +960,9 @@ export const tests = [
   {
     name: 'rots, water en begroeiing: onbegaanbaar, kogels stoppen (niet op water), plant weg na het juiste aantal treffers',
     async run() {
-      const w = G.generateMap(12345, G.MAPS.ardennen);
-      const cfg = G.MAPS.ardennen.vegetation;
+      const rules = G.MAPS.barbarossa;
+      const w = G.generateMap(12345, rules);
+      const cfg = rules.vegetation;
       const out = [];
       for (const type of [G.ROCK, G.WATER, G.VEG]) {
         // een cel van dit type midden in de kaart: tank kan er niet in, kogel stopt erop
@@ -1182,6 +1183,42 @@ export const tests = [
       const dead = await connectBot(port, 'carentan', { autoPong: false });
       check(await waitFor(() => dead.closed, 12000, 200), 'dode verbinding werd niet afgesloten');
       return 'groot bericht geweigerd, flood begrensd, dode verbinding opgeruimd';
+    },
+  },
+  {
+    name: 'rondes: FFA 3 spelers — ronde pas voorbij als er 1 leeft',
+    async run() {
+      const p = (id, alive) => ({ id, alive });
+      check(G.roundWinner([p(0, true), p(1, false), p(2, true)]) === -1, '2 leven: nog geen ronde-winnaar');
+      check(G.roundWinner([p(0, true), p(1, false), p(2, false)]) === 0, '1 leeft: ronde-winnaar');
+      check(G.roundWinner([p(0, false), p(1, false), p(2, false)]) === -1, 'niemand leeft: geen winnaar');
+      return 'FFA 3 spelers: ronde voorbij bij 1 overlevende';
+    },
+  },
+  {
+    name: 'rondes: teams — team wint als alle tegenstanders dood zijn',
+    async run() {
+      const p = (id, alive) => ({ id, alive });
+      // team 0 = speler 0, 2; team 1 = speler 1, 3
+      check(G.roundWinner([p(0, true), p(1, false), p(2, true), p(3, false)], 'teams') === 0, 'team 0 wint (1 en 3 dood)');
+      check(G.roundWinner([p(0, false), p(1, true), p(2, false), p(3, true)], 'teams') === 1, 'team 1 wint (0 en 2 dood)');
+      check(G.roundWinner([p(0, true), p(1, true), p(2, false), p(3, false)], 'teams') === -1, 'gemengd: geen winnaar');
+      check(G.roundWinner([p(0, false), p(1, false), p(2, false), p(3, false)], 'teams') === -1, 'allemaal dood: geen winnaar');
+      check(G.roundWinner([p(0, true), p(1, false), p(2, false), p(3, false)], 'teams') === 0, 'team 0 wint met 1 overlevende');
+      return 'teams: ronde voorbij als een heel team dood is';
+    },
+  },
+  {
+    name: 'rondes: teams — scoreMode en gameWinner bij teams',
+    async run() {
+      check(G.scoreMode(4, 'teams') === 'rounds', 'teams: rondes tellen');
+      check(G.scoreMode(4, 'ffa') === 'kills', 'FFA 4 spelers: kills tellen');
+      check(G.scoreMode(2, 'ffa') === 'rounds', 'FFA 2 spelers: rondes tellen');
+      const s = (id, rounds, kills) => ({ id, rounds, kills });
+      const cfg = { roundsToWin: 3, killsToWin: 5 };
+      check(G.gameWinner([s(0, 3, 0), s(1, 0, 0), s(2, 3, 0), s(3, 0, 0)], cfg, 'teams') === 0, 'teams: 3 rondes wint');
+      check(G.gameWinner([s(0, 2, 9), s(1, 0, 0), s(2, 2, 0), s(3, 0, 0)], cfg, 'teams') === -1, 'teams: kills tellen niet');
+      return 'scoreMode en gameWinner respecteren de gameMode-parameter';
     },
   },
   {
