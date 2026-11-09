@@ -8,6 +8,8 @@
 //               (zomer, winter, woestijn); tanks: {A, B} welke tank elke ploeg rijdt (sleutel in
 //               TANKS, config.js; alleen uiterlijk)
 //   terrainPercent  {klasse | rock | water | vegetation | building: procent van het speelbare deel}
+//   terrainClusters {klasse: aantal} laat een terreinsoort in dat aantal aaneengesloten velden genereren
+//   terrainClusterClearance {klasse: extra afstand} houdt geclusterde terreinen verder van bases
 //   features    vaste kenmerken voor de kaartmaker (mapgen.js): village, road, river, area, ...
 //   classes     per terreinklasse {label, color}: naam en kleur in de legenda
 //   rocks, water, vegetation, buildings   {label, color, ...}: naam en kleur; vegetation.type (uit VEGETATION),
@@ -18,6 +20,7 @@
 //   weather     weerregels (§7, zie shared/weather.js): zicht, sporenwisser, onderduiken,
 //               terreinveranderingen per ronde (dooi, modder) en vlaggen zoals fog (witte mist)
 //   bulletsDig, minimap   overschrijven BULLETS.dig en DISPLAY.minimap voor deze kaart
+//   rockEdge    maakt de onbegaanbare randstrook uit rots in plaats van spiegelbeeldgrond
 //   look        uiterlijk in de weergave (kleurfilter, grondtextuur, weer, licht): zie LOOK
 //   mines       mijnenvelden (El Alamein)
 // Zonder features (alleen retro): classes met één klasse en rocks {count, min, max}.

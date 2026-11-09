@@ -23,7 +23,8 @@ export function generateFeatureMap(seed, rules, players) {
   let error = null;
   for (let attempt = 0; attempt < ATTEMPTS || (attempt < 3 * ATTEMPTS && (!best || best.deviation >= 100)); attempt++) {
     let m;
-    try { m = tryMap((seed + attempt * 0x9e3779b1) >>> 0, rules, players); } catch (err) { if (err.message !== 'BASES') throw err; error = err; continue; }
+    try { m = tryMap((seed + attempt * 0x9e3779b1) >>> 0, rules, players); }
+    catch (err) { if (err.message !== 'BASES' && err.message !== 'CLUSTERS') throw err; error = err; continue; }
     if (!best || m.deviation < best.deviation) best = m;
     if (m.deviation <= MARGIN + m.overshoot + toleranceOf(rules)) break; // beter kan niet (zie unavoidable in tryMap)
   }
@@ -49,6 +50,104 @@ export function terrainShares(w) {
   return out;
 }
 const deviationOf = (shares, pct) => Math.max(0, ...Object.entries(pct).map(([k, p]) => Math.abs((shares[k] || 0) - p)));
+
+function growPatches(count, want, candidates, place, seed, noise) {
+  if (!want) return true;
+  if (candidates.length < want || count < 1) return false;
+  const rng = mulberry32(seed ^ 0x6d2b79f5);
+  const allowed = new Uint8Array(W * H);
+  for (const i of candidates) allowed[i] = 1;
+  const radius = Math.sqrt(want / count / Math.PI);
+  const sizes = Array.from({ length: count }, (_, i) => Math.floor(want / count) + (i < want % count ? 1 : 0));
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const owner = new Uint8Array(W * H), centers = [];
+    let failed = false;
+    for (let p = 0; p < count && !failed; p++) {
+      let start = -1, farthest = -1;
+      for (let k = 0; k < 256; k++) {
+        const i = candidates[Math.floor(rng() * candidates.length)];
+        if (owner[i]) continue;
+        const x = i % W, y = (i / W) | 0;
+        let clear = true;
+        for (let dy = -1; dy <= 1 && clear; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx >= 0 && xx < W && yy >= 0 && yy < H && owner[yy * W + xx] && owner[yy * W + xx] !== p + 1) { clear = false; break; }
+        }
+        if (!clear) continue;
+        const distance = centers.length ? Math.min(...centers.map(([cx, cy]) => (x - cx) ** 2 + (y - cy) ** 2)) : Infinity;
+        if (distance > farthest) { farthest = distance; start = i; }
+      }
+      if (start < 0 || (centers.length && farthest < (radius * 1.45) ** 2)) { failed = true; break; }
+      const cx = start % W, cy = (start / W) | 0;
+      centers.push([cx, cy]);
+      const heap = [], queued = new Uint8Array(W * H), label = p + 1;
+      const priorPatchTouches = (i) => {
+        const x = i % W, y = (i / W) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx >= 0 && xx < W && yy >= 0 && yy < H) {
+            const n = owner[yy * W + xx];
+            if (n && n !== label) return true;
+          }
+        }
+        return false;
+      };
+      const score = (i) => {
+        const x = i % W, y = (i / W) | 0;
+        return (x - cx) ** 2 + (y - cy) ** 2 + noise(x / 7 + p * 31, y / 7 + p * 31) * radius * 8;
+      };
+      const push = (i) => {
+        if (i < 0 || i >= owner.length || !allowed[i] || queued[i] || owner[i] || priorPatchTouches(i)) return;
+        queued[i] = 1;
+        const item = { i, score: score(i) };
+        let k = heap.length;
+        heap.push(item);
+        while (k) {
+          const parent = (k - 1) >> 1;
+          if (heap[parent].score <= item.score) break;
+          heap[k] = heap[parent]; k = parent;
+        }
+        heap[k] = item;
+      };
+      const pop = () => {
+        const first = heap[0], last = heap.pop();
+        if (heap.length) {
+          let k = 0;
+          while (true) {
+            const left = k * 2 + 1, right = left + 1;
+            if (left >= heap.length) break;
+            const child = right < heap.length && heap[right].score < heap[left].score ? right : left;
+            if (heap[child].score >= last.score) break;
+            heap[k] = heap[child]; k = child;
+          }
+          heap[k] = last;
+        }
+        return first.i;
+      };
+      owner[start] = label;
+      let filled = 1;
+      if (cy > 0) push(start - W);
+      if (cy + 1 < H) push(start + W);
+      if (cx > 0) push(start - 1);
+      if (cx + 1 < W) push(start + 1);
+      while (filled < sizes[p] && heap.length) {
+        const i = pop();
+        if (owner[i] || priorPatchTouches(i)) continue;
+        owner[i] = label; filled++;
+        const x = i % W, y = (i / W) | 0;
+        if (y > 0) push(i - W);
+        if (y + 1 < H) push(i + W);
+        if (x > 0) push(i - 1);
+        if (x + 1 < W) push(i + 1);
+      }
+      if (filled < sizes[p]) failed = true;
+    }
+    if (failed) continue;
+    for (let i = 0; i < owner.length; i++) if (owner[i]) place(i);
+    return true;
+  }
+  return false;
+}
 
 function tryMap(seed, rules, players) {
   const rnd = mulberry32(seed), noise = makeNoise(seed ^ 0x5bd1e995);
@@ -82,7 +181,7 @@ function tryMap(seed, rules, players) {
   // bij noBases (Arnhem): geen bases plaatsen, spawn gaat op willekeurige plek
   const lakeExclude = lakeExclusion(of('lake'), noise, band);
   const bases = rules.noBases ? [] : placeBases(players, rnd, isBorder, [...villages, ...parks], rivers, pt, rules, lakeExclude);
-  const zone = protectedZone(bases);
+  const zone = protectedZone(bases, rules.terrainClusterClearance?.ice || 0);
 
   // ---------- 2. Vaste kenmerken ----------
   // het dorp zelf (een ellips in het dorpsvak): daar geen bos, rotsen of plassen
@@ -154,10 +253,10 @@ function tryMap(seed, rules, players) {
   const riverCells = [];
   rivers.forEach((f, k) => {
     const width = f.width * T, half = width / 2;
-    const path = routePath(pt(f.from), pt(f.to), zone, half + 2 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 300 + k, f.wiggle ?? 0.12);
+    const path = f.inEdge ? [pt(f.from), pt(f.to)] : routePath(pt(f.from), pt(f.to), zone, half + 2 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 300 + k, f.wiggle ?? 0.12);
     const mine = [];
     stroke(path, half, (i) => {
-      if ((!f.inEdge && border[i]) || zone[i] || villageMask[i]) return;
+      if (!f.inEdge && (border[i] || zone[i] || villageMask[i])) return;
       if (f.frozen) setClass(i, 'ice'); else { map[i] = WATER; fixedClass[i] = 1; }
       mine.push(i);
     });
@@ -527,6 +626,13 @@ function tryMap(seed, rules, players) {
         map[i] = ROCK; have.rock++;
       }
     }
+  }
+  // Kaarten met een vast aantal rotsvelden gebruiken verbonden groeigebieden.
+  if (rk.clusters) {
+    const canRock = freeNoRoad(freeIn(rk.in));
+    const candidates = [];
+    for (let i = 0; i < N; i++) if (canRock(i)) candidates.push(i);
+    if (!growPatches(rk.clusters, Math.max(0, Math.round(target('rock') - have.rock)), candidates, (i) => { map[i] = ROCK; have.rock++; }, seed + 11, noise)) throw new Error('CLUSTERS');
   } else {
     blobs(ROCK, 'rock', target('rock'), (rk.size?.[0] ?? 0.6) * T, (rk.size?.[1] ?? 2) * T, 11, freeNoRoad(freeIn(rk.in)), rk.in && areaOf(rk.in));
   }
@@ -544,7 +650,23 @@ function tryMap(seed, rules, players) {
   for (const p of parks) for (let i = 0; i < N; i++) if (parkMask[i] && map[i] === DIRT && !fixedClass[i] && CLASS.normal !== undefined) { terrain[i] = CLASS.normal; fixedClass[i] = 1; }
   fillClasses(map, terrain, fixedClass, border, groundClasses, pct, P, seed, undefined, rules.noiseScale);
 
-  // begroeiing weghalen op uitgesloten terreinklassen (bv. bocage niet op moeras)
+  const clusteredTerrain = new Uint8Array(N);
+  for (const [name, count] of Object.entries(rules.terrainClusters || {})) {
+    const cls = CLASS[name], base = groundClasses.find((k) => k !== name);
+    if (cls === undefined || !base) throw new Error(`Onbekende terreincluster: ${name}`);
+    let fixed = 0;
+    for (let i = 0; i < N; i++) {
+      if ((map[i] !== DIRT && map[i] !== EMPTY_CELL) || terrain[i] !== cls) continue;
+      if (fixedClass[i]) fixed++;
+      else terrain[i] = CLASS[base];
+    }
+    const candidates = [];
+    for (let i = 0; i < N; i++) if (map[i] === DIRT && !fixedClass[i] && !zone[i] && !villageMask[i] && !border[i] && !clusteredTerrain[i]) candidates.push(i);
+    const remaining = Math.max(0, Math.round(target(name) - fixed));
+    if (!growPatches(count, remaining, candidates, (i) => { terrain[i] = cls; clusteredTerrain[i] = 1; }, seed + cls * 101, noise)) throw new Error('CLUSTERS');
+  }
+
+  // Pas klasse-uitsluitingen toe nadat geclusterde terreinen hun definitieve klasse hebben.
   if (vcfg?.excludeClasses) {
     const ex = new Set(vcfg.excludeClasses.map((n) => CLASS[n]));
     for (let i = 0; i < N; i++) {
@@ -570,8 +692,14 @@ function tryMap(seed, rules, players) {
     connectBases(map, bases, isBorder, band);
     ensureWeatherRoutes(map, terrain, bases, isBorder, rules);
   }
+  if (rules.rocks?.clusters) {
+    const patches = components(Uint8Array.from(map, (cell, i) => cell === ROCK && !border[i])).sort((a, b) => b.cells - a.cells);
+    for (const patch of patches.slice(rules.rocks.clusters)) for (const i of patch.list) map[i] = DIRT;
+  }
   const { fields, mines } = rules.mines ? addMines(map, terrain, bases, rnd, Math.max(2, Math.round((8 * W * H) / 100000)), rules.mineClass) : { fields: [], mines: [] };
   mirrorEdge(map, terrain, veg, band);
+  // Tunneler-zomer en -winter hebben een rotswand aan de rand in plaats van spiegelbeeldgrond.
+  if (rules.rockEdge) for (let i = 0; i < N; i++) if (border[i]) map[i] = ROCK;
 
   const w = {
     map, terrain, track: new Uint16Array(N), veg, vegHp: Uint8Array.from(vegHp), scar: new Uint8Array(N),
@@ -651,7 +779,11 @@ function densify(path) {
 // kunnen bereiken. Op een kopie alle veranderingen doen; lukt het niet, dan wordt de doorgang
 // die connectBases graaft een dam van harde grond.
 function ensureWeatherRoutes(map, terrain, bases, isBorder, rules) {
-  ensureThawRoute(map, terrain, bases, isBorder, edgeBand(rules));
+  let hasThaw = false;
+  for (let round = 2; round <= 8 && !hasThaw; round++) {
+    hasThaw = terrainChangesAt(rules, round).some(({ change }) => change.type === 'thaw');
+  }
+  if (hasThaw) ensureThawRoute(map, terrain, bases, isBorder, edgeBand(rules));
   // alle rondes nadoen (de inundatie stijgt elke ronde verder); de dooi doet ensureThawRoute
   const w = { map: map.slice(), terrain: terrain.slice(), track: new Uint16Array(map.length), scar: new Uint8Array(map.length), veg: new Uint16Array(map.length) };
   let any = false;
@@ -771,12 +903,12 @@ function placeBases(n, rnd, isBorder, villages, rivers, pt, rules, lakeExclude) 
 }
 
 // Beschermde zone (§6.1): de basis plus 3 T, en de vrije stroken voor de deuren
-function protectedZone(bases) {
-  const zone = new Uint8Array(W * H), hw = BASE_W >> 1, hh = BASE_H >> 1, pad = 3 * T;
+function protectedZone(bases, clearance = 0) {
+  const zone = new Uint8Array(W * H), hw = BASE_W >> 1, hh = BASE_H >> 1, pad = 3 * T + clearance;
   for (const b of bases) {
     for (let y = b.y - hh - pad; y <= b.y + hh + pad; y++) for (let x = b.x - hw - pad; x <= b.x + hw + pad; x++) if (inBounds(x, y)) zone[y * W + x] = 1;
-    for (let y = b.y - hh - DOOR_CLEAR - 2; y <= b.y + hh + DOOR_CLEAR + 2; y++) {
-      for (let x = b.x - 2 * T; x <= b.x + 2 * T; x++) if (inBounds(x, y)) zone[y * W + x] = 1;
+    for (let y = b.y - hh - DOOR_CLEAR - clearance - 2; y <= b.y + hh + DOOR_CLEAR + clearance + 2; y++) {
+      for (let x = b.x - 2 * T - clearance; x <= b.x + 2 * T + clearance; x++) if (inBounds(x, y)) zone[y * W + x] = 1;
     }
   }
   return zone;
@@ -1069,7 +1201,7 @@ function mirrorEdge(map, terrain, veg, band) {
       if (sx === x && sy === y) continue;
       const i = y * W + x, j = sy * W + sx, c = map[j];
       terrain[i] = terrain[j];
-      map[i] = c === BUILDING || c >= WALL ? DIRT : c;
+      map[i] = map[i] === WATER ? WATER : c === BUILDING || c >= WALL ? DIRT : c;
       veg[i] = c === VEG ? veg[j] : 0;
     }
   }

@@ -23,7 +23,8 @@ export default { // §10.4
   water: { label: 'Open water', color: '#1e2e38' },
   vegetation: { type: 'birch', label: 'Berken en dennen', color: '#5a6e50', groundAfter: 'soft', spacing: 2 },
   noPonds: true,
-  iceBreak: 0.02,
+  iceBreak: 0.02,       // breakkans per passage bij blokwisseling (alleen als langzaam)
+  iceSlowBreak: 0.04,   // breakkans per seconde bij stilstaan/langzaam op ijs
   features: [
     // breed bevroren meer: van rechts tot voorbij het midden (2/3 van de kaart)
     { type: 'lake', cx: 0.65, cy: 0.5, rx: 0.33, ry: 0.42, frozen: true, irregular: true,

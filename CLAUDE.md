@@ -110,15 +110,17 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - **Geen loopgraven bij Koersk** (en geen zigzag-optie in de kaartmaker): één zandweg met de brug.
 - **Geen metrotunnels in Berlijn.** Geen aparte pagina's per map: alles via de spelpagina.
 - Een weggeschoten plant ruimt alles binnen 4 cellen op (`FELL.clearRadius`), zodat een tank erdoor past.
-- **Geen rotsrand om de kaart.** Langs de rand ligt een onbegaanbare strook van 2 tankbreedtes
-  (`EDGE.band`): het terrein loopt erin door (spiegelbeeld) en wordt naar buiten zwart. Regel:
-  `playable` in `world.js`; niet voor de retrokaart.
+- **Geen rotsrand om de kaart**, behalve op Tunneler-winter: daar is de onbegaanbare randstrook van
+  2 tankbreedtes (`EDGE.band`) gevuld met rotsblokken uit de winteratlas. Op andere kaarten loopt het
+  terrein in de strook door (spiegelbeeld). Regel: `playable` in `world.js`; niet voor de retrokaart.
 - Huizen zijn groter dan een tank (`BUILDINGS.footprints`, ~1,7 × de tekening); bomen 7–10 cellen,
   kruinen hangen hoogstens `OBJECTS.overhang` cel over open grond.
 - K = zelfvernietiging: dood, telt voor niemand als kill.
-- De minikaart staat aan via `DISPLAY.minimap` (per map te overschrijven). Er staat alleen je eigen
-  tank, je eigen basis, het terrein en brandstof/munitie op: geen tunnels, sporen, andere bases of
-  andere tanks.
+- De minikaart staat aan via `DISPLAY.minimap` (per map te overschrijven) en de host kan hem in de
+  wachtkamer uitzetten; dan is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter
+  staat hij standaard uit. Er staat alleen je eigen tank, je eigen basis, het terrein en
+  brandstof/munitie op: geen tunnels, sporen, andere bases of andere tanks. Tijdens zand- en
+  sneeuwstormen is de minikaart tijdelijk verborgen.
 - **Zijpaneel is op elke map hetzelfde:** je tankkaart (zonder "jij"), dan de minikaart, dan de
   legenda. Verder niets. Uitzondering: op een liggende telefoon (`pointer: coarse` en hoogte ≤ 500 px)
   wordt het een kleine HUD rechtsboven (tankkaart + minikaart, geen legenda), via `touch.css`.

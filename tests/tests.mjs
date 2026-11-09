@@ -279,10 +279,11 @@ export const tests = [
     name: 'weer: regels per ronde en timer, kleinste zichtstraal, mist die optrekt, regen alleen bij water',
     async run() {
       const A = G.MAPS.ardennen;
-      // Ardennen §10.8: pulsende mist (2 → 12 in 30 s, dan 30 s helder, herhaalt), storm met willekeurig interval, vanaf ronde 3 opklaring
+      // Ardennen §10.8: pulsende mist (2 → 12 in 60 s, dan 30 s helder, herhaalt), storm met willekeurig interval, vanaf ronde 3 opklaring
       check(Wx.weatherAt(A, 1, 0, 0).visibility === 2, 'mist begint niet op 2 T');
-      check(Wx.weatherAt(A, 1, 35, 35).visibility === 12, 'mist na 35 s niet helder (pulse)');
-      check(Wx.weatherAt(A, 1, 65, 65).visibility < 12, 'mist na 65 s niet weer terug (pulse)');
+      check(Wx.weatherAt(A, 1, 35, 35).visibility < 12, 'mist na 35 s al helder (pulse)');
+      check(Wx.weatherAt(A, 1, 62, 62).visibility === 12, 'mist na 62 s niet helder (pulse)');
+      check(Wx.weatherAt(A, 1, 95, 95).visibility < 12, 'mist na 95 s niet weer terug (pulse)');
       check(Wx.weatherAt(A, 2, 200, 0).flags.fog && !Wx.weatherAt(A, 3, 200, 0).flags.fog, 'opklaring vanaf ronde 3');
       // terugkerend weer vanaf een ronde, en een sporenwisser alleen bij water
       const rules = { weather: [{ label: 'Regenbui', from: { round: 2 }, every: 120, duration: 20, effect: { visibility: 8, trackEraser: 'nearWater' } }] };
@@ -1131,6 +1132,31 @@ export const tests = [
       for (let t = 0; t < 200 * 30 && !eraserR5; t += 10) if (Wx.weatherAt(cfg, 5, t, t).eraser) eraserR5 = true;
       check(eraserR4 && !eraserR5, 'sneeuwjacht gaat door na de dooi');
       return `20 kaarten, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
+    },
+  },
+  {
+    name: 'ijs: snelheidsafhankelijk breken (iceSlowBreak, Leningrad)',
+    async run() {
+      const cfg = G.MAPS.leningrad;
+      check(cfg.iceSlowBreak > 0, 'leningrad mist iceSlowBreak');
+      check(cfg.iceBreak > 0, 'leningrad mist iceBreak');
+      // Drempel: 90% van volle snelheid is veilig, daaronder breekt het ijs
+      const threshold = Math.round(0.9 * G.SPEED_ONE);
+      check(G.SPEED_ONE >= threshold, 'volle snelheid is niet boven de drempel');
+      // Bevroren motor (10% snelheid, rampFrom in de meter) is langzaam → ijs breekt
+      const frozenSlow = Math.round((cfg.meter.rampFrom ?? 0.1) * G.SPEED_ONE);
+      check(frozenSlow < threshold, `bevroren motor (${frozenSlow}) niet onder drempel (${threshold})`);
+      // Passage-breekkans (voor blokwisseling bij langzaam rijden) klopt nog
+      check(G.iceBreakChance(1, cfg.iceBreak) === cfg.iceBreak, 'iceBreakChance(1) klopt niet');
+      check(G.iceBreakChance(50, cfg.iceBreak) === 1, 'iceBreakChance(50) is niet maximaal');
+      // Per-tick kans bij stilstaan valt in een redelijk bereik
+      const perTick = cfg.iceSlowBreak / G.TICK_RATE;
+      check(perTick > 0 && perTick < 0.01, `per-tick kans ${perTick} buiten bereik`);
+      // Weermultiplicators verhogen de kans in latere rondes
+      const mul3 = Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul ?? 1;
+      const mul4 = Wx.weatherAt(cfg, 4, 10, 10).flags.iceBreakMul ?? 1;
+      check(mul3 === 2 && mul4 === 4, `weerbonus ronde 3=${mul3} ronde 4=${mul4}, verwacht 2 en 4`);
+      return `drempel ${threshold}/${G.SPEED_ONE}, bevroren motor ${frozenSlow}, kans/tick ${perTick.toFixed(5)}, weer ×${mul3}/×${mul4}`;
     },
   },
   {

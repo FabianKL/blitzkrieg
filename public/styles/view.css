@@ -45,6 +45,7 @@ aside { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12
 @keyframes blink { 50% { opacity: .25; } }
 
 #mini { width: 100%; aspect-ratio: 8 / 5; display: block; }
+#mini[hidden] { display: none; }
 .legend { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 8px; row-gap: 5px; align-items: center; }
 .legend-row { display: contents; }
 .legend-swatch { width: 22px; height: 22px; image-rendering: pixelated; }

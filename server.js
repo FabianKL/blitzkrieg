@@ -88,7 +88,8 @@ function getRoom(name, size) {
     room = {
       name, lobby, mapId, rules: G.MAPS[mapId], tick: 0, bullets: [], nextBulletId: 1, pendingEvents: [],
       tanks: new Array(G.MAX_PLAYERS).fill(null), host: -1,
-      rounds: GAME.roundsToWin, settings: { ...G.DEFAULT_SETTINGS },
+      rounds: GAME.roundsToWin,
+      settings: { ...G.DEFAULT_SETTINGS, minimap: G.minimapOn(G.MAPS[mapId]) ? 1 : 0 },
       playerCount: G.MAX_PLAYERS, gameMode: 'ffa',
     };
     rooms.set(name, room);
@@ -130,6 +131,7 @@ function configure(room, t, msg) {
   if (gm === 'teams' && pc !== 4) gm = 'ffa';
   // te veel spelers al verbonden
   if (room.tanks.filter(Boolean).length > pc) return;
+  if (mapId !== room.mapId) room.settings.minimap = G.minimapOn(rules) ? 1 : 0;
   room.playerCount = pc;
   room.gameMode = gm;
   // rondes
@@ -242,7 +244,7 @@ function spawn(room, t) {
     x = b.x; y = b.y;
   }
   Object.assign(t, {
-    x, y, dir: 0, alive: true, cooldown: 0, mv: 0, iceBlock: -1, wetTicks: 0, still: 0, buried: false,
+    x, y, dir: 0, alive: true, cooldown: 0, mv: 0, iceBlock: -1, wetTicks: 0, iceStayTicks: 0, still: 0, buried: false,
     gauge: room.rules.meter?.start ?? 0, slow: G.SPEED_ONE, meterState: {},
     fuel: max.fuel, shield: max.shield, ammo: max.ammo,
   });
@@ -372,19 +374,48 @@ const gameState = (room) => ({ round: room.round, phase: room.phase, left: Math.
 // dat als passage en gooit de server de dobbelsteen; breekt het, dan krijgen alle clients het
 // vaknummer en maken ze zelf hetzelfde wak. Staat de tank in het water, dan loopt zijn pantser
 // leeg (ICE.sinkDamagePerSecond). Geeft true als de tank daardoor dood is.
+//
+// Met iceSlowBreak (Leningrad): op volle snelheid breekt het ijs niet. Stilstaan of langzaam
+// rijden geeft een kans per seconde; de barstteller loopt altijd door (visuele feedback).
 const SINK_EVERY = Math.max(1, Math.round(G.TICK_RATE / G.ICE.sinkDamagePerSecond));
-function iceStep(room, t, events) {
+const ICE_SLOW_THRESHOLD = Math.round(0.9 * G.SPEED_ONE);
+function isSlowOnIce(t, moved) {
+  if (!moved) return true;
+  return (t.slow ?? G.SPEED_ONE) < ICE_SLOW_THRESHOLD;
+}
+function iceStep(room, t, moved, events) {
   const w = room.world, i = t.y * G.W + t.x;
   const b = G.iceBlockAt(t.x, t.y);
+  const slowBreak = room.rules.iceSlowBreak;
+  const mul = room.wx?.flags?.iceBreakMul || 1;
+
+  // Blokwisseling: passage ophogen + barstevent; breekrol alleen als langzaam (of altijd zonder iceSlowBreak)
   if (b !== t.iceBlock) {
     t.iceBlock = b;
+    t.iceStayTicks = 0;
     if (G.isIce(w, i)) {
       const n = w.ice[b] = Math.min(255, w.ice[b] + 1);
       events.push({ t: 'c', b, n, i: t.id });
-      const mul = room.wx?.flags?.iceBreakMul || 1;
-      if (Math.random() < G.iceBreakChance(n, (room.rules.iceBreak ?? G.ICE.breakPerPass) * mul)) { G.breakIce(w, b); events.push({ t: 'w', b, i: t.id }); }
+      if (!slowBreak || isSlowOnIce(t, moved)) {
+        if (Math.random() < G.iceBreakChance(n, (room.rules.iceBreak ?? G.ICE.breakPerPass) * mul)) {
+          G.breakIce(w, b); events.push({ t: 'w', b, i: t.id });
+        }
+      }
     }
   }
+
+  // Per-tick check: langzaam of stilstaand op ijs → kans per seconde (iceSlowBreak × weerbonus)
+  if (slowBreak && G.isIce(w, i) && isSlowOnIce(t, moved)) {
+    t.iceStayTicks++;
+    if (Math.random() < slowBreak / G.TICK_RATE * mul) {
+      const n = w.ice[b] = Math.min(255, (w.ice[b] || 0) + 1);
+      events.push({ t: 'c', b, n, i: t.id });
+      G.breakIce(w, b); events.push({ t: 'w', b, i: t.id });
+    }
+  } else {
+    t.iceStayTicks = 0;
+  }
+
   if (G.waterUnder(w.map, t.x, t.y, t.dir) > 0) {
     if (++t.wetTicks % SINK_EVERY === 0) t.shield = Math.max(0, t.shield - 1);
     if (t.shield === 0) { kill(room, t, null, events); return true; }
@@ -528,7 +559,7 @@ function stepTank(room, t, live, events) {
     events.push({ t: 'b', id: b.id, x: b.x, y: b.y, d: b.d, i: t.id }); // i: wie schoot (voor de hint)
   }
 
-  if (iceStep(room, t, events)) return;
+  if (iceStep(room, t, moved, events)) return;
 
   if (t.fuel <= 0) { t.fuel = 0; kill(room, t, null, events); }
 }

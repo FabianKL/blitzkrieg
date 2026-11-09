@@ -31,7 +31,7 @@ export function createSidePanel(v) {
   const MINI_TEAM = ['#2fd04a', '#2f7fe8', '#e8352b', '#f2b51c']; // als de stijl geen minikleur heeft
   const miniColor = (id) => style.teams[id]?.mini || MINI_TEAM[id] || '#ffffff';
   function paintMini(x, y) {
-    if (!miniCanvas || !G.minimapOn(game.rules)) return;
+    if (!miniCanvas || !G.minimapOn(game.rules, game.settings?.minimap)) return;
     const c = at(x, y), idx = y * G.W + x, i = idx * 4;
     const own = c === G.BASE + game.me || c === G.WALL + game.me;
     let col;
@@ -59,7 +59,7 @@ export function createSidePanel(v) {
     const now = performance.now();
     if (!miniCanvas || !game.map || now - lastMini < 100) return;
     lastMini = now;
-    const on = G.minimapOn(game.rules) && !game.weather?.flags?.hidesMinimap;
+    const on = G.minimapOn(game.rules, game.settings?.minimap) && !game.weather?.flags?.hidesMinimap;
     if (miniCanvas.hidden === on) {
       miniCanvas.hidden = !on;
       for (const el of document.querySelectorAll('[data-minimap]')) el.hidden = !on;

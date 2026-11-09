@@ -7,7 +7,6 @@ export default { // §10.6
     setting: 'Juni 1944. D-Day: na de landing in Normandië vechten de geallieerden om het strategische stadje Carentan.',
     terrain: 'Normandisch bocagelandschap met dichte heggen rond de weilanden, moeras en modder langs de dijkweg.',
     weather: 'Ochtendmist in de eerste ronde, daarna wisselend bewolkt met felle regenbuien met onweer die sporen bij het water wissen.',
-    special: 'Antitankgeschut bewaakt het slagveld — twee verborgen kanonnen vuren op tanks in hun boog. Verniel ze voordat ze jou raken.',
   },
   terrainPercent: { normal: 46, marsh: 17, vegetation: 15, paved: 8, hard: 7, soft: 6, rock: 1 },
   classes: {
@@ -27,7 +26,6 @@ export default { // §10.6
     { type: 'road', from: [0.75, 0.25], to: [0.9, 1], width: 2 },
   ],
   sideRoadZone: [0.5, 0, 1, 1],
-  hazard: { type: 'atGuns', count: 2, coneDegrees: 45, rangeT: 10, everySeconds: 4, armorLoss: 25, hp: 4 },
   look: { grade: { saturation: -0.05, tint: '#e6f0e0', tintStrength: 0.08 }, noise: { strength: 0.08 } },
   tunnelColor: '#4a3a22',
   weather: [

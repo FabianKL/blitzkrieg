@@ -16,7 +16,7 @@
 // zichtmasker: altijd te zien (de tunnel eronder niet).
 // Ontbreekt de atlas of een soort, dan geeft load() false en tekent de stijl de oude objecten.
 import * as G from '/shared/game.js';
-import { OBJECTS } from '/shared/config.js';
+import { EDGE, OBJECTS } from '/shared/config.js';
 import { Container, Sprite, Texture, ImageSource, Spritesheet } from 'pixi.js';
 import { hash, TILE } from '/render-common.js';
 import { loadManifest, loadImage, has, report } from '/assets.js';
@@ -27,7 +27,7 @@ const KIND = { pine: 'den', tree: 'loof', hedge: 'heg', shrub: 'struik', birch: 
 
 // under/over: containers onder en boven de tanks, shadows: schaduwlaag, craters: container in de
 // laag met het omgekeerde zichtmasker, shadowColor: kleur van de schaduw
-export function createObjectView({ under, over, shadows, craters, game, shadowColor }) {
+export function createObjectView({ under, over, shadows, craters, edgeRockLayer, game, shadowColor }) {
   let sheet = null, sheetStyle = '', look = null, active = false;
   let kinds = null, coast = null; // soorten met hun aandeel, afstand tot zee (palmen)
   let tiles = []; // per tegel {under, over, shadow, list: [{name, x, y, s, rot}]}
@@ -58,7 +58,7 @@ export function createObjectView({ under, over, shadows, craters, game, shadowCo
 
   // Welke soorten deze kaart gebruikt: vegetation.sprites ({soort: aandeel}) of de soort uit vegetation.type
   function kindsFor(rules) {
-    const v = rules.vegetation || {}, own = v.sprites || { [KIND[v.type] || 'loof']: 1 };
+    const v = rules.vegetation || {}, own = v.sprites || (v.type ? { [KIND[v.type] || 'loof']: 1 } : {});
     const list = Object.entries(own).map(([name, share]) => ({ name, share, v: variants(name), kapot: hasKapot(name) ? variants(`${name}-kapot`) : [] }));
     if (v.palmCoast) list.palm = { name: 'palm', v: variants('palm'), kapot: hasKapot('palm') ? variants('palm-kapot') : [] };
     return list;
@@ -197,6 +197,32 @@ export function createObjectView({ under, over, shadows, craters, game, shadowCo
     for (const tile of tiles) for (const c of [tile.under, tile.over, tile.shadow]) c.destroy({ children: true });
     tiles = [];
     for (const c of craters.removeChildren()) c.destroy();
+    for (const s of edgeRockLayer.removeChildren()) s.destroy();
+  }
+
+  function buildRockEdge() {
+    if (!game.rules?.rockEdge || !G.BAND) return;
+    const v = variants('rots');
+    if (!v.length) return;
+    const sides = [true, true, false, false];
+    for (let side = 0; side < sides.length; side++) {
+      const horizontal = sides[side], length = horizontal ? G.W : G.H;
+      const count = Math.ceil(length / EDGE.rockStep);
+      for (let row = 0; row < EDGE.rockRows; row++) {
+        const offset = G.BAND * (row + 0.5) / EDGE.rockRows;
+        const fixed = side === 0 ? offset : side === 1 ? G.H - offset : side === 2 ? offset : G.W - offset;
+        for (let k = -1; k <= count; k++) {
+          const rnd = G.mulberry32(hash(k + side * (count + 1), row + side * EDGE.rockRows));
+          const pos = (k + rnd()) * EDGE.rockStep;
+          const name = v[Math.floor(rnd() * v.length)], s = new Sprite(sheet.textures[name]);
+          s.anchor.set(0.5);
+          s.position.set(horizontal ? pos : fixed, horizontal ? fixed : pos);
+          s.scale.set(EDGE.rockScale / PX);
+          s.rotation = (rnd() - 0.5) * 2 * OBJECTS.turn;
+          edgeRockLayer.addChild(s);
+        }
+      }
+    }
   }
 
   // Nieuwe kaart. Geeft true als de sprites er zijn, false als de stijl zijn eigen objecten tekent.
@@ -206,6 +232,7 @@ export function createObjectView({ under, over, shadows, craters, game, shadowCo
     active = false;
     const style = game.rules?.style || 'zomer', map = game.map;
     if (!await loadSheet(style) || game.map !== map) { report.objects = 'getekend (geen atlas)'; return false; }
+    buildRockEdge();
     kinds = kindsFor(game.rules || {});
     const missing = [...kinds, ...(kinds.palm ? [kinds.palm] : [])].filter((k) => !k.v.length).map((k) => k.name);
     if (missing.length) { report.objects = `getekend (niet in de atlas: ${missing.join(', ')})`; return false; }

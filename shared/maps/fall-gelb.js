@@ -5,7 +5,7 @@ export default { // §10.1
   tanks: { A: 'landsverk', B: 'panther' },
   desc: {
     setting: 'Mei 1940. De Duitse invasie van Nederland begint. Bij de Grebbeberg verdedigt het Nederlandse leger de Grebbelinie tegen een overmacht.',
-    terrain: 'Weilanden in de vallei, een beboste heuvel centraal, en de rivier aan de bovenrand. Het inundatiewater stijgt vanuit de rivier richting de heuvel.',
+    terrain: 'Weilanden in de vallei en een groene, beboste heuvel met begroeide flanken over de volle breedte. Het inundatiewater stijgt vanuit de rivier aan de bovenrand richting de heuvel.',
     weather: 'Vanaf ronde 2 stijgt het inundatiewater in de vallei. In ronde 3 maakt regen het zicht slechter.',
     special: 'Munitie alleen bij het depot in Rhenen. Het stijgende water maakt de vallei steeds moeilijker begaanbaar — maar over de heuvel ben je sneller.',
   },
@@ -23,16 +23,16 @@ export default { // §10.1
   vegetation: { type: 'tree', label: 'Loofbossen', color: '#2f4a24', groundAfter: 'hard', in: 'heuvel' },
   noPonds: true,
   features: [
-    // vallei bovenaan (waar het inundatiewater stijgt), heuvel centraal onderaan
+    // vallei bovenaan (waar het inundatiewater stijgt), heuvel onderaan over de volle breedte
     { type: 'area', name: 'vallei', rect: [0, 0, 1, 0.55], classes: { normal: 50, soft: 34, marsh: 16 } },
-    { type: 'area', name: 'heuvel', rect: [0.1, 0.5, 0.9, 1], classes: { hard: 20, normal: 80 } },
+    { type: 'area', name: 'heuvel', rect: [0, 0.5, 1, 1], classes: { hard: 20, normal: 80 } },
     // rivier in de onbegaanbare bovenrand (bron van het inundatiewater, 2T breed)
     { type: 'river', from: [0, 0.01], to: [1, 0.01], width: 2, bridges: false, inEdge: true },
     { type: 'village', at: [0.35, 0.7], size: 0.07, name: 'Rhenen', buildings: [4, 6], landmark: 'kerk', depot: 'ammo' },
     { type: 'village', at: [0.65, 0.7], size: 0.05, name: 'Achterberg', buildings: [2, 4], depot: 'ammo' },
     // weg van vallei naar het dorp op de heuvel, en een weg over de heuvel
     { type: 'road', from: [0.5, 0.1], to: [0.35, 0.7], width: 2 },
-    { type: 'road', from: [0.2, 0.8], to: [0.8, 0.8], width: 2 },
+    { type: 'road', from: [0.35, 0.7], to: [0.8, 0.8], width: 2 },
   ],
   refill: { ammo: false },
   scarce: { type: 'ammoDepot', perSecond: 5, radiusT: 2.5 },

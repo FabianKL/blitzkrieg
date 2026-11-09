@@ -22,21 +22,14 @@ game.visionOverlay = true;
 window.blitz = { game }; // voor de console en de tests
 touchControls($('panel'), game, $('view'));
 
-// ZICHT AAN/UIT — knoppen in de balk en in de lobby delen dezelfde toggle
+// Zichtoverlay: alleen instelbaar via de checkbox in de wachtkamer.
 const VISION_KEY = 'blitzkrieg.zicht';
 try { game.visionOverlay = localStorage.getItem(VISION_KEY) !== 'uit'; } catch { /* geen opslag */ }
-const visionBtns = [$('vision'), $('lobby-vision')].filter(Boolean);
 const syncVisionLabels = () => {
-  const txt = game.visionOverlay ? 'ZICHT AAN' : 'ZICHT UIT';
-  for (const b of visionBtns) b.textContent = txt;
+  const cb = $('set-vision');
+  if (cb) cb.checked = game.visionOverlay;
 };
 syncVisionLabels();
-for (const btn of visionBtns) btn.addEventListener('click', () => {
-  btn.blur();
-  game.visionOverlay = !game.visionOverlay;
-  try { localStorage.setItem(VISION_KEY, game.visionOverlay ? 'aan' : 'uit'); } catch {}
-  syncVisionLabels();
-});
 
 // ---------- Lobby ----------
 const STYLE_ICON = { zomer: '☀', winter: '❄', woestijn: '🏜' };
@@ -109,19 +102,50 @@ for (const r of G.ROUND_OPTIONS) {
 }
 $('lobby-rounds').addEventListener('change', () => { sendConfig(); $('lobby-rounds').blur(); });
 
-// Instellingen (eenmalig opbouwen)
+// Instellingen opbouwen in kolommen: toggles → checkboxes, rest → selects
+const OPTIES_KEYS = new Set(['stormFreq']);
 for (const [key, def] of Object.entries(G.LOBBY_SETTINGS)) {
-  const label = document.createElement('label');
-  const select = document.createElement('select');
-  select.id = `set-${key}`;
-  for (const [val, text] of def.options) select.add(new Option(text, String(val)));
-  select.value = String(def.default);
-  select.addEventListener('change', () => { sendConfig(); select.blur(); });
-  label.textContent = def.label + ' ';
-  label.append(select);
-  $('lobby-settings').append(label);
+  const col = def.type === 'toggle' || OPTIES_KEYS.has(key)
+    ? $('lobby-col-opties') : $('lobby-col-voorraden');
+  if (def.type === 'toggle') {
+    const label = document.createElement('label');
+    label.className = 'lobby-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.id = `set-${key}`;
+    const onVal = def.options.find(([, t]) => t === 'Aan')?.[0] ?? 1;
+    const offVal = def.options.find(([, t]) => t === 'Uit')?.[0] ?? 0;
+    cb.dataset.on = String(onVal); cb.dataset.off = String(offVal);
+    cb.checked = String(def.default) === cb.dataset.on;
+    cb.addEventListener('change', () => sendConfig());
+    label.append(cb, ` ${def.label}`);
+    col.append(label);
+  } else {
+    const label = document.createElement('label');
+    const select = document.createElement('select');
+    select.id = `set-${key}`;
+    for (const [val, text] of def.options) select.add(new Option(text, String(val)));
+    select.value = String(def.default);
+    select.addEventListener('change', () => { sendConfig(); select.blur(); });
+    label.textContent = def.label + ' ';
+    label.append(select);
+    col.append(label);
+  }
 }
-
+// Zicht-checkbox (niet onderdeel van LOBBY_SETTINGS, leeft op de client)
+{
+  const label = document.createElement('label');
+  label.className = 'lobby-check';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.id = 'set-vision';
+  cb.checked = game.visionOverlay;
+  cb.addEventListener('change', () => {
+    game.visionOverlay = cb.checked;
+    try { localStorage.setItem(VISION_KEY, game.visionOverlay ? 'aan' : 'uit'); } catch {}
+    syncVisionLabels();
+  });
+  label.append(cb, ' Zicht');
+  $('lobby-col-opties').append(label);
+}
 // Naam
 $('lobby-naam').value = savedName;
 $('lobby-naam').addEventListener('input', () => {
@@ -135,10 +159,16 @@ $('lobby-start').addEventListener('click', () => { game.send({ t: 'start' }); $(
 
 // Config naar de server: kaart, grootte, rondes en instellingen
 function sendConfig(mapOverride) {
+  if (mapOverride && mapOverride !== game.mapId) {
+    $('set-minimap').checked = G.minimapOn(G.MAPS[mapOverride]);
+  }
   const settings = {};
-  for (const [key, def] of Object.entries(G.LOBBY_SETTINGS)) {
+  for (const [key] of Object.entries(G.LOBBY_SETTINGS)) {
     const el = document.getElementById(`set-${key}`);
-    if (el) settings[key] = Number(el.value);
+    if (!el) continue;
+    settings[key] = el.type === 'checkbox'
+      ? Number(el.checked ? el.dataset.on : el.dataset.off)
+      : Number(el.value);
   }
   game.send({
     t: 'cfg',
@@ -207,7 +237,7 @@ function showView() {
 }
 
 addEventListener('keydown', (event) => {
-  if (game.status !== 'playing' || game.lobby || !view) return;
+  if (game.status !== 'playing' || (game.lobby && game.game.phase === 'lobby') || !view) return;
   const tag = event.target?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   const delta = event.code === 'Digit9' || event.code === 'Numpad9' ? CAMERA_ZOOM.step
@@ -284,11 +314,16 @@ function syncLobbyControls(isHost) {
   syncPlayerDropdown();
   const players = game.tanks.size;
   for (const opt of $('lobby-size').options) opt.disabled = G.MAP_SIZES[opt.value].maxPlayers < players && opt.value !== game.size;
-  // instellingen syncen
+  // instellingen syncen (checkboxes en selects)
   for (const [key] of Object.entries(G.LOBBY_SETTINGS)) {
     const el = document.getElementById(`set-${key}`);
     const val = game.settings?.[key];
-    if (el && val !== undefined && el.value !== String(val)) el.value = String(val);
+    if (!el || val === undefined) continue;
+    if (el.type === 'checkbox') {
+      el.checked = String(val) === el.dataset.on;
+    } else {
+      if (el.value !== String(val)) el.value = String(val);
+    }
   }
   // host-klasse: gasten kunnen niets aanpassen
   $('lobby').classList.toggle('host', isHost);
@@ -296,7 +331,7 @@ function syncLobbyControls(isHost) {
 
 // ---------- Titel en status ----------
 function update() {
-  if (game.status === 'left') { $('stop').textContent = 'OPNIEUW MEEDOEN'; $('stop').hidden = false; $('choose').hidden = true; return; }
+  if (game.status === 'left') { $('stop').textContent = 'OPNIEUW MEEDOEN'; $('stop').hidden = false; $('choose').hidden = true; $('lobby-start').hidden = true; return; }
   if (!game.mapId) return;
   const rules = game.rules || {}, players = game.tanks.size;
   const isHost = game.me === game.host;
@@ -319,6 +354,7 @@ function update() {
   if ($('header').textContent !== header + size) { $('header').textContent = header + size; document.title = `BLITZKRIEG ${header}`; }
   $('header').hidden = false;
 
+  $('lobby-start').hidden = !inLobby || !isHost;
   $('stop').hidden = !game.lobby || inLobby || game.status !== 'playing';
   if ($('map').value !== game.mapId) $('map').value = game.mapId;
   if ($('size').value !== game.size) $('size').value = game.size;

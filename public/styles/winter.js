@@ -270,7 +270,7 @@ function onEvent(e, spawn) {
 // ---------- Mist ----------
 // Witte mist zolang het weer de vlag fog heeft (Ardennen: begin van ronde 1 en 2). Hoe ver
 // hij is opgetrokken komt uit het weer, dus bij iedereen even ver.
-const FOG_SECONDS = 120; // alleen voor de tekst; de echte duur staat in het weer (config)
+const FOG_SECONDS = 60; // alleen voor de tekst; de echte duur staat in het weer (config)
 const FOG_CLEAR_START = 9; // zicht rond je tank bij de start, in cellen
 const FOG_CLEAR_END = 70; // zicht vlak voordat de mist helemaal weg is
 

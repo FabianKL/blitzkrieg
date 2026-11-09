@@ -69,23 +69,24 @@
     .lobby-chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .lobby-chip { display: flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 8px; background: rgba(255,255,255,.04); border-radius: 3px; }
     .lobby-swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
-    .lobby-footer { flex: none; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px; }
-    .lobby-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
-    .lobby-naam { font: inherit; font-size: 14px; color: var(--cream); background: #171510; border: 1px solid var(--line); padding: 5px 10px; border-radius: 3px; width: 180px; }
+    .lobby-controls { flex: 0 0 220px; display: flex; flex-direction: column; gap: 14px; padding: 16px 0; border-left: 1px solid var(--line); padding-left: 24px; overflow-y: auto; }
+    .lobby-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .lobby-naam { font: inherit; font-size: 13px; color: var(--cream); background: #171510; border: 1px solid var(--line); padding: 4px 8px; border-radius: 3px; width: 100%; max-width: 160px; }
     .lobby-naam::placeholder { color: var(--dim); opacity: .6; }
     .lobby-player { display: flex; align-items: center; gap: 5px; font-size: 13px; }
     .lobby-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
     .lobby-team { font: 400 10px/1 "Black Ops One", Impact, sans-serif; letter-spacing: 1px; color: var(--dim); }
-    .lobby-settings { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-    .lobby-settings label { font-size: 11px; }
-    .lobby-start-btn { font-size: 16px !important; padding: 8px 28px !important; }
+    .lobby-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .lobby-col-title { font: 400 11px/1 "Black Ops One", Impact, sans-serif; letter-spacing: 2px; color: var(--dim); margin-bottom: 2px; }
+    .lobby-col label { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+    .lobby-check { cursor: pointer; }
+    .lobby-check input[type="checkbox"] { accent-color: var(--red); width: 15px; height: 15px; cursor: pointer; margin: 0; }
     #lobby:not(.host) .lobby-map-item { pointer-events: none; cursor: default; }
     #lobby:not(.host) .lobby-map-item:hover { background: none; }
     #lobby:not(.host) .lobby-map-item.active { border-color: var(--line); }
-    #lobby:not(.host) .lobby-footer select { pointer-events: none; opacity: .6; }
+    #lobby:not(.host) .lobby-col select,
+    #lobby:not(.host) .lobby-col input[type="checkbox"] { pointer-events: none; opacity: .6; }
     #lobby-mode-label[hidden] { display: none; }
-    #lobby:not(.host) .lobby-settings select { pointer-events: none; opacity: .6; }
-    #lobby:not(.host) .lobby-start-btn { display: none; }
     .lobby-guest-label { display: none; font-size: 11px; color: var(--dim); letter-spacing: 1px; font-family: "Black Ops One", Impact, sans-serif; }
     #lobby:not(.host) .lobby-guest-label { display: block; }
     @media (max-width: 700px) {
@@ -133,7 +134,7 @@
     <span class="info" id="info">verbinden…</span>
     <!-- altijd helemaal rechtsboven -->
     <span class="corner">
-      <button id="vision" title="zichtveld in beeld aan of uit">ZICHT AAN</button>
+      <button id="lobby-start" hidden>START</button>
       <button id="stop" hidden title="stoppen">STOP</button>
       <button id="full" hidden title="volledig scherm">⛶ <span class="label">VOLLEDIG SCHERM</span></button>
     </span>
@@ -143,22 +144,26 @@
     <div class="lobby-body">
       <div class="lobby-maps"><h2>VELDSLAGEN</h2><div class="lobby-map-list" id="lobby-map-list"></div></div>
       <div class="lobby-brief" id="lobby-brief"></div>
-    </div>
-    <div class="lobby-footer" id="lobby-controls">
-      <div class="lobby-guest-label">GAST — de host kiest de slag</div>
-      <div class="lobby-row">
-        <label>NAAM <input type="text" class="lobby-naam" id="lobby-naam" maxlength="20" placeholder="jouw naam" autocomplete="off" spellcheck="false"></label>
-        <div id="lobby-players" style="display:flex;gap:14px;flex-wrap:wrap"></div>
+      <div class="lobby-controls" id="lobby-controls">
+        <div class="lobby-guest-label">GAST — de host kiest de slag</div>
+        <div class="lobby-row">
+          <label>NAAM <input type="text" class="lobby-naam" id="lobby-naam" maxlength="20" placeholder="jouw naam" autocomplete="off" spellcheck="false"></label>
+          <div id="lobby-players" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+        <div class="lobby-col">
+          <div class="lobby-col-title">SPEL</div>
+          <label>KAART <select id="lobby-size"></select></label>
+          <label>SPELERS <select id="lobby-playercount"></select></label>
+          <label id="lobby-mode-label">MODUS <select id="lobby-mode"></select></label>
+          <label id="lobby-rounds-label">RONDES <select id="lobby-rounds"></select></label>
+        </div>
+        <div class="lobby-col" id="lobby-col-opties">
+          <div class="lobby-col-title">OPTIES</div>
+        </div>
+        <div class="lobby-col" id="lobby-col-voorraden">
+          <div class="lobby-col-title">VOORRADEN</div>
+        </div>
       </div>
-      <div class="lobby-row">
-        <label>KAART <select id="lobby-size"></select></label>
-        <label>SPELERS <select id="lobby-playercount"></select></label>
-        <label id="lobby-mode-label">MODUS <select id="lobby-mode"></select></label>
-        <label id="lobby-rounds-label">RONDES <select id="lobby-rounds"></select></label>
-        <button id="lobby-vision" class="lobby-vision-btn" title="zichtveld in beeld aan of uit">ZICHT AAN</button>
-      </div>
-      <div class="lobby-settings" id="lobby-settings"></div>
-      <button id="lobby-start" class="lobby-start-btn">▶ START</button>
     </div>
   </section>
   <!-- Het speelveld en het zijpaneel; de stijl van de kaart (zomer, winter, woestijn) staat in

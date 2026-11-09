@@ -256,8 +256,8 @@ dat cloudrollen, WSS-ingress, lange sessies of de gekozen Azure-capaciteit al in
 ## Besturing
 
 Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = inzoomen en
-0 = uitzoomen. De zoom verandert alleen jouw weergave. Terug in je eigen basis tank, repareer en
-herlaad je.
+0 = uitzoomen. Na een zoomtoets verschijnt het zoomniveau kort bovenin beeld. De zoom verandert
+alleen jouw weergave. Terug in je eigen basis tank, repareer en herlaad je.
 
 Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de knoppen verschijnen bij
 de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
@@ -270,8 +270,10 @@ touchbesturing.
 
 Rechts staat op elke map hetzelfde: je tank (plaatje, naam, land, zeges en meters), de minikaart (terrein, je eigen basis,
 je eigen tank en waar je brandstof (B) of munitie (M) haalt; geen tunnels, andere bases of tanks) en
-de legenda van de map. Ook op de kaart zelf staat boven elke volle laadplek (depot, dropping) een
-B- of M-badge met een pulserende ring.
+de legenda van de map. Tijdens zand- en sneeuwstormen is de minikaart tijdelijk verborgen, zodat
+navigeren moeilijker wordt. Ook op de kaart zelf staat boven elke volle laadplek (depot, dropping)
+een B- of M-badge met een pulserende ring. De host kan de minikaart in de wachtkamer uitzetten; dan
+is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter staat hij standaard uit.
 
 ## Een spel
 - Wie als eerste binnenkomt is de **host**. In de wachtkamer staan bij de host naast de titel de
@@ -301,8 +303,8 @@ B- of M-badge met een pulserende ring.
   niets erlangs. Buiten de cirkel wordt het beeld steeds vager. Daar zie je alleen in je kijkboog
   nog iets: een tank die daar rijdt, zie je gewoon (geen vage contour meer). Waar je niets kunt
   zien, is het beeld donkerder en zie je geen tunnels, sporen, kraters of ijsbarsten, alleen het
-  kale terrein. Met de knop **ZICHT AAN/UIT** in de bovenste balk zet je de mist, schaduw en
-  vervaging uit; wat je niet kunt zien, blijft verborgen.
+  kale terrein. De checkbox **Zicht** in de wachtkamer zet mist, schaduw en vervaging voor jouw
+  weergave aan of uit; tijdens het spelen is er geen zichtknop. Wat je niet kunt zien, blijft verborgen.
 - **Richtingshints**: een gloed aan de rand in één van 8 richtingen bij een schot, een omgeschoten
   plant of krakend ijs van een tegenstander binnen 20 T, en bij grote gebeurtenissen overal. Zie je
   die tegenstander scherp, dan komt er geen hint.
@@ -316,6 +318,11 @@ B- of M-badge met een pulserende ring.
   niets aan tunnels, behalve de bestaande regenbui bij Carentan die bij het water sporen wist. In
   Carentan en Berlijn komen regenstormen met onweer: bliksem die voor iedereen tegelijk flitst.
 - **Gevaren en schaarse middelen** per map: zie de tabel hieronder.
+
+Op de Tunneler-zomerkaart is **25% gemengd bos**: 10% berk, 10% loofboom en 5% den. Op de
+winterkaart is **15% dennenbos** op sneeuwgrond. Beide kaarten hebben verder open terrein: er zijn
+geen rotsvelden of ijsplaten in de speelbare map. Alleen de onbegaanbare randstrook is opgebouwd
+uit rotsbloksprites uit de atlas van de stijl. Bomen zijn met twee treffers kapot te schieten.
 
 | Map | Gevaar | Schaars middel | Weer |
 |---|---|---|---|
@@ -371,11 +378,13 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
   rijhuis 20×8 (de helft gedraaid) in plaats van een willekeurige maat van T tot 2T. Een dorp kan per
   kaartgrootte een eigen maat hebben (`size: { klein, middel }`): Arnhem is op klein naar verhouding
   groter, anders passen de huizen niet.
-- **Rand van de kaart**: geen rotsrand meer. Langs de rand ligt een onbegaanbare strook van 2
+- **Rand van de kaart**: langs de rand ligt een onbegaanbare strook van 2
   tankbreedtes (`EDGE.band`, 11 cellen) waarin het terrein doorloopt (het spiegelbeeld van het terrein
-  ernaast) en naar buiten toe zwart wordt. Tanks, kogels, gebouwen, bases en gevaren blijven erbuiten
-  (`playable` in world.js); de percentages gelden voor het speelbare deel. De retrokaart houdt zijn
-  rotsrand. Een kogel stopt dus aan de binnenrand van de strook, niet aan de kaartrand (spec §5.8).
+  ernaast). Uitzondering: op de Tunneler-kaarten is die strook rots met rotsbloksprites
+  (uit de zomer- of winteratlas). Tanks,
+  kogels, gebouwen, bases en gevaren blijven erbuiten (`playable` in world.js); de percentages gelden
+  voor het speelbare deel. De retrokaart houdt ook zijn rotsrand. Een kogel stopt dus aan de binnenrand
+  van de strook, niet aan de kaartrand (spec §5.8).
 - **Bedekte tank** (spec §5.7): je eigen tank blijft onder een hoop sneeuw, zand of stof te zien
   (verbleekt, de loop steekt eruit, `BURIAL` in config.js); de hoop valt eraf als je rijdt of schiet.
 - **Koersk**: de Psel (3 T) is maar ~3% water; de rest van de 6% zijn plassen. Er zijn **geen
@@ -398,7 +407,8 @@ npm run test:gen -- ardennen 10   # één map, 10 kaarten per geval
 Elk acceptatiecriterium uit §12 heeft tests (zie `tests/acceptance.mjs`). Ontwikkelen (alleen op
 localhost, in de adresbalk):
 - `?debug=alles` toont alle tanks en zet het zicht uit;
-- `?zoom=3` zet bij het laden de camera dichter op je tank (om details te bekijken); tijdens het
+- de standaard camerazoom is 2.0× op alle kaarten; `?zoom=3` zet bij het laden de camera dichter op
+  je tank (om details te bekijken); tijdens het
   spel kun je dit op localhost direct aanpassen met `blitzView.setZoom(3)` in de browserconsole;
 - `?fps=1` toont linksboven de beelden per seconde en de rekentijd per beeld;
 - `?kijk=0.5,0.45` zet de camera op die plek van de kaart (fractie van breedte en hoogte) in plaats

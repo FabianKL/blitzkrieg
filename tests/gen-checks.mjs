@@ -27,9 +27,30 @@ export function distanceInside(inShape) {
   return d;
 }
 
+function componentCount(w, matches) {
+  const seen = new Uint8Array(w.map.length), queue = new Int32Array(w.map.length);
+  let count = 0;
+  for (let i = 0; i < w.map.length; i++) {
+    if (seen[i] || w.border?.[i] || !matches(i)) continue;
+    count++;
+    let head = 0, tail = 0;
+    queue[tail++] = i; seen[i] = 1;
+    while (head < tail) {
+      const at = queue[head++], x = at % G.W, y = (at / G.W) | 0;
+      for (const n of [y > 0 ? at - G.W : -1, y + 1 < G.H ? at + G.W : -1, x > 0 ? at - 1 : -1, x + 1 < G.W ? at + 1 : -1]) {
+        if (n >= 0 && !seen[n] && !w.border?.[n] && matches(n)) { seen[n] = 1; queue[tail++] = n; }
+      }
+    }
+  }
+  return count;
+}
+
 // Alle controles voor één kaart; geeft een korte samenvatting terug
 export function checkGeneratedMap(id, w, players, size) {
   const rules = G.MAPS[id], T = G.T, tag = `${id} ${size} ${players}sp`;
+  if (rules.rockEdge) check(w.border?.every((edge, i) => !edge || w.map[i] === G.ROCK), `${tag}: randstrook is niet gevuld met rots`);
+  if (rules.terrainClusterClearance?.ice) check(w.zone?.every((protectedCell, i) => !protectedCell || w.terrain[i] !== G.CLASS.ice), `${tag}: ijs ligt in de uitgebreide basiszone of sluit erop aan`);
+  if (rules.vegetation?.excludeClasses?.includes('ice')) check(w.map.every((cell, i) => cell !== G.VEG || w.terrain[i] !== G.CLASS.ice), `${tag}: begroeiing staat op ijs`);
   // percentages (§6.1 stap 4)
   // (overshoot: wegen van vaste breedte zijn op een kleine kaart al meer dan het percentage verhard;
   // dat gaat onvermijdelijk van de andere klassen af, dus de marge wordt zoveel ruimer)
@@ -40,6 +61,13 @@ export function checkGeneratedMap(id, w, players, size) {
   for (const [k, p] of Object.entries(rules.terrainPercent)) {
     const margin = MARGIN + (w.unavoidable?.[k] ?? extra) + toleranceOf(rules) + 0.01;
     check(Math.abs((shares[k] || 0) - p) <= margin, `${tag}: ${k} ${(shares[k] || 0).toFixed(1)}%, verwacht ${p} ± ${margin.toFixed(1)}`);
+  }
+  if (rules.rocks?.clusters) {
+    check(componentCount(w, (i) => w.map[i] === G.ROCK) === rules.rocks.clusters, `${tag}: rotsvelden zijn niet ${rules.rocks.clusters} samenhangende gebieden`);
+  }
+  for (const [name, count] of Object.entries(rules.terrainClusters || {})) {
+    const cls = G.CLASS[name];
+    check(componentCount(w, (i) => (w.map[i] === G.DIRT || w.map[i] === G.EMPTY) && w.terrain[i] === cls) === count, `${tag}: ${name} is niet ${count} samenhangende gebieden`);
   }
   // bases (§6.2) — noBases kaarten hebben geen bases
   const expectBases = rules.noBases ? 0 : players;

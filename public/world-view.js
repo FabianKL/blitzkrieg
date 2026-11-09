@@ -157,6 +157,8 @@ export function startWorld(style, game) {
   // Rand van de kaart (EDGE, G.BAND): over alles in de onbegaanbare strook een verloop van helder
   // (binnenrand, zacht begin: geen lijn) naar zwart (buitenrand), en zwart buiten de kaart. Zo lijkt
   // het land door te lopen. Onder de mist, zodat die er gewoon overheen ligt.
+  // De rotsblokken liggen onder het verloop, zodat de rand buiten de kaart zwart blijft.
+  const edgeRockLayer = world.addChildAt(new Container(), world.getChildIndex(L.fog));
   const edgeLayer = world.addChildAt(new Container(), world.getChildIndex(L.fog));
   const edgeTex = drawnTexture(256, 1, (g) => {
     const img = g.createImageData(256, 1);
@@ -434,7 +436,7 @@ export function startWorld(style, game) {
   // bij objTiles.
   const objectView = createObjectView({
     under: objectsUnder, over: L.canopy.addChild(new Container()), shadows: L.shadows.addChild(new Container()),
-    craters: craterLayer, game, shadowColor: style.shadow?.color ?? 0x000000,
+    craters: craterLayer, edgeRockLayer, game, shadowColor: style.shadow?.color ?? 0x000000,
   });
   const crackMask = crackLayer.addChild(new Sprite());
   crackLayer.setMask({ mask: crackMask, inverse: true });
@@ -486,6 +488,8 @@ export function startWorld(style, game) {
   const hintSprites = spritePool(L.ui.addChild(new Container()), TEX.fadeX, (s) => s.anchor.set(0));
   const hintCorners = spritePool(L.ui.addChild(new Container()), TEX.soft);
   const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
+  const zoomLabel = createLabel(L.ui);
+  let zoomLabelUntil = 0;
   // Schaduwen: dezelfde vorm in het zwart, iets verschoven (licht van linksboven)
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
@@ -918,7 +922,10 @@ export function startWorld(style, game) {
   const debugParam = (k) => new URLSearchParams(location.search).get(k);
   const DEBUG = DEBUG_HOST && debugParam('debug') === 'alles';
   // ?zoom=3: dichter op de tank (alleen op deze computer, om details te bekijken)
-  let ZOOM = (DEBUG_HOST && Number(debugParam('zoom'))) || 1;
+  const requestedZoom = DEBUG_HOST ? Number(debugParam('zoom')) : NaN;
+  let ZOOM = Number.isFinite(requestedZoom) && requestedZoom > 0
+    ? Math.max(CAMERA_ZOOM.min, Math.min(CAMERA_ZOOM.max, requestedZoom))
+    : CAMERA_ZOOM.default;
   // ?kijk=0.5,0.45: de camera kijkt naar die plek (fractie van de kaart) in plaats van naar je tank;
   // in de console ook blitzView.lookAt(0.5, 0.45), en lookAt() weer terug naar je tank
   let FOCUS = (DEBUG_HOST && debugParam('kijk')?.split(',').map(Number)) || null;
@@ -1225,7 +1232,7 @@ export function startWorld(style, game) {
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
-    if (game.map && mapReady) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); side.drawMinimap(); }
+    if (game.map && mapReady) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawZoomLabel(now); side.drawMinimap(); }
     side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
     gpu.flushSwatches(); // legenda: uitsnedes van de grond
@@ -1274,6 +1281,13 @@ export function startWorld(style, game) {
     roundLabel.at(8 * s, canvas.height - 30 * s);
   }
 
+  function drawZoomLabel(now) {
+    if (now >= zoomLabelUntil) { zoomLabel.hide(); return; }
+    const s = devicePixelRatio || 1;
+    zoomLabel.set(`ZOOM ${ZOOM.toFixed(1)}×`, { size: 14 * s, pad: 10 * s, h: 26 * s, color: 0xf0e6c8, bg: 0x100c08, alpha: 0.82 });
+    zoomLabel.at((canvas.width - zoomLabel.width) / 2, 44 * s);
+  }
+
   // Wat een stijl nodig heeft voor zijn effecten, en wat de spelpagina gebruikt (hooks, destroy)
   const view = {
     game, canvas, hooks,
@@ -1289,6 +1303,7 @@ export function startWorld(style, game) {
     setZoom(value) {
       if (!Number.isFinite(value) || value <= 0) throw new RangeError('Zoom moet een positief getal zijn');
       ZOOM = Math.max(CAMERA_ZOOM.min, Math.min(CAMERA_ZOOM.max, value));
+      zoomLabelUntil = performance.now() + CAMERA_ZOOM.indicatorMs;
       return ZOOM;
     },
     zoomBy(delta) { return view.setZoom(ZOOM + delta); },

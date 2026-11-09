@@ -32,7 +32,7 @@ export default { // §10.8
   look: { grade: { saturation: -0.12, contrast: 1.04, tint: '#d4e2ff', tintStrength: 0.15 }, noise: { scale: 8, strength: 0.1 }, blend: 3, weather: 'snow', amount: 25, vignette: 0.25, fogSoft: 0.2, road: { vergeColor: '#f2f6fa', vergeAmount: 0.55 }, bridge: { kind: 'hout' }, objects: { rocks: 1 } },
   tunnelColor: '#2b2118',
   weather: [
-    { label: 'Dichte mist', from: { secondsInRound: 0 }, untilRound: 2, effect: { visibility: { pulse: { thick: 2, clear: 12, thickSeconds: 30, clearSeconds: 30 } }, fog: true } },
+    { label: 'Dichte mist', from: { secondsInRound: 0 }, untilRound: 2, effect: { visibility: { pulse: { thick: 2, clear: 12, thickSeconds: 60, clearSeconds: 30 } }, fog: true } },
     { label: 'Sneeuwval', effect: { drift: { min: 0.15, max: 0.8, period: 30 } } },
     storm('Sneeuwstorm'),
   ],

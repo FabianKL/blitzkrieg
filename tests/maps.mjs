@@ -3,6 +3,7 @@
 import { G, check } from './helpers.mjs';
 import * as Wx from '../shared/weather.js';
 import * as Hz from '../hazards.js';
+import { terrainShares } from '../shared/mapgen.js';
 
 // Nagebootst potje voor hazards.js (draait anders op de server)
 export function fakeRoom(id, size = 'middel', seed = 4242) {
@@ -34,7 +35,6 @@ function withRandom(v, fn) {
   Math.random = () => v;
   try { return fn(); } finally { Math.random = r; }
 }
-
 // Wat het weer per map moet doen: [ronde, seconden in het spel, seconden in de ronde, verwachting]
 const WEATHER = {
   'fall-gelb': [[1, 10, 10, { vis: null }], [3, 400, 10, { vis: 8 }], [4, 600, 10, { vis: null }]],
@@ -52,6 +52,59 @@ const WEATHER = {
 const CHANGES = { 'fall-gelb': { 2: 1, 3: 1, 4: 1, 5: 0 }, barbarossa: { 3: 1, 4: 0 }, leningrad: { 5: 1 }, koersk: { 3: 1 } };
 
 export const mapTests = [
+  {
+    name: 'Tunneler zomer en winter: terreinpercentages en kapot te schieten bomen',
+    run() {
+      try {
+        G.setMapSize(...Object.values(G.sizeDims('middel')));
+        const zomer = G.MAPS['tunneler-zomer'], winter = G.MAPS['tunneler-winter'];
+        check(zomer.minimap === false && winter.minimap === false, 'Tunneler: minimap staat standaard aan');
+        check(!G.minimapOn(zomer) && !G.minimapOn(winter), 'Tunneler: minimap is zichtbaar ondanks de kaartstandaard');
+        check(G.minimapOn(zomer, 1) && G.minimapOn(winter, 1), 'Tunneler: minimap kan niet via de lobby worden aangezet');
+        check(!G.minimapOn(G.MAPS.ardennen, 0), 'minimap kan niet via de lobby worden uitgezet');
+        check(zomer.terrainPercent.normal === 75 && zomer.terrainPercent.vegetation === 25, 'zomer: weiland- of bospercentage wijkt af');
+        check(winter.terrainPercent.soft === 85 && winter.terrainPercent.vegetation === 15, 'winter: sneeuwgrond- of bospercentage wijkt af');
+        check(JSON.stringify(zomer.vegetation.sprites) === JSON.stringify({ berk: 10, loof: 10, den: 5 }), 'zomer: bomenmix wijkt af');
+        check(JSON.stringify(winter.vegetation.sprites) === JSON.stringify({ den: 15 }), 'winter: dennenaandeel wijkt af');
+        check(!zomer.terrainPercent.rock && !zomer.rocks && !winter.terrainPercent.ice && !winter.terrainClusters?.ice, 'Tunneler: rotsvelden of ijsplaten zijn nog ingesteld');
+        check(zomer.rockEdge === true && winter.rockEdge === true, 'Tunneler: rotsrand is niet ingesteld');
+        for (const [id, rules] of [['tunneler-zomer', zomer], ['tunneler-winter', winter]]) {
+          const world = G.generateMap(4242, rules, 2), shares = terrainShares(world);
+          check(world.border.every((edge, i) => !edge || world.map[i] === G.ROCK), `${id}: randstrook bestaat niet uit rots`);
+          check(world.border.every((edge, i) => edge || world.map[i] !== G.ROCK), `${id}: rots staat binnen de speelbare map`);
+          if (id === 'tunneler-winter') check(world.border.every((edge, i) => edge || world.terrain[i] !== G.CLASS.ice), 'winter: ijs ligt binnen de speelbare map');
+          for (const [kind, percent] of Object.entries(rules.terrainPercent)) {
+            check(Math.abs((shares[kind] || 0) - percent) <= 3.1, `${id}: ${kind} ${(shares[kind] || 0).toFixed(1)}%, verwacht ${percent}%`);
+          }
+          const i = world.map.findIndex((cell) => cell === G.VEG);
+          check(i >= 0, `${id}: geen bomen geplaatst`);
+          check(world.vegHp[world.veg[i] - 1] === G.VEGETATION.pine.hp, `${id}: bomen hebben geen dennen-levensduur`);
+          check(!G.hitObstacle(world, i % G.W, (i / G.W) | 0), `${id}: boom gaat neer na één treffer`);
+          check(G.hitObstacle(world, i % G.W, (i / G.W) | 0) && world.map[i] === G.EMPTY, `${id}: boom is niet kapot te schieten`);
+        }
+      } finally { G.applyTerrainOverrides(null); G.setMapSize(G.BASE_W_CELLS, G.BASE_H_CELLS); }
+      return 'open speelbaar terrein met zomerbos of winterdennen, zonder rotsvelden of ijsplaten; rotsblokken alleen langs de rand';
+    },
+  },
+  {
+    name: 'minikaart verdwijnt tijdens zand- en sneeuwstormen',
+    run() {
+      for (const id of ['el-alamein', 'ardennen', 'leningrad']) {
+        const map = G.MAPS[id];
+        check(!Wx.weatherAt(map, 1, 0, 0).flags.hidesMinimap, `${id}: minikaart al verborgen buiten de storm`);
+        let stormFound = false;
+        for (let t = 0; t <= 180; t++) {
+          const weather = Wx.weatherAt(map, 1, t, t);
+          if (!weather.burial) continue;
+          check(weather.flags.hidesMinimap, `${id}: minikaart niet verborgen tijdens de storm`);
+          stormFound = true;
+          break;
+        }
+        check(stormFound, `${id}: geen storm gevonden voor de test`);
+      }
+      return 'minikaart zichtbaar buiten en verborgen tijdens zand- en sneeuwstormen';
+    },
+  },
   {
     name: 'weer per map: 5 rondes met een snelle klok, en na elke terreinverandering een route tussen de bases (§6.3, §13)',
     async run() {
@@ -88,7 +141,7 @@ export const mapTests = [
     },
   },
   {
-    name: 'gevaren: brandend graan, antitankgeschut, ontploffende brug, artillerie, instortende gevels',
+    name: 'gevaren: brandend graan, ontploffende brug, artillerie, instortende gevels',
     async run() {
       const out = [];
       try {
@@ -102,19 +155,6 @@ export const mapTests = [
         check(t.shield < G.SHIELD_MAX, 'geen schade in het vuur');
         check(room.world.terrain.includes(G.CLASS.burnt), 'niets verbrand na 15 s');
         out.push(`graanbrand (${ev.filter((e) => e.t === 'fi').length} vakken)`);
-        // Carentan: geschut vuurt pas als je in het schootsveld komt, is daarna zichtbaar en met 4 treffers uit
-        room = fakeRoom('carentan'); t = room.tanks[0]; ev = [];
-        Hz.roundStart(room, ev);
-        const g = room.hz.guns[0];
-        check(g && !Hz.snapshot(room).guns.length, 'geschut niet verborgen');
-        t.x = Math.round(g.x + Math.cos(g.ang) * 30); t.y = Math.round(g.y + Math.sin(g.ang) * 30);
-        for (let k = 1; k <= 5 * G.TICK_RATE; k++) Hz.step(room, k, ev, hurt);
-        check(ev.some((e) => e.t === 'gun') && t.shield === 75, `geschut trof niet (pantser ${t.shield})`);
-        for (let k = 0; k < 4; k++) check(Hz.bulletAt(room, g.x, g.y, ev), 'kogel raakte het geschut niet');
-        const before = t.shield;
-        for (let k = 0; k < 10 * G.TICK_RATE; k++) Hz.step(room, 200 + k, ev, hurt);
-        check(t.shield === before, 'uitgeschakeld geschut schoot nog');
-        out.push('geschut');
         // Market Garden: over de brug = kans op ontploffing (10%, +5% per oversteek), brug weg tot de volgende ronde
         room = fakeRoom('market-garden'); t = room.tanks[0]; ev = [];
         Hz.roundStart(room, ev);

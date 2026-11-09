@@ -368,9 +368,9 @@ Bij de start is er geen open water. Water ontstaat pas door de inundatie.
 **Bijzonderheden:**
 
 - Er loopt **geen rivier** over de kaart.
-- De **vallei** (laag land) beslaat de linkerhelft, tot ongeveer 55% van links. Rechts daarvan ligt de **heuvel** met loofbossen.
-- **Dorp:** de rand van Rhenen, aan de voet van de heuvel rond (0.65, 0.75).
-- Een weg loopt van de linkerrand door de vallei naar het dorp en over de heuvel naar de rechterrand.
+- De **vallei** (laag land) ligt bovenaan, tot ongeveer 55% van de hoogte. Daaronder loopt de groene **heuvel** over de volle breedte, met gras en loofbossen op de flanken.
+- **Dorp:** Rhenen ligt op de heuvel rond (0.35, 0.7); Achterberg ligt verderop rond (0.65, 0.7).
+- Een weg loopt vanuit de vallei naar Rhenen en vandaar verder over de heuvel.
 
 **Gevaar:** geen.
 

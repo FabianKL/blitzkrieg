@@ -19,8 +19,7 @@ export const DEFAULT_ROUNDS = 3;
 export const LOBBY_SETTINGS = {
   stormFreq:  { label: 'Storm',          type: 'select', default: 1,  options: [[0, 'Uit'], [2, 'Langzaam'], [1, 'Normaal'], [0.5, 'Snel']] },
   hazards:    { label: 'Gevaren',        type: 'toggle', default: 1,  options: [[1, 'Aan'], [0, 'Uit']] },
-  bulletsDig: { label: 'Kogels graven',  type: 'toggle', default: 0,  options: [[0, 'Uit'], [1, 'Aan']] },
-  zoom:       { label: 'Zoom',           type: 'select', default: 1,  options: [[0.6, 'Ingezoomd'], [1, 'Normaal'], [1.5, 'Uitgezoomd']] },
+  minimap:    { label: 'Minimap',         type: 'toggle', default: 1,  options: [[1, 'Aan'], [0, 'Uit']] },
   fuelMul:    { label: 'Brandstof',      type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
   shieldMul:  { label: 'Pantser',        type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
   ammoMul:    { label: 'Munitie',        type: 'select', default: 1,  options: [[0.5, 'Laag'], [1, 'Normaal'], [2, 'Hoog']] },
@@ -97,7 +96,7 @@ export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5, shado
 export const DISPLAY = { minimap: true };
 
 // Lokale camerazoom tijdens het spelen: 9 zoomt in, 0 zoomt uit.
-export const CAMERA_ZOOM = { step: 0.1, min: 0.5, max: 4 };
+export const CAMERA_ZOOM = { default: 2, step: 0.1, min: 0.5, max: 4, indicatorMs: 1500 };
 
 // Uiterlijk per kaart (alleen de weergave, public/world-view.js; de spelregels kijken er niet
 // naar). Een kaart overschrijft dit met look: {...}; grade en noise worden per veld gemengd.
@@ -314,11 +313,9 @@ export const WATER_PLANTS = {
   },
 };
 
-// Rand van de kaart (geen rotsrand meer): band = zoveel cellen langs elke rand zijn onbegaanbaar (2
-// tankbreedtes; een tank is 2 x TANK_WID = 5,2 breed). Het terrein loopt erin door en wordt naar buiten
-// donkerder: curve = hoe snel (1 = gelijkmatig, hoger = sneller donker), helemaal zwart aan de rand.
-// Alleen op kaarten met features; de retrokaart houdt zijn rotsrand.
-export const EDGE = { band: 11, curve: 1.8 };
+// Rand van de kaart: band = zoveel cellen langs elke rand zijn onbegaanbaar (2 tankbreedtes).
+// De rotsrand krijgt sprites; curve maakt de buitenkant donker. De retrokaart houdt zijn eigen rand.
+export const EDGE = { band: 11, curve: 1.8, rockStep: 4, rockRows: 2, rockScale: 1.45 };
 
 // Ingesneeuwde (of ondergestoven) eigen tank (public/world-view.js, drawBuried): een hoop over de
 // tank. px = pixels per cel in de getekende hoop; length en width = maat in cellen (de tank is ~6,6 x
@@ -392,7 +389,7 @@ export const TERRAIN = {
   marsh: { speed: 0.3, fuel: 4, track: 0.6, fade: 0.1, min: 0.0, noTunnel: true },
   // Doorwaadbare plek in een rivier: heel traag, geen tunnel, rimpels die snel verdwijnen
   ford: { speed: 0.25, fuel: 3, track: 0.6, fade: 0.1, min: 0.0, noTunnel: true },
-  // IJs: rijdt als een weg, maar geen tunnel en geen spoor; het enige spoor zijn barsten (ICE)
+  // IJs: rijdt als een weg, maar geen tunnel; kaarten kunnen rupsensporen aanzetten.
   ice: { speed: 1.0, fuel: 1, track: 0, fade: 0, min: 0, noTunnel: true },
   // Verbrande grond (Koersk): hard en zwart; nieuwe sporen zijn juist extra duidelijk
   burnt: { speed: 0.8, fuel: 2, track: 1.0, fade: 0.008, min: 0.1 },

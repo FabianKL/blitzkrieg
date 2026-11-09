@@ -32,7 +32,7 @@ export const minRadius = () => VISION.minTanks * T; // een tank is T breed (zie 
 export const visionRadius = (viewH, inT = VISION.defaultT) => Math.max(minRadius(), (viewH / 2) * Math.min(1, inT / VISION.defaultT));
 // Regels die een kaart kan overschrijven
 export const bulletsDig = (rules) => rules?.bulletsDig ?? BULLETS.dig;
-export const minimapOn = (rules) => rules?.minimap ?? DISPLAY.minimap;
+export const minimapOn = (rules, enabled) => Boolean(enabled ?? rules?.minimap ?? DISPLAY.minimap);
 export const TICK_RATE = NET.tickRate; // simulatiestappen per seconde
 export const MAX_PLAYERS = GAME.maxPlayers;
 
