@@ -122,15 +122,15 @@ function configure(room, t, msg) {
   const rules = G.MAPS[mapId];
   const maxForSize = G.MAP_SIZES[size].maxPlayers;
   const maxForMap = rules?.maxPlayers ?? G.MAX_PLAYERS;
-  const effectiveMax = Math.min(maxForSize, maxForMap);
-  let pc = Number(msg.playerCount) || effectiveMax;
-  if (![2, 3, 4].includes(pc)) pc = effectiveMax;
-  pc = Math.min(pc, effectiveMax);
+  const maxPlayers = Math.min(maxForSize, maxForMap);
+  let pc = Number(msg.playerCount) || maxPlayers;
+  if (![2, 3, 4].includes(pc)) pc = maxPlayers;
+  pc = Math.min(pc, maxPlayers);
   let gm = String(msg.gameMode ?? room.gameMode);
   if (gm !== 'ffa' && gm !== 'teams') gm = 'ffa';
   if (gm === 'teams' && pc !== 4) gm = 'ffa';
-  // te veel spelers al verbonden
-  if (room.tanks.filter(Boolean).length > pc) return;
+  // een speler op een slot >= het nieuwe aantal: wijziging weigeren
+  if (room.tanks.some((t, i) => t && i >= pc)) return;
   if (mapId !== room.mapId) room.settings.minimap = G.minimapOn(rules) ? 1 : 0;
   room.playerCount = pc;
   room.gameMode = gm;
@@ -378,7 +378,7 @@ const gameState = (room) => ({ round: room.round, phase: room.phase, left: Math.
 // Met iceSlowBreak (Leningrad): op volle snelheid breekt het ijs niet. Stilstaan of langzaam
 // rijden geeft een kans per seconde; de barstteller loopt altijd door (visuele feedback).
 const SINK_EVERY = Math.max(1, Math.round(G.TICK_RATE / G.ICE.sinkDamagePerSecond));
-const ICE_SLOW_THRESHOLD = Math.round(0.9 * G.SPEED_ONE);
+const ICE_SLOW_THRESHOLD = Math.round(G.ICE.slowThreshold * G.SPEED_ONE);
 function isSlowOnIce(t, moved) {
   if (!moved) return true;
   return (t.slow ?? G.SPEED_ONE) < ICE_SLOW_THRESHOLD;
@@ -462,6 +462,8 @@ function step(room) {
     // gevaren en schaarse middelen van deze kaart
     if (room.settings?.hazards !== 0) Hazards.step(room, tick, events, (t, pct, ev) => hurt(room, t, pct, ev));
     if (live.filter((t) => !t.alive).length > deaths) {
+      // winner vóór de rondepunten: kijkt of iemand het spel al gewonnen heeft;
+      // endRound() kent het rondepunt toe en herberekent de definitieve winnaar.
       const cfg = { ...GAME, roundsToWin: room.rounds, killsToWin: room.rounds };
       const winner = G.gameWinner(live, cfg, room.gameMode);
       const roundDone = room.gameMode === 'teams'
@@ -486,7 +488,7 @@ function step(room) {
 // Kogels (een treffer op begroeiing kost die plant een leven; clients zien in het
 // 'x'-bericht dat er een plant staat en doen hetzelfde)
 function stepBullets(room, live, events) {
-  const w = room.world, dig = room.settings?.bulletsDig ? true : G.bulletsDig(room.rules);
+  const w = room.world, dig = G.bulletsDig(room.rules);
   room.bullets = room.bullets.filter((b) => {
     const hit = G.stepBullet(b, w.map, live, dig);
     if (!hit && Hazards.bulletAt(room, b.x, b.y, events)) { events.push({ t: 'x', id: b.id, x: b.x, y: b.y, r: 0, o: b.owner }); return false; }

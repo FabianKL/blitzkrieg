@@ -97,7 +97,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   - bomkraters (van artillerie of een ontplofte tank) zie je altijd, ook zonder zicht;
   - waar je geen zicht hebt, zie je geen tunnels, sporen of ijsbarsten: daar ligt de
     schone kaart (`L.clean`, met masker) over de grond;
-  - de knop ZICHT AAN/UIT in de bovenste balk (`blitz.visionOverlay`) zet mist, schaduw en
+  - de checkbox ZICHT in de wachtkamer (`game.visionOverlay`) zet mist, schaduw en
     vervaging uit; de zichtregel blijft gelden;
   - een tegenstander die je scherp ziet, geeft geen hint;
   - gehoord binnen 20 T.

@@ -50,7 +50,22 @@ export function checkGeneratedMap(id, w, players, size) {
   const rules = G.MAPS[id], T = G.T, tag = `${id} ${size} ${players}sp`;
   if (rules.rockEdge) check(w.border?.every((edge, i) => !edge || w.map[i] === G.ROCK), `${tag}: randstrook is niet gevuld met rots`);
   if (rules.terrainClusterClearance?.ice) check(w.zone?.every((protectedCell, i) => !protectedCell || w.terrain[i] !== G.CLASS.ice), `${tag}: ijs ligt in de uitgebreide basiszone of sluit erop aan`);
-  if (rules.vegetation?.excludeClasses?.includes('ice')) check(w.map.every((cell, i) => cell !== G.VEG || w.terrain[i] !== G.CLASS.ice), `${tag}: begroeiing staat op ijs`);
+  if (rules.vegetation?.excludeClasses) {
+    const ex = new Set(rules.vegetation.excludeClasses.map((n) => G.CLASS[n]));
+    for (let i = 0; i < w.map.length; i++) {
+      if (w.map[i] !== G.VEG) continue;
+      const x = i % G.W, y = (i / G.W) | 0;
+      const buren = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= G.W || ny < 0 || ny >= G.H) return -1;
+        return ny * G.W + nx;
+      }).filter((ni) => ni >= 0 && w.map[ni] === G.DIRT);
+      if (buren.length && buren.every((ni) => ex.has(w.terrain[ni]))) {
+        check(false, `${tag}: begroeiing staat op uitgesloten terrein (${rules.vegetation.excludeClasses.join(', ')})`);
+        break;
+      }
+    }
+  }
   // percentages (§6.1 stap 4)
   // (overshoot: wegen van vaste breedte zijn op een kleine kaart al meer dan het percentage verhard;
   // dat gaat onvermijdelijk van de andere klassen af, dus de marge wordt zoveel ruimer)

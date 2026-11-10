@@ -417,7 +417,7 @@ export const VEGETATION = {
 // vanaf crackStages passages. Breekt het, dan worden het vak en de vakken ernaast een wak:
 // een tank die erin zakt rijdt nog maar sinkSpeed, kan er alleen uit (niet dieper in) en
 // verliest sinkDamagePerSecond pantser per seconde tot hij weer op het droge staat.
-export const ICE = { block: 6, breakPerPass: 0.08, crackStages: [2, 5, 8], sinkSpeed: 0.15, sinkDamagePerSecond: 2 };
+export const ICE = { block: 6, breakPerPass: 0.08, crackStages: [2, 5, 8], sinkSpeed: 0.15, sinkDamagePerSecond: 2, slowThreshold: 0.9 };
 
 // Sporenwisser (storm, regenbui): zolang hij woedt vervagen sporen op klassen met erasable
 // fadeFactor keer zo snel en geldt hun minimum niet. Verstuiving (weerregel drift: sneeuw,

@@ -740,7 +740,7 @@ export function startWorld(style, game) {
     }
     const cam = view.cam = camera(game, canvas, style.viewCells / ZOOM, shake, FOCUS);
     // sightOn: de zichtregel geldt (je leeft, geen debug); overlayOn: het zichtveld staat ook in
-    // beeld (mist, schaduw, vervaging; de knop ZICHT in de bovenste balk)
+    // beeld (mist, schaduw, vervaging; de checkbox ZICHT in de wachtkamer)
     const me = eye(), sightOn = !DEBUG && !!me, overlayOn = sightOn && game.visionOverlay !== false;
     world.scale.set(cam.Z);
     world.position.set(-cam.drawX * cam.Z, -cam.drawY * cam.Z);

@@ -666,14 +666,6 @@ function tryMap(seed, rules, players) {
     if (!growPatches(count, remaining, candidates, (i) => { terrain[i] = cls; clusteredTerrain[i] = 1; }, seed + cls * 101, noise)) throw new Error('CLUSTERS');
   }
 
-  // Pas klasse-uitsluitingen toe nadat geclusterde terreinen hun definitieve klasse hebben.
-  if (vcfg?.excludeClasses) {
-    const ex = new Set(vcfg.excludeClasses.map((n) => CLASS[n]));
-    for (let i = 0; i < N; i++) {
-      if (map[i] === VEG && ex.has(terrain[i])) { map[i] = DIRT; veg[i] = 0; }
-    }
-  }
-
   // akkerblokken: houd de N grootste aaneengesloten stukken, zet fragmenten om
   if (rules.farms) consolidateAndPlaceFarms(rules.farms);
 
@@ -700,6 +692,24 @@ function tryMap(seed, rules, players) {
   mirrorEdge(map, terrain, veg, band);
   // Tunneler-zomer en -winter hebben een rotswand aan de rand in plaats van spiegelbeeldgrond.
   if (rules.rockEdge) for (let i = 0; i < N; i++) if (border[i]) map[i] = ROCK;
+
+  // Klasse-uitsluitingen: plantBlocks overschrijft terrain naar groundAfter, dus kijk naar
+  // DIRT-buren. Na mirrorEdge, zodat gespiegelde planten op de rand ook meegenomen worden.
+  if (vcfg?.excludeClasses) {
+    const ex = new Set(vcfg.excludeClasses.map((n) => CLASS[n]));
+    for (let i = 0; i < N; i++) {
+      if (map[i] !== VEG) continue;
+      const x = i % W, y = (i / W) | 0;
+      let excluded = false;
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        const ni = ny * W + nx;
+        if (map[ni] === DIRT && ex.has(terrain[ni])) { excluded = true; break; }
+      }
+      if (excluded) { map[i] = DIRT; veg[i] = 0; }
+    }
+  }
 
   const w = {
     map, terrain, track: new Uint16Array(N), veg, vegHp: Uint8Array.from(vegHp), scar: new Uint8Array(N),
