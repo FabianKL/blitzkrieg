@@ -1,6 +1,6 @@
 // Alle kaarten (veldslagen). Elke kaart staat in een eigen bestand in deze map en is alleen
 // gegevens; de regels die erbij horen staan in mapgen.js (kaart maken), weather.js (weer) en
-// hazards.js (gevaren, schaarse middelen, meters). Een nieuwe kaart: een bestand erbij, hier
+// server/hazards.js (gevaren, schaarse middelen, meters). Een nieuwe kaart: een bestand erbij, hier
 // importeren en in MAPS en MAP_MENU zetten.
 //
 // Kaarten (SPEC-terrein §6). Elke kaart is een eigen potje. Per kaart:
@@ -15,7 +15,7 @@
 //   rocks, water, vegetation, buildings   {label, color, ...}: naam en kleur; vegetation.type (uit VEGETATION),
 //               groundAfter: de grond die overblijft als een plant weggeschoten is
 //   tunnelColor kleur van een vers spoor
-//   hazard, scarce, meter  gevaar, schaars middel en meter (§10, zie hazards.js);
+//   hazard, scarce, meter  gevaar, schaars middel en meter (§10, zie server/hazards.js);
 //               refill: {fuel, armor, ammo} false = in de basis niet aangevuld
 //   weather     weerregels (§7, zie shared/weather.js): zicht, sporenwisser, onderduiken,
 //               terreinveranderingen per ronde (dooi, modder) en vlaggen zoals fog (witte mist)

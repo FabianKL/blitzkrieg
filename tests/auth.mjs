@@ -4,7 +4,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
-import { createAuth } from '../auth.js';
+import { createAuth } from '../server/auth.js';
 import { AUTH } from '../shared/config.js';
 import { startServer, connectBot, closeAllBots } from './helpers.mjs';
 

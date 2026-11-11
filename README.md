@@ -473,8 +473,9 @@ en het zijpaneel, op `[data-style="<naam>"]`), plus een `<link>` naar dat thema 
 | `shared/weather.js` | Weerregels per ronde en timer. |
 | `shared/vision.js` | Zichtregel (kijkboog, zichtlijn, scherp of contour), richtingshints, zoeklichten. |
 | `shared/client-sim.js` | Clientkant zonder browsercode: berichten (tabel `ON` met alle gebeurtenissen), voorspelling, posities. Browser én tests. |
-| `hazards.js` | Gevaren, schaarse middelen en meters (alleen server; die gooit de dobbelsteen). |
-| `server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
+| `server/server.js` | Autoritatieve simulatie op 30 ticks/s, wachtkamer en rondes. |
+| `server/auth.js` | Toegang en authenticatie voor de spelserver. |
+| `server/hazards.js` | Gevaren, schaarse middelen en meters; serverkant bepaalt de toevalstrekkingen. |
 | `public/index.html`, `shell.js` | De spelpagina: titel, menu's, speelveld en zijpaneel. `shell.js` laadt de stijl van de kaart en wisselt hem bij een andere kaart. |
 | `public/world-view.js` | Gedeelde wereldweergave (PixiJS): lagen, kaart, zicht, hints, objecten, tanks, weer, `look`. |
 | `public/view/tanks-view.js` | Tanks als container: twee rupsen (`TilingSprite`, schuiven mee met rijden en draaien) en de romp erboven, schaduw met `tank.png`; anders `tank.png` of de getekende tank. |

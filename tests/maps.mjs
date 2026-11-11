@@ -2,10 +2,10 @@
 // routes na elke terreinverandering, en de gevaren, schaarse middelen en meters.
 import { G, check } from './helpers.mjs';
 import * as Wx from '../shared/weather.js';
-import * as Hz from '../hazards.js';
+import * as Hz from '../server/hazards.js';
 import { terrainShares } from '../shared/mapgen.js';
 
-// Nagebootst potje voor hazards.js (draait anders op de server)
+// Nagebootst potje voor server/hazards.js (draait anders op de server)
 export function fakeRoom(id, size = 'middel', seed = 4242) {
   const { w, h } = G.sizeDims(size);
   G.setMapSize(w, h);

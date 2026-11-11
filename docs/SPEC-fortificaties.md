@@ -1,7 +1,7 @@
 # Specificatie: bunkers en fortificaties
 
 Lees eerst `CLAUDE.md`. Alle werkafspraken gelden: Nederlands, alle getallen in `shared/config.js`
-of `shared/maps/<map>.js`, `shared/` deterministisch (toeval alleen via de kaartseed of `hazards.js`),
+of `shared/maps/<map>.js`, `shared/` deterministisch (toeval alleen via de kaartseed of `server/hazards.js`),
 preview op poort 3100, `npm test` en `npm run test:gen -- "" 10` na wijzigingen aan de kaartmaker.
 
 ## Doel
@@ -27,7 +27,7 @@ fortificatie valt in één van vier **rollen**.
   (wel botsing), de minikaart (eigen kleur) en de legenda.
 
 ### Gevaar
-- Gebruik het mechanisme van het bestaande antitankgeschut (`atGuns` in `hazards.js`): plaatsing
+- Gebruik het mechanisme van het bestaande antitankgeschut (`atGuns` in `server/hazards.js`): plaatsing
   op de server, een kijkboog, bereik, interval, pantserverlies, `hp`, zichtbaar na het eerste schot.
 - Nu kan een map maar één `hazard` hebben. Fortificaties met een gevaar komen daarom in een eigen
   lijst `fortifications` en mogen naast de bestaande `hazard` van de map bestaan.
@@ -101,7 +101,7 @@ fortifications: [
 - Daarna moet `connectBases` nog altijd een route tussen alle bases vinden; lukt dat niet, dan
   wordt de fortificatie die in de weg ligt een gat breder of weggelaten.
 - Deterministisch uit de kaartseed. De posities gaan mee in de kaartgegevens naar de browser.
-- Een gevaar wordt op de server geplaatst (`hazards.js`) op een plek die de kaartmaker reserveert.
+- Een gevaar wordt op de server geplaatst (`server/hazards.js`) op een plek die de kaartmaker reserveert.
 
 ## 6. Weergave
 - Sprites in `public/assets/<stijl>/fortifications/<type>-…png`, zelfde regels als gebouwen

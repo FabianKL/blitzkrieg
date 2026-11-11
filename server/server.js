@@ -8,11 +8,11 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { createAuth } from './auth.js';
-import * as G from './shared/game.js';
-import * as Weather from './shared/weather.js';
+import * as G from '../shared/game.js';
+import * as Weather from '../shared/weather.js';
 import * as Hazards from './hazards.js';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
 const auth = createAuth();
 const MIME = {
@@ -533,7 +533,7 @@ function stepTank(room, t, live, events) {
   // Onderduiken (§5.7): 2 seconden stil in een storm = bedekt, tot de tank rijdt of schiet
   if (moved || (t.input.fire && t.ammo > 0)) { t.still = 0; t.buried = false; }
   else if (++t.still >= G.BURIAL_TICKS && wx.burial) t.buried = true;
-  // meters van de kaart (zand, motorwarmte, motortemperatuur): zie hazards.js
+  // meters van de kaart (zand, motorwarmte, motortemperatuur): zie server/hazards.js
   Hazards.tankStep(room, t, { moved, wx }, events, (tank, pct, ev) => hurt(room, tank, pct, ev));
   if (!t.alive) return;
   // Voor de voorspelling: hoeveel ticks deze invoer (volgnummer) al is toegepast

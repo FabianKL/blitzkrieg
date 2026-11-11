@@ -404,7 +404,7 @@ buitenrand van de kaart. Zo lijkt het alsof er nog meer land is, maar je kunt er
   randdikte (`4 + ruis·7 + ruis·2` cellen) tot `ROCK`. De kaartmaker bewaart ze in `border` en houdt
   er overal rekening mee: geen kenmerken, gebouwen, bases of gevaren op de rand, en de rand telt niet
   mee voor de terreinpercentages (`P`).
-- `border` gaat mee in de wereld (`w.border`) en wordt gebruikt in `hazards.js` (rond regel 292,
+- `border` gaat mee in de wereld (`w.border`) en wordt gebruikt in `server/hazards.js` (rond regel 292,
   droppings niet op de rand) en in de telling van de kaartmaker (rond regel 40).
 - Buiten de kaart houdt het spel tanks en kogels al tegen: `inBounds()` in `shared/movement.js`
   (rijden: geblokkeerd; kogel: `solid`). De rotsrand is dus niet nodig om de kaart dicht te houden.
@@ -419,7 +419,7 @@ buitenrand van de kaart. Zo lijkt het alsof er nog meer land is, maar je kunt er
    - rijden en graven (`shared/movement.js`): een tank kan geen cel in de strook bezetten (zijn hele
      voetafdruk, `tankCovers`, moet speelbaar zijn);
    - kogels: stoppen aan de binnenrand van de strook (zoals nu aan de kaartrand: `solid`);
-   - gevaren en droppings (`hazards.js`), depots en kratten: alleen op speelbare cellen;
+   - gevaren en droppings (`server/hazards.js`), depots en kratten: alleen op speelbare cellen;
    - zicht mag wel de strook in (dat hoort bij de illusie), maar er staat nooit iets dat je moet
      zien.
    `inBounds()` zelf blijft wat hij is (de hele kaart), voor tekenen en arrays.

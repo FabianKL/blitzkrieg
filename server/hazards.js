@@ -10,9 +10,9 @@
 // De server roept aan: roundStart(room, events) bij elke nieuwe ronde (en bij het begin),
 // step(room, tick, events, hurt) elke tick, en snapshot(room) voor het instapbericht.
 // hurt(t, procent, events) haalt pantser af en laat de tank zo nodig ontploffen.
-import * as G from './shared/game.js';
-import { HINTS, SMOKE } from './shared/config.js';
-import { searchlightAt, searchlightBeams } from './shared/vision.js';
+import * as G from '../shared/game.js';
+import { HINTS, SMOKE } from '../shared/config.js';
+import { searchlightAt, searchlightBeams } from '../shared/vision.js';
 
 const rnd = () => Math.random(); // (tests kunnen Math.random vervangen)
 const ticks = (s) => Math.round(s * G.TICK_RATE);

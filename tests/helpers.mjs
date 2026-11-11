@@ -19,7 +19,7 @@ export function check(ok, message) {
 // Start de server als los proces en wacht tot hij luistert
 export function startServer(port, env = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
+    const proc = spawn(process.execPath, [path.join(ROOT, 'server', 'server.js')], {
       cwd: ROOT, env: {
         ...process.env, NODE_ENV: 'test', TUNNELER_AUTH: 'local',
         INVITE_PASSPHRASE: '', SESSION_SECRET: '', APP_ORIGIN: '', PORT: String(port), ...env,

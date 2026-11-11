@@ -3,7 +3,7 @@ import { G, Sim, sleep, check, connectBot, mapDiff, waitFor, nextStep } from './
 import { checkGeneratedMap } from './gen-checks.mjs';
 import * as V from '../shared/vision.js';
 import * as Wx from '../shared/weather.js';
-import * as Hz from '../hazards.js';
+import * as Hz from '../server/hazards.js';
 import { mapTests } from './maps.mjs';
 import { acceptanceTest } from './acceptance.mjs';
 import { TANKS } from '../shared/config.js';
@@ -111,7 +111,7 @@ function fireTest(w, from, d, dig, tanks = []) {
   return null;
 }
 
-// Nagebootst potje voor de gevaren (hazards.js draait anders op de server)
+// Nagebootst potje voor de gevaren (server/hazards.js draait anders op de server)
 function fakeRoom(id, size = 'middel') {
   const { w, h } = G.sizeDims(size);
   G.setMapSize(w, h);
