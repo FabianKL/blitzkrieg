@@ -43,7 +43,7 @@ Getallen staan in `shared/config.js` (bijv. `track` per terreinklasse).
 Het hele retro-spel moet uit de code. Daar hoort bij:
 - de pagina `public/retro.html` met `public/client.js`;
 - de kaart `shared/maps/retro.js` en de vermelding in `shared/maps/index.js`;
-- de route en uitzonderingen in `server.js`;
+- de route en uitzonderingen in `server/server.js`;
 - de retro-uitzonderingen in `shared/` (`config.js`, `mapgen.js`, `world.js`, `movement.js`; bijv.
   "retro graaft wel" bij `BULLETS.dig`) en in `public/view/side-panel.js`;
 - de tests (`tests/tests.mjs`, `tests/acceptance.mjs`, de retro-vingerafdrukken in

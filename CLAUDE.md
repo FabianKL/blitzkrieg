@@ -22,7 +22,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   antwoorden aan de eigenaar.
 - Code zonder build-stap: ES-modules, Node + `ws` op de server, vanille JS en PixiJS in de browser.
   Toegestane pakketten in de browser: `pixi.js` (8), `pixi-filters`, `simplex-noise`; de server geeft
-  ze op `/vendor/` (vaste lijst in `server.js`) en `index.html` heeft een import map. Geen andere
+  ze op `/vendor/` (vaste lijst in `server/server.js`) en `index.html` heeft een import map. Geen andere
   frameworks of pakketten zonder overleg.
 - Sluit aan bij de omringende code: korte functies, commentaar dat uitlegt *waarom*.
 - **Alle getallen horen in `shared/config.js`**, niet als losse waarden in de code. Getallen die bij
@@ -30,11 +30,11 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   `shared/maps/`.
 
 ## Architectuur in het kort
-- **De server is de baas** (`server.js`, 30 ticks/s). De browser rekent dezelfde regels mee
+- **De server is de baas** (`server/server.js`, 30 ticks/s). De browser rekent dezelfde regels mee
   (`shared/game.js` geeft door uit `world.js`, `terrain.js`, `movement.js`, `codec.js`, `mapgen.js`;
   `shared/client-sim.js` verwerkt de berichten). Alles in `shared/` draait op server én client en moet
   **deterministisch** zijn: geen `Math.random()`, geen tijd, alleen gegevens die beide kanten hebben.
-  Toeval (gevaren, droppings, kaartseed) zit op de server (`hazards.js`) en gaat als gebeurtenis mee.
+  Toeval (gevaren, droppings, kaartseed) zit op de server (`server/hazards.js`) en gaat als gebeurtenis mee.
 - **Kaartgrootte is live**: `G.W`/`G.H` zijn `let`-exports die `setMapSize` verandert. De server doet
   `useRoom(room)` voordat hij met een kaart werkt. In de browser zet `loadMap` de maat.
 - **Eén spelpagina**: `public/index.html` + `shell.js` houden de verbinding, de menu's, het speelveld
@@ -141,7 +141,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   De test "kaart-vingerafdruk" bewaakt dat dezelfde seed dezelfde kaart geeft; verander je de kaarten
   bewust, werk dan de verwachting bij met `node tests/fingerprint.mjs --write`.
 - Verander je iets aan wat de speler ziet, controleer het dan in de browser (preview op 3100).
-  Herstart de previewserver na wijzigingen aan `server.js`, `hazards.js` of `shared/`; voor alleen
+  Herstart de previewserver na wijzigingen aan `server/` of `shared/`; voor alleen
   `public/` is herladen genoeg.
 - `?debug=alles` (alleen localhost) laat alle tanks zien en zet het zicht uit; `?zoom=3` zet de camera
   dichterbij, `?fps=1` toont fps en rekentijd. In een verborgen previewvenster tekent de browser bijna
@@ -159,7 +159,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 `.claude/launch.json` (niet in git) voor de preview:
 ```json
 { "version": "0.0.1", "configurations": [ { "name": "blitzkrieg", "runtimeExecutable": "node",
-  "runtimeArgs": ["server.js"], "env": { "PORT": "3100" }, "port": 3100 } ] }
+  "runtimeArgs": ["server/server.js"], "env": { "PORT": "3100" }, "port": 3100 } ] }
 ```
 
 ## Git

@@ -13,13 +13,13 @@ bases, winnaar, score, spawn, en lobby-UI.
 | Onderdeel | Huidig gedrag | Bron |
 |-----------|--------------|------|
 | Max. spelers | Bepaald door `MAP_SIZES[size].maxPlayers` (klein=2, rest=4) | `config.js:67-70` |
-| Bases | `generateMap()` krijgt `players` = `MAP_SIZES[size].maxPlayers` | `server.js:177` |
-| Slots | `room.tanks[0..3]`, eerste vrije slot | `server.js:576-577` |
+| Bases | `generateMap()` krijgt `players` = `MAP_SIZES[size].maxPlayers` | `server/server.js:177` |
+| Slots | `room.tanks[0..3]`, eerste vrije slot | `server/server.js:576-577` |
 | Winnaar (2 sp.) | Rondes: wie als enige leeft wint de ronde; eerst N rondes wint | `game.js:30,36,43` |
 | Winnaar (3-4 sp.) | Kills: eerst N kills wint het spel | `game.js:30,43` |
-| Ronde-einde | `endRound()` bij elke dode → bij 2 sp. ronde-winnaar, bij 3+ sp. niemand | `server.js:254-269` |
+| Ronde-einde | `endRound()` bij elke dode → bij 2 sp. ronde-winnaar, bij 3+ sp. niemand | `server/server.js:254-269` |
 | Lobby-config | `sendConfig()` stuurt `map`, `size`, `rounds`, `settings` | `shell.js:96-108` |
-| Spawn | Elk slot krijgt basis `world.bases[t.id]` | `server.js:222-224` |
+| Spawn | Elk slot krijgt basis `world.bases[t.id]` | `server/server.js:222-224` |
 | Teams | Bestaan niet | — |
 
 ---
@@ -56,9 +56,9 @@ Deze waarden worden opgeslagen als `room.playerCount` en `room.gameMode`.
 - `public/index.html` — twee nieuwe `<select>` elementen (id `lobby-players`, `lobby-mode`)
 - `public/shell.js` — opbouwen, event-listeners, meesturen in `sendConfig()`
 - Het `init`-bericht stuurt `playerCount` en `gameMode` terug zodat gasten de juiste waarde
-  zien (`sendInit` in `server.js:318`).
+  zien (`sendInit` in `server/server.js:318`).
 
-### F3. Server (`server.js`)
+### F3. Server (`server/server.js`)
 
 **`configure()`** (regel 113):
 - Accepteer `playerCount` (2/3/4) en `gameMode` ('ffa'/'teams') uit het cfg-bericht.
@@ -142,7 +142,7 @@ gameWinner = (players, cfg) => ...find(t => mode === 'rounds' ? t.rounds >= cfg.
   teamgenoten krijgen dezelfde `rounds`-teller → na `roundWinner()` hoog je de `rounds`
   van **alle spelers van het winnende team** op.
 
-**`endRound()` in `server.js`** (regel 254):
+**`endRound()` in `server/server.js`** (regel 254):
 ```javascript
 room.roundWinner = G.roundWinner(players, room.gameMode);
 if (room.roundWinner >= 0) {
@@ -159,7 +159,7 @@ room.winner = G.gameWinner(players, { ...GAME, roundsToWin: room.rounds }, room.
 
 ### F5. Ronde-einde trigger
 
-**Huidig** (server.js:407): `endRound` wordt aangeroepen zodra er een dode bijkomt.
+**Huidig** (`server/server.js`:407): `endRound` wordt aangeroepen zodra er een dode bijkomt.
 
 - Bij 2 spelers FFA: 1 dode → ronde voorbij (ongewijzigd).
 - Bij 3-4 spelers FFA: elke dode → `endRound`, maar `roundWinner()` geeft -1, dus de
@@ -173,7 +173,7 @@ room.winner = G.gameWinner(players, { ...GAME, roundsToWin: room.rounds }, room.
   - FFA 3-4 sp.: maar 1 levend → ronde voorbij. Of: `gameWinner` geeft een winnaar.
   - Teams: beide spelers van een team dood → ronde voorbij.
 
-  Nieuwe check in de tick-loop (server.js:407):
+  Nieuwe check in de tick-loop (`server/server.js`:407):
   ```javascript
   if (live.filter(t => !t.alive).length > deaths) {
     const winner = G.gameWinner(live, { ...GAME, killsToWin: room.kills }, room.gameMode);
@@ -216,7 +216,7 @@ is `Math.min(MAP_SIZES[size].maxPlayers, rules.maxPlayers ?? 4)`.
 |---------|-----|
 | `shared/config.js` | `GAME.maxPlayers` referentie; eventueel nieuwe constanten |
 | `shared/game.js` | `scoreMode`, `roundWinner`, `gameWinner` krijgen `mode` parameter |
-| `server.js` | `configure`, slot-limiet, `spawn`, `endRound`, `makeWorld`, `sendInit` |
+| `server/server.js` | `configure`, slot-limiet, `spawn`, `endRound`, `makeWorld`, `sendInit` |
 | `public/index.html` | Twee nieuwe dropdowns |
 | `public/shell.js` | Opbouwen dropdowns, `sendConfig`, init-verwerking |
 | `shared/client-sim.js` | `gameMode` opslaan uit init-bericht |
@@ -230,7 +230,7 @@ is `Math.min(MAP_SIZES[size].maxPlayers, rules.maxPlayers ?? 4)`.
 ## Stappenplan
 
 ### Stap 1: Datamodel en validatie
-1. Voeg `playerCount` en `gameMode` toe aan `room` in `server.js` (bij `newWorld`).
+1. Voeg `playerCount` en `gameMode` toe aan `room` in `server/server.js` (bij `newWorld`).
 2. Pas `configure()` aan: accepteer en valideer de nieuwe velden.
 3. Pas de slot-limiet aan (regel 576-577).
 4. Stuur `playerCount` en `gameMode` mee in `sendInit()`.
@@ -241,7 +241,7 @@ is `Math.min(MAP_SIZES[size].maxPlayers, rules.maxPlayers ?? 4)`.
 
 ### Stap 3: Winnaar-logica
 1. Pas `scoreMode`, `roundWinner`, `gameWinner` aan in `game.js` (met `mode` parameter).
-2. Pas `endRound()` in `server.js` aan: team-rondes, ronde-einde trigger.
+2. Pas `endRound()` in `server/server.js` aan: team-rondes, ronde-einde trigger.
 3. Fix de ronde-einde trigger voor 3-4 spelers FFA (ronde gaat door tot 1 over of kills-doel).
 
 ### Stap 4: Lobby-UI

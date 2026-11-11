@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { AUTH } from './shared/config.js';
+import { AUTH } from '../shared/config.js';
 
 const COOKIE = '__Host-blitz-session';
 const digest = (value) => createHash('sha256').update(value).digest();
