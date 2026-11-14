@@ -301,6 +301,7 @@ const fctx = fogCanvas.getContext('2d');
 
 // 0 = dichte mist, 1 = helemaal opgetrokken (kaarten zonder fog: altijd 1)
 function fogProgress() {
+  if (view.game.fogOff) return 1; // M-toets: mist uit (host, voor iedereen)
   const wx = view.game.weather;
   if (!wx?.flags.fog) return 1; // mist volgens het weer (Ardennen: ronde 1 en 2)
   const p = wx.flags.fogProgress;

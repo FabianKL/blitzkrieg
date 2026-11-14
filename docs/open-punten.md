@@ -7,7 +7,7 @@ Lijst met nog te nemen beslissingen, nieuwe features, nodige aanpassingen en bug
 
 ### Valse contouren bij El Alamein
 De vage contour van een tank buiten je zichtcirkel verdwijnt (keuze bij de nieuwe tanks,
-`docs/SPEC-tanks.md`): een tank die je in de kijkboog ziet, wordt gewoon getekend. De valse contouren
+spec §4): een tank die je in de kijkboog ziet, wordt gewoon getekend. De valse contouren
 van de woestijnhallucinaties (`public/view/hazards-view.js`, "Woestijnhallucinaties") zijn
 dan meteen als nep te herkennen, want echte tanks zijn geen contour meer. Mogelijkheden:
 - schrappen (ook uit README, de kaarttabel en `tests/acceptance.mjs` punt 13);
@@ -48,14 +48,19 @@ Het hele retro-spel moet uit de code. Daar hoort bij:
   "retro graaft wel" bij `BULLETS.dig`) en in `public/view/side-panel.js`;
 - de tests (`tests/tests.mjs`, `tests/acceptance.mjs`, de retro-vingerafdrukken in
   `tests/fingerprint.json`);
-- de vermeldingen in `README.md`, `CLAUDE.md` en `docs/spec-grafische-reparaties.md`.
+- de vermeldingen in `README.md` en `CLAUDE.md`.
 
 Controleer daarna met `npm test` en `npm run test:gen -- "" 10` dat de andere kaarten niet veranderen.
 
 ## Nieuwe features
 
+### Ardennen-verbeteringen (branch `verbeter-ardennen`)
+Gebouwd (nog niet gecommit). Drie vaste, onbeperkte brandstofdepots (5 T afstand); bombardement
+nabij spelers met drie niveaus en versnellende timer; host-commando's B (barrage), O (storm),
+N (dag/nacht), [ ] (lichtstand); M voor lokale mist. Zie spec §10.8 en §11.1.
+
 ### Nieuwe tanks met bewegende rupsbanden
-Spec: `docs/SPEC-tanks.md`. Gebouwd (nog niet gecommit). Afwijkingen van de spec: geen emblemen
+Spec §4. Gebouwd (nog niet gecommit). Afwijkingen van de spec: geen emblemen
 of nummers op de sprite (keuze van de eigenaar); de vage contour is geschrapt, een tank in je
 kijkboog buiten de cirkel wordt gewoon getekend. Nog door de eigenaar te controleren: de keuze
 van de tanks per map (§5) en hoe de rupsen eruitzien in het spel.

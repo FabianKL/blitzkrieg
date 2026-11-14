@@ -1,873 +1,881 @@
-# Specificatie: Blitzkrieg — spelregels, maps, terrein en weer
+# Specificatie: Blitzkrieg
 
-Dit document beschrijft de uitbreiding van het bestaande Tunneler-spel naar **Blitzkrieg**: tien maps uit de Tweede Wereldoorlog, elk met eigen terrein, een eigen gevaar, een eigen schaars middel en een eigen weerbeeld. Het vervangt de eerdere terreinspecificatie (`SPEC-terrein.md`). Waar die twee verschillen, geldt dit document.
-
-Bouw voort op de bestaande code (tegels, rendering, netwerk, tanks). Bedenk geen nieuwe architectuur als dat niet nodig is. Alle getallen in dit document horen in configuratiebestanden, zodat ze tijdens het testen makkelijk aan te passen zijn.
-
----
-
-## 0. Kern van het spel (niet veranderen)
-
-Blitzkrieg blijft Tunneler. Spelers graven zich met een tank door de grond en zoeken elkaar. Je ziet een tegenstander pas scherp als hij binnen je zichtstraal komt (hoofdstuk 9). Daarvoor zoek je hem aan de hand van zijn sporen: tunnels, bandensporen, barsten in het ijs, weggeschoten begroeiing, puin. Buiten je zichtstraal zie je hem hooguit als een vage **schim**, of krijg je een **richtingshint** (hoofdstuk 8): een oplichtende gloed aan de rand van je scherm die alleen een richting aangeeft.
+Tankspel voor 2–4 spelers in het lokale netwerk of via internet, gebaseerd op Tunneler. Tien
+maps uit de Tweede Wereldoorlog, elk met eigen terrein, gevaar, schaars middel en weer. Dit
+document is de enige spelspecificatie; de code en tests verwijzen ernaar. De code is leidend
+bij afwijkingen.
 
 ---
 
-## 1. Naam
+## §1. Overzicht
 
-- Hernoem het spel overal in de interface van "Tunneler" naar **"BLITZKRIEG"**: titelbalk, kopregel in het spel, starttekst, paginatitel.
-- Interne code- en bestandsnamen mogen blijven als hernoemen veel risico geeft. Zeg dan welke namen je hebt laten staan.
+Spelers graven zich met een tank door de grond en zoeken elkaar. Je ziet een tegenstander pas
+als hij binnen je zichtcirkel komt (§7). Daarvoor zoek je hem aan de hand van sporen: tunnels,
+bandensporen, barsten in het ijs, weggeschoten begroeiing en puin. Buiten je zichtcirkel kun je
+een tank in je kijkboog gewoon zien; daarbuiten krijg je een richtingshint (§8): een gloed aan
+de rand van je scherm die alleen een richting aangeeft.
 
 ---
 
-## 2. Spel, ronde en winnen
+## §2. Spel, ronde en winnen
 
 ### 2.1 Begrippen
 
 - **Spel:** een reeks rondes op één map, tot er een winnaar is.
-- **Ronde:** begint met alle spelers in hun eigen basis en eindigt zodra er een speler dood is.
+- **Ronde:** begint met alle spelers in hun eigen basis; eindigt zodra er een dode is
+  (2 spelers), zodra er maar één leeft (3–4 FFA), of beide spelers van een team dood zijn
+  (teams).
 
 ### 2.2 Winnen
 
-| Aantal spelers | Winnaar van het spel |
-| --- | --- |
-| 2 | Wie als eerste **3 rondes** heeft gewonnen. Je wint een ronde als je tegenstander dood is en jij als enige over bent. |
-| Meer dan 2 | Wie als eerste **5 kills** heeft. |
+| Modus | Winnaar |
+|---|---|
+| 2 spelers | Wie als eerste **3 rondes** wint (instelbaar). |
+| 3–4 spelers, ieder voor zich | Wie als eerste **3 kills** heeft (instelbaar; dezelfde lobby-instelling als rondes). |
+| 4 spelers, teams (2v2) | Het team dat als eerste **3 rondes** wint (instelbaar). |
 
-- **Kill:** jouw treffer zorgt ervoor dat een tegenstander geen pantser meer heeft.
-- **Geen pantser = dood**, ook als dat door een gevaar of weer komt. Een dood door een gevaar telt niet als kill voor iemand.
-- Bij 2 spelers: gaan beide spelers tegelijk dood, dan wint niemand de ronde.
+- **Kill:** jouw treffer brengt een tegenstander op 0 pantser.
+- Een dood door een gevaar telt voor niemand als kill.
+- Bij 2 spelers: gaan beide tegelijk dood, dan wint niemand de ronde.
 
 ### 2.3 Na een dood
 
-- Gaat een speler dood, dan eindigt de ronde en begint **iedereen weer in zijn eigen basis**.
-- Aan het begin van elke ronde heeft iedereen **vol pantser, volle brandstof en volle munitie**, tenzij de map iets anders bepaalt (hoofdstuk 10).
-- De score (gewonnen rondes of kills) blijft over de rondes heen staan.
+Iedereen begint weer in zijn eigen basis met vol pantser, volle brandstof en volle munitie,
+tenzij de map iets anders bepaalt. De score blijft over de rondes staan.
 
 ### 2.4 De map tijdens een spel
 
-- De kaart wordt **één keer** gegenereerd bij het begin van een spel en blijft het hele spel dezelfde. Ook de basisposities blijven gelijk.
-- Wat er tijdens een ronde op de kaart verandert (gegraven tunnels, weggeschoten begroeiing, puin, gebroken ijs, veranderingen door het weer), blijft ook in de volgende ronde staan, tenzij de map iets anders bepaalt. Zie open vraag 1.
-- Uitzondering: bruggen bij Market Garden worden aan het begin van elke ronde hersteld (10.7).
-
-### 2.5 Weer en rondes
-
-- Het weer (hoofdstuk 7) begint bij de start van het **spel** en loopt over de rondes heen door.
-- Een weersverandering kan afhangen van een **timer** (seconden sinds het begin van het spel of van de ronde) of van het **rondenummer** (bijvoorbeeld "vanaf ronde 3").
-- Het kan dus gebeuren dat er twee rondes gespeeld zijn voordat een weersverandering begint.
+- De kaart wordt **één keer** gegenereerd bij het begin van een spel.
+- Tunnels, sporen en kaartveranderingen blijven tussen rondes liggen.
+- Uitzondering: de brug bij Market Garden wordt elke ronde hersteld (de ontploffingsteller
+  loopt wel door).
 
 ---
 
-## 3. Mapkeuze en kaartgrootte
+## §3. Wachtkamer en spelermodus
 
-- Bovenaan het scherm komen twee **pull-down menu's**: de map en de kaartgrootte.
-- **Mapmenu:** alle maps in chronologische volgorde, zoals in de tabel in hoofdstuk 10. Weergave per regel: `jaar · missie — map`, bijvoorbeeld `1944 · Wacht am Rhein — Ardennen`.
-- **Kaartgrootte:** klein, middel, groot, extra groot (zie 6.0). Standaard: middel.
-- De menu's zijn bruikbaar voordat een spel start. Tijdens een spel zijn ze zichtbaar, maar uitgeschakeld.
-- De speler die het spel aanmaakt (host) kiest. De andere spelers zien de keuze, maar kunnen die niet wijzigen.
-- De titelregel in het spel toont de missie en map, bijvoorbeeld `BLITZKRIEG — WACHT AM RHEIN — ARDENNEN · DECEMBER 1944`.
-- Het scherm toont ook de score en het rondenummer.
+### 3.1 De host kiest
+
+Wie als eerste binnenkomt is de host. In de wachtkamer kiest de host:
+
+- **Map:** 10 maps in chronologische volgorde. Maps die nog niet bestaan staan grijs.
+- **Kaartgrootte:** klein (max. 2 spelers), middel, groot, extra groot.
+- **Aantal spelers:** 2, 3 of 4 (begrensd door de kaartgrootte).
+- **Modus:** ieder voor zich (FFA) of teams (2v2, alleen bij 4 spelers). Bij teams spawnen
+  twee spelers in dezelfde basis.
+- **Rondes/kills om te winnen** (dezelfde instelling: standaard 3).
+- **Minikaart:** aan of uit. Bij Tunneler-maps standaard uit.
+- **Zicht-overlay:** mist, schaduw en vervaging aan of uit (de zichtregel blijft altijd gelden).
+- **Stormfrequentie, gevaren, brandstof/schild/munitie-multiplier** (extra lobby-instellingen).
+
+Gasten zien alleen de titel, die meeloopt met wat de host kiest. Na START ziet ook de host
+alleen de titel.
+
+### 3.2 STOP-knop
+
+Naast volledig scherm, alleen tijdens een spel:
+- **Host:** iedereen terug naar de wachtkamer.
+- **Gast:** verlaat het spel, de rest speelt door. De knop wordt "opnieuw meedoen".
+
+### 3.3 Kaartgrootte
+
+| Grootte | Factor t.o.v. middel |
+|---|---|
+| Klein | 0,75× |
+| Middel | 1× |
+| Groot | 1,5× |
+| Extra groot | 2× |
+
+Posities van vaste kenmerken zijn fracties van de kaart en schalen mee. Breedtes in T (wegen,
+bruggen, tunnels, ruimte rond een basis) schalen **niet** mee. Percentages en aantallen blijven
+gelijk.
 
 ---
 
-## 4. Tanks
+## §4. Tanks
 
-- Alle tanks hebben **exact dezelfde eigenschappen**: snelheid, pantser, brandstof, munitie, vuursnelheid.
-- Per map verschilt alleen het uiterlijk (sprite en naam op het rapportkaartje).
-- **Basis:** in je eigen basis vul je pantser, brandstof en munitie aan, tenzij de map iets anders bepaalt.
+### 4.1 Eigenschappen
+
+Alle tanks hebben **exact dezelfde eigenschappen**: snelheid, pantser, brandstof, munitie,
+vuursnelheid. Per map verschilt alleen het uiterlijk.
+
+### 4.2 De vijf tanks
+
+| Naam | Land |
+|---|---|
+| Landsverk L-60 | Nederland |
+| T-34/76 | Sovjet-Unie |
+| Panther Ausf. G | Duitsland |
+| M4A1 Sherman | Verenigde Staten |
+| A34 Comet | Verenigd Koninkrijk |
+
+Geen embleem of nummer op de tanksprite. Elke tank ziet er op elke map en in elke stijl
+hetzelfde uit: geen aparte winter- of woestijnvariant. Ploeg C en D zijn donkerdere varianten
+van A en B.
+
+### 4.3 Tanks per map
+
+| Map | Ploeg A | Ploeg B |
+|---|---|---|
+| Grebbeberg | Landsverk | Panther |
+| Russische vlakte | T-34 | Panther |
+| El Alamein | Comet | Panther |
+| Leningrad | T-34 | Panther |
+| Koersk | T-34 | Panther |
+| Carentan | Sherman | Panther |
+| Arnhem | Comet | Panther |
+| Ardennen | Sherman | Panther |
+| Oder-front | T-34 | Panther |
+| Berlijn | T-34 | Panther |
+
+### 4.4 Weergave
+
+Romp + twee rupsbanden die meeschuiven met het rijden. Bij draaien op de plaats schuiven de
+rupsen tegen elkaar in. Geen emblemen of nummers op de tanksprite.
+
+### 4.5 Basis
+
+In je eigen basis vul je pantser, brandstof en munitie aan, tenzij de map iets anders bepaalt
+(§10).
+
+### 4.6 Zelfvernietiging
+
+K = zelfvernietiging. De tank is dood; telt voor niemand als kill.
 
 ---
 
-## 5. Terreinsysteem
+## §5. Terrein
 
 ### 5.1 Maten
 
-Alle breedtes worden uitgedrukt in **T = de breedte van een tank**.
+Alle breedtes in **T** = de breedte van een tank (5 cellen).
 
 | Element | Breedte |
-| --- | --- |
-| Gegraven tunnel | ca. 1,5 T (de bestaande tunnelbreedte aanhouden als die al vastligt) |
+|---|---|
+| Gegraven tunnel | ca. 1,5 T |
 | Weg, straat, dijk | minimaal 2 T |
-| Brug | minimaal 3 T breed, zodat je er makkelijk overheen rijdt |
-| Doorwaadbare plek | 3 T breed |
-| Rivier | 3 tot 5 T, tenzij anders vermeld |
-| Beek of kanaal | 2 tot 3 T |
-| Heg | precies 1 T |
-| Bos | op elk punt 1 tot 5 T breed |
+| Brug | minimaal 3 T |
+| Doorwaadbare plek | 3 T |
+| Rivier | 3–5 T, tenzij anders vermeld |
+| Beek of kanaal | 2–3 T |
+| Heg | 1 T |
+| Bos | 1–5 T breed; losse bossen minstens 2 cellen uit elkaar |
 
 ### 5.2 Terreinklassen
 
-Kernregel: **hoe harder de grond, hoe sneller je rijdt en hoe minder spoor je achterlaat. Hoe zachter de grond, hoe trager je rijdt en hoe duidelijker je tunnel.**
+Kernregel: hoe harder de grond, hoe sneller je rijdt en hoe minder spoor. Hoe zachter, hoe
+trager en hoe duidelijker de tunnel.
 
-| Klasse (`id`) | Rijsnelheid op ongegraven tegel | Brandstof per tegel | Begin-intensiteit spoor | Vervaging per seconde | Minimale intensiteit |
-| --- | --- | --- | --- | --- | --- |
-| `paved` (verhard: weg, straat, brug) | 1.00 | 1 | 0.10 | 0.020 | 0.00 |
-| `hard` (bevroren/droge grond, dijk) | 0.80 | 2 | 0.35 | 0.008 | 0.10 |
-| `normal` (gras, graan, aarde) | 0.65 | 2 | 0.80 | 0.003 | 0.40 |
-| `soft` (zand, sneeuw, modder, puin) | 0.45 | 3 | 1.00 | 0.001 | 0.60 |
-| `marsh` (drassig) | 0.30 | 4 | 0.60 | 0.100 | 0.00 |
-| `ford` (doorwaadbare plek) | 0.25 | 3 | 0.60 | 0.100 | 0.00 |
-| `ice` (bevroren rivier of meer) | 1.00 | 1 | zie 5.6 | – | – |
-| `vegetation` (begroeiing) | 0 tot weggeschoten | – | – | – | – |
-| `building` (gebouw) | 0 tot kapotgeschoten | – | – | – | – |
-| `rock` (onbegaanbaar, grijs) | 0 | – | – | – | – |
-| `water` (onbegaanbaar, donkerblauw) | 0 | – | – | – | – |
+| Klasse | Rijsnelheid | Brandstof | Begin-spoorintensiteit | Vervaging/s | Min. intensiteit |
+|---|---|---|---|---|---|
+| verhard (weg, brug) | 1,00 | 1 | 0,10 | 0,020 | 0,00 |
+| hard (bevroren/droog, dijk) | 0,80 | 2 | 0,35 | 0,008 | 0,10 |
+| normaal (gras, graan) | 0,65 | 2 | 0,80 | 0,003 | 0,40 |
+| zacht (zand, sneeuw, modder, puin) | 0,45 | 3 | 1,00 | 0,001 | 0,60 |
+| moeras | 0,30 | 4 | 0,60 | 0,100 | 0,00 |
+| doorwaadbaar | 0,25 | 3 | 0,60 | 0,100 | 0,00 |
+| ijs | 1,00 | 1 | alleen barsten | – | – |
+| verbrand | 0,80 | 2 | 1,00 | 0,008 | 0,10 |
+| begroeiing | 0 (tot weggeschoten) | – | – | – | – |
+| gebouw | 0 (tot kapotgeschoten) | – | – | – | – |
+| rots | 0 (onbegaanbaar) | – | – | – | – |
+| water | 0 (onbegaanbaar) | – | – | – | – |
 
 **Regels:**
 
-1. Rijsnelheid is een vermenigvuldiger op de maximale tanksnelheid en geldt voor graven door een ongegraven tegel.
-2. **Bestaande tunnel:** rijden door een tunneltegel gaat altijd op snelheid 1.00 en kost 1 brandstof.
-3. **Spoor:** bij binnenrijden wordt `trackIntensity` gelijk aan de begin-intensiteit van de klasse. Opnieuw rijden over een tunneltegel zet hem terug op de begin-intensiteit.
-4. **Vervaging:** `trackIntensity` daalt elke seconde met de vervagingswaarde, maar niet onder de minimale intensiteit, behalve tijdens een sporenwisser (7.2).
-5. **`marsh` en `ford`** krijgen geen tunnel, alleen rimpelingen die snel verdwijnen. De tegel blijft wat hij was.
-6. **`rock` en `water`** zijn onbegaanbaar en niet te vernietigen. Rotsen zijn grijs, water is donkerblauw. Kogels stoppen op rotsen, maar vliegen over water heen (5.8).
-7. **Weergave van sporen:** meng de terreinkleur met de tunnelkleur van de map, naar verhouding van `trackIntensity`. Eigen en vreemde sporen zien er hetzelfde uit.
+1. Rijsnelheid is een vermenigvuldiger op de maximale tanksnelheid, bij het graven door een
+   ongegraven tegel.
+2. **Bestaande tunnel:** snelheid 1,00, kost 1 brandstof.
+3. **Spoor:** bij het binnenrijden wordt de spoorintensiteit gelijk aan de beginwaarde van de
+   klasse. Opnieuw rijden over een tunneltegel zet hem terug.
+4. **Vervaging:** de intensiteit daalt per seconde, maar niet onder het minimum, behalve tijdens
+   een sporenwisser (§9.2).
+5. **Moeras en doorwaadbaar:** geen tunnel, alleen rimpelingen die snel verdwijnen. De tegel
+   blijft wat hij was.
+6. **Rots en water:** onbegaanbaar, niet te vernietigen. Kogels stoppen op rots maar vliegen
+   over water.
 
 ### 5.3 Begroeiing
 
 | Type | Schoten nodig |
-| --- | --- |
-| `pine` dennenboom | 2 |
-| `tree` loofboom, bosje, boomgaard | 2 |
-| `birch` berk | 2 |
-| `hedge` heg | 3 |
-| `shrub` dorre struik | 1 |
+|---|---|
+| den, loof, berk | 2 |
+| heg | 3 |
+| struik | 1 |
 
-- **Bossen:** `pine`, `tree` en `birch` staan nooit los, maar vormen altijd een **bos**: een samenhangend vlak dat op elk punt minimaal 1 T en maximaal 5 T breed is. Een map met veel begroeiing krijgt dus meerdere bossen, geen één groot blok.
-- **Heggen:** een `hedge` is altijd precies **1 T breed** en loopt als een lijn, recht of met hoeken.
-- **Struiken:** `shrub` staan in kleine groepjes van 1 tot 3 T.
-- Bij 0 levenspunten wordt de tegel de ondergrondklasse uit de mapconfiguratie.
-- Er blijft een **permanent gat** zichtbaar (stronk, takken). Dat vervaagt nooit, ook niet door een sporenwisser.
-- Een tank kan niet door begroeiing graven; eerst schieten. Elk schot kost munitie.
+- Bossen staan altijd als samenhangend vlak, nooit los.
+- Heggen zijn precies 1 T breed en lopen als een lijn.
+- Een weggeschoten plant ruimt alles binnen 4 cellen op (`FELL.clearRadius`), zodat een tank
+  erdoor past.
+- Boomkruinen zijn 7–10 cellen; ze hangen hoogstens `OBJECTS.overhang` cel over open grond.
 
 ### 5.4 Gebouwen
 
-- Grijze blokken met een dak- of muurtextuur, zodat ze herkenbaar anders zijn dan rotsen.
-- Kapot te schieten in **4 schoten**. Daarna wordt de tegel `soft` (puin) met een permanent zichtbaar puinpatroon.
-- Het kapotschieten van een gebouw geeft een richtingshint aan wie binnen gehoorafstand is (hoofdstuk 8).
+- 4 schoten om kapot te schieten → puin (zacht, berijdbaar).
+- Drie stadia: heel, half, puin.
+- Huizen zijn groter dan een tank: grondvlakken in `BUILDINGS.footprints` (~1,7× de tekening).
+  Woonhuis 10×10, rijhuis 20×8, boerderij 19×17, kerk 14×26 (in een krap dorp dwars).
+- Huizen en kerken staan nooit op een weg of dijk; in een dorp ook niet pal ertegen.
+- Dorpshuizen tellen niet mee in de terreinpercentages.
 
 ### 5.5 Dorpsmodule
 
-Een dorp is een vaste module die op een opgegeven plek wordt neergezet:
-
-- een plein of kruispunt in het midden met één herkenningspunt (kerk, waterput, plein);
-- 4 tot 8 gebouwen;
-- straten (`paved`, minimaal 2 T breed) die aansluiten op de wegen van de map;
-- eventueel tuinmuren of heggen als begroeiing aan de rand.
-
-Standaardgrootte: ongeveer 10% van de kaart. Afwijkingen staan per map vermeld.
+Een dorp met een plein of kruispunt, een kerk, 4–8 gebouwen en straten die aansluiten op de
+wegen. Standaard ~10% van de kaart. Afwijkingen per map vermeld. Een dorp kan per kaartgrootte
+een eigen maat hebben.
 
 ### 5.6 IJs
 
-IJs kan op **elke map** voorkomen als bevroren rivier of bevroren meer. De mapconfiguratie bepaalt of een rivier of meer bevroren is (`"frozen": true`). In de huidige maps is dat de Neva bij Leningrad.
+Op elke map met bevroren water (Leningrad: het meer).
 
-1. Rijdt als `paved`, maar maakt geen tunnel en laat **geen bandensporen** achter. Het enige spoor op ijs zijn **barsten**.
-2. Elke ijstegel houdt `passCount` bij.
-3. Bij elke passage is de kans dat het ijs breekt `min(1, passCount × 0.08)`.
-4. Barsten worden zichtbaar in drie stadia: vanaf 2, 5 en 8 passages. Ze vervagen niet.
-5. **Breekt het ijs onder een tank,** dan worden de tegel en de direct aangrenzende ijstegels een wak (`water`). De tank zakt erin en:
-   - verliest zolang hij in het wak staat **2% pantser per seconde**;
-   - kan nog wel rijden, maar heel langzaam (snelheid 0.15), en alleen naar een tegel die geen water is;
-   - stopt met pantser verliezen zodra hij op een tegel staat die geen water is;
-   - blijft hij in het wak, dan loopt het pantser leeg tot 0 en is hij dood.
-6. Op de plek van een wak blijft een open gat met ijsschotsen zichtbaar.
+1. Rijdt als verhard, geen tunnel, alleen **barsten**.
+2. Kans op breken per passage: `min(1, passages × 0,08)`.
+3. Barsten zichtbaar in drie stadia: 2, 5 en 8 passages. Ze vervagen niet.
+4. **Tank door het ijs:** tegel + aangrenzend ijs wordt wak (water). De tank verliest 2%
+   pantser/s, rijdt heel langzaam (0,15), en gaat dood als hij erin blijft.
 
 ### 5.7 Onderduiken in een storm
 
-Alleen bij maps waarvan het weer een sneeuwstorm, zandstorm of sneeuwjacht heeft (zie de mapbeschrijving):
+Op maps met sneeuwstorm, zandstorm of sneeuwjacht:
 
-- Staat een tank tijdens de storm **2 seconden stil**, dan raakt hij bedekt onder de sneeuw of het zand.
-- Een bedekte tank is **onzichtbaar voor de tegenstanders**, ook binnen hun zichtstraal, en geeft geen schim. Voor de eigen speler wordt hij getekend als een hoopje sneeuw of zand met een vage omtrek.
-- De tank blijft bedekt tot hij gaat rijden of schiet, ook als de storm al voorbij is.
-- Een bedekte tank kan wel geraakt worden door een schot dat er toevallig op komt.
+- 2 seconden stilstaan → de tank raakt bedekt.
+- De eigen speler ziet de tank verbleekt met de loop die uitsteekt (`BURIAL`).
+- Onzichtbaar voor tegenstanders tot hij rijdt of schiet.
+- Een bedekte tank kan wel geraakt worden door een schot dat erop komt.
 
 ### 5.8 Schieten
 
-- Een kogel vliegt **over de grond heen**. Hij graaft niet: zand, sneeuw, aarde en andere grond blijven onveranderd.
-- Een kogel vliegt rechtdoor **over de hele kaart**, ook over water, tot hij iets raakt of de kaartrand bereikt.
-- Een kogel stopt bij: een tank, `vegetation`, `building`, `rock`, of een object zoals geschut.
-- Raakt een kogel begroeiing of een gebouw, dan gaat er een levenspunt af (5.3 en 5.4).
-- Je kunt een tegenstander dus raken zonder dat er een tunnel tussen jullie ligt.
+- Kogels **graven standaard niet** (`BULLETS.dig` staat uit; per map aan te zetten).
+- Een kogel vliegt over grond en water, stopt bij tank, begroeiing, gebouw, rots of geschut.
+- De krater van een ontploffende tank blijft.
 
 ---
 
-## 6. Kaartgeneratie
-
-De kaart wordt bij het begin van een spel gegenereerd volgens de mapbeschrijving: vaste kenmerken plus willekeurig ingevuld terrein. Daarna blijft hij het hele spel dezelfde (2.4).
-
-### 6.0 Kaartgrootte
-
-| Grootte | Breedte en hoogte ten opzichte van middel |
-| --- | --- |
-| Klein | 0,75× |
-| Middel | 1× (de huidige kaartgrootte) |
-| Groot | 1,5× |
-| Extra groot | 2× |
-
-- Posities van vaste kenmerken zijn fracties van de kaart en schalen dus mee.
-- Breedtes in T (wegen, bruggen, rivieren, tunnels, de ruimte rond een base) schalen **niet** mee.
-- Aantallen (bruggen, gebouwen per dorp, geschut) blijven gelijk, tenzij de map iets anders bepaalt. Percentages blijven gelijk.
+## §6. Kaartgeneratie
 
 ### 6.1 Volgorde
 
-De bases komen **eerst**; daarna wordt de kaart eromheen gemaakt.
+1. **Bases plaatsen** (6.2).
+2. **Vaste kenmerken:** rivieren, wegen, bruggen, dorpen, bijzonderheden.
+3. **Terrein invullen** tot de percentages (±3 procentpunt marge), met samenhangende vlakken.
+4. **Objecten plaatsen:** gevaren, depots, speciale objecten.
+5. **Controleren** (6.4).
 
-1. **Bases plaatsen** (6.2). Houd daarbij rekening met de plekken waar vaste kenmerken komen (rivieren, dorpen, de stad), zodat een base daar niet op terechtkomt. Leg rond elke base een **beschermde zone**: de base zelf plus 3 T vrije ruimte en de vrije stroken boven en onder de opening.
-2. **Vaste kenmerken plaatsen:** rivieren, beken, meren, wegen, bruggen, doorwaadbare plekken, dorpen, heuvels en andere bijzonderheden uit de mapbeschrijving. Posities staan als fracties van de kaart: `(0,0)` is linksboven, `(1,1)` rechtsonder. Licht variëren (±5%) mag, zodat geen twee kaarten precies gelijk zijn. Een kenmerk mag nooit een beschermde zone in. Schuif het zo nodig op (tot ±10%) of buig een rivier of weg om de zone heen.
-3. **Bruggen:** op elk punt waar een weg water kruist, komt een brug van minimaal 3 T breed. Het aantal bruggen per water staat in de mapbeschrijving.
-4. **Terrein invullen:** vul de rest van de kaart met de terreinklassen tot de percentages uit de mapbeschrijving zijn bereikt, met een marge van ±3 procentpunt. Gebruik samenhangende vlakken (bijvoorbeeld via ruis of groeiende blobs), geen losse tegels. Begroeiing volgt de vormregels uit 5.3. Percentages gelden voor de hele kaart, inclusief de vaste kenmerken.
-5. **Objecten plaatsen:** gevaren, depots en speciale objecten uit de mapbeschrijving, buiten de beschermde zones.
-6. **Controleren** (6.3).
+Lukt een poging niet, dan probeert de kaartmaker opnieuw met een andere seed.
 
 ### 6.2 Bases
 
-- Elke speler krijgt een base. Bases worden **willekeurig** geplaatst, zodat je niet steeds dezelfde kant op hoeft te zoeken.
-- **Minimale afstand:** je mag een andere base nooit kunnen zien vanuit je eigen base of als je er vlak omheen rijdt. Concreet: voor elke positie van je tank in je eigen base of binnen 3 T eromheen ligt elke andere base **helemaal buiten je venster**, inclusief de vage rand. Gebruik de grootte van het venster zoals die in het spel is. Dit geldt voor elk paar bases.
-- **Vrije ruimte:** rond de hele base ligt een rand van minimaal **3 T** zonder `water`, `rock`, `building`, `vegetation`, gevaren of objecten. Alleen graafbaar terrein of `paved` is daar toegestaan.
-- **In- en uitgang:** de openingen aan de boven- en onderkant zijn altijd vrij. Recht boven en recht onder de opening ligt een vrije strook van minimaal 3 T diep, zodat je de base makkelijk in en uit rijdt.
-- Een base staat dus ook minimaal 3 T van de kaartrand.
-- Een base staat niet op een dorp, weg of brug. Het terrein onder de base wordt vrijgemaakt.
-- Mapspecifieke regels (bijvoorbeeld bases aan weerszijden van een rivier) staan in de mapbeschrijving.
-- Lukt plaatsing na 50 pogingen niet, kies dan opnieuw. Lukt het ook dan niet (bijvoorbeeld te veel spelers op een kleine kaart), meld dat in het menu en vraag om een grotere kaart.
+- Willekeurig geplaatst; de kaart wordt eromheen gemaakt.
+- **Zicht:** vanuit je basis en 3 T eromheen is geen andere basis in je venster.
+- **Vrije ruimte:** 3 T zonder water, rots, gebouwen, begroeiing of gevaren.
+- **In- en uitgang:** vrije strook van 3 T boven en onder de opening.
+- Niet op een dorp, weg of brug. Het terrein onder de basis wordt vrijgemaakt.
+- Bij krappe kaarten (Market Garden, Berlijn klein) worden de regels stap voor stap
+  versoepeld: eerst de vensterregel, dan de afstand tot de rivier, dan de uitrijstrook
+  (minimum 3 T).
 
-### 6.3 Controle
+### 6.3 Rand van de kaart
 
-- Er moet tussen elk paar bases een route zijn die niet door `water` of `rock` gaat. `vegetation`, `building`, `ice` en `ford` tellen als passeerbaar.
-- Voor maps waar het weer terrein verandert (Grebbeberg, Barbarossa, Leningrad, Koersk, Val van Berlijn): de route moet ook na alle veranderingen nog bestaan.
-- Percentages binnen de marge. Zo niet: opnieuw genereren.
+Langs de rand een onbegaanbare strook van 2 tankbreedtes (`EDGE.band`, 11 cellen). Het terrein
+loopt erin door (spiegelbeeld van het terrein ernaast).
 
-### 6.4 Netwerk
+**Uitzondering:** op de Tunneler-kaarten (zomer en winter) is de strook gevuld met rotsblokken
+uit de atlas van de stijl. Op andere kaarten niet; op de retrokaart ook.
 
-- De host kiest een willekeurige `seed` en stuurt die met de map-id en de kaartgrootte naar de andere spelers. Iedereen genereert dezelfde kaart uit dezelfde seed.
-- Alle willekeurige gebeurtenissen tijdens het spel (ijs dat breekt, brand die overslaat, artillerievakken, droppings, depots, instortende gevels) worden door de host bepaald en verstuurd.
-- Kaartwijzigingen, weer, score en rondenummer lopen bij iedereen gelijk.
-- Uitzondering: woestijnhallucinaties bij El Alamein zijn per speler verschillend en worden niet gesynchroniseerd.
+Tanks, kogels, gebouwen, bases en gevaren blijven buiten de strook (`playable` in `world.js`).
+De terreinpercentages gelden voor het speelbare deel. Een kogel stopt aan de binnenrand van de
+strook.
 
----
+### 6.4 Controle
 
-## 7. Weer
+- Route tussen elk paar bases (niet door water of rots; begroeiing, gebouwen, ijs en
+  doorwaadbaar tellen als passeerbaar).
+- Routes moeten ook na weerveranderingen bestaan.
+- Percentages binnen de marge.
 
-Elke map heeft een eigen **weerbeeld**. Het weer begint bij de start van het spel en kan veranderen op een timer of per ronde (2.5). Het weer kan drie dingen doen:
+### 6.5 Plassen en rotsen
 
-1. **Zicht** veranderen (de zichtstraal, hoofdstuk 9).
-2. **Sporen wissen** (een sporenwisser, 7.2).
-3. **Terrein** veranderen (bijvoorbeeld ijs dat smelt of grond die modder wordt).
+Plassen en rotsen worden niet afgekapt door de rechthoekige zones (rond bases, dorpen,
+gebieden): een blob die daaraan komt wordt kleiner of komt ergens anders.
 
-### 7.1 Weersregels in de configuratie
+### 6.6 Netwerk
 
-Een weerregel heeft:
-
-- `from`: vanaf wanneer hij geldt, als rondenummer (`{"round": 3}`) of als tijd (`{"secondsInGame": 300}` of `{"secondsInRound": 0}`);
-- `every` en `duration` (optioneel): voor terugkerend weer, zoals een storm elke 90 seconden voor 20 seconden;
-- het effect: zichtstraal, sporenwisser, onderduiken, terreinverandering.
-
-### 7.2 Sporenwisser
-
-Zolang een sporenwisser actief is:
-
-- vervagen sporen op `soft` en `normal` **10× zo snel** en geldt de minimale intensiteit niet;
-- wordt een tunneltegel van `soft` of `normal` die intensiteit 0 bereikt weer **ongegraven**, zodat hij opnieuw gegraven moet worden;
-- blijven `paved`, `hard` en permanente gaten (begroeiing, puin) onveranderd.
-
-Sommige sporenwissers werken alleen in een deel van de kaart, zie de mapbeschrijving.
+De host kiest een willekeurige seed en stuurt die met de map-id en kaartgrootte. Iedereen
+genereert dezelfde kaart. Alle willekeurige gebeurtenissen (ijs, brand, artillerie, droppings,
+instortende gevels) worden door de host bepaald en verstuurd.
 
 ---
 
-## 8. Richtingshints
+## §7. Zicht
 
-- Bij bepaalde gebeurtenissen licht de rand van je venster op met een **gloed** in de richting van de tegenstander.
-- Alleen **8 richtingen**: boven, rechtsboven, rechts, rechtsonder, onder, linksonder, links, linksboven. De gloed bedekt het betreffende deel van de rand (een zijde of een hoek). Geen exacte plek, geen afstand.
-- **Duur:** de gloed licht op en dooft in 3 seconden. Hij geeft de richting van de plek van de gebeurtenis aan, niet waar de tegenstander daarna heen rijdt.
+### 7.1 Zichtcirkel
 
-**Geluiden** geven alleen een hint als de tegenstander binnen **20 T** van jou is (gehoorafstand):
+De zichtcirkel is de **halve hoogte van het beeld**. Het weer geeft waarden in T: 12 T = de
+volle cirkel, 6 T = de helft. Minimum: 2 tankbreedtes (`VISION`).
 
+### 7.2 Binnen de cirkel
+
+Je ziet rondom. Gebouwen, begroeiing, rotsen en rook verbergen wat erachter ligt.
+
+### 7.3 Kijkboog
+
+In een boog van **130°** in de rijrichting kijk je langs randen: je ziet de rand van het
+obstakel en een tank die half achter een hoek staat. Naast en achter je niet — daar zie je het
+obstakel zelf ook niet.
+
+### 7.4 Buiten de cirkel
+
+Alleen in de kijkboog: een tank die daar rijdt zie je als een vage contour (50% dekking die
+afloopt naar de rand van het venster). Geen richtingshint voor een tegenstander die je scherp
+ziet.
+
+### 7.5 Donkere schaduw
+
+Volgt dezelfde regel (`visibleCell`). Waar je geen zicht hebt: geen tunnels, sporen,
+ijsbarsten of kraters — alleen het kale terrein (de schone kaart). Bomkraters (artillerie,
+ontplofte tank) zie je altijd, ook zonder zicht.
+
+### 7.6 Zicht-overlay
+
+De checkbox ZICHT in de wachtkamer zet mist, schaduw en vervaging uit; de zichtregel zelf
+blijft gelden. Tijdens het spelen is er geen zichtknop.
+
+---
+
+## §8. Richtingshints
+
+Een **gloed** aan de rand van het scherm in één van 8 richtingen. Licht op en dooft in
+3 seconden. Geeft de richting van de gebeurtenis aan, niet waar de tegenstander heen rijdt.
+Een tegenstander die je scherp ziet geeft geen hint.
+
+**Geluiden** (binnen 20 T):
 - een tegenstander schiet;
 - een tegenstander schiet begroeiing of een gebouw kapot;
-- het ijs kraakt onder een tegenstander (Leningrad).
+- krakend ijs onder een tegenstander (Leningrad).
 
-**Grote gebeurtenissen** geven over de hele kaart een hint:
-
-- een gevaar raakt een tegenstander (geschut, artillerie, instortende gevel);
-- een brug ontploft onder een tegenstander (Market Garden);
-- een tegenstander wordt gevangen in een zoeklicht (Seelower Hoogten);
-- het stofspoor achter een tegenstander (Barbarossa, zomer), eens per 10 seconden.
-
----
-
-## 9. Fog of war en zicht
-
-### 9.1 Basisregel
-
-- In je venster zie je **het terrein en de sporen**: tunnels, barsten, gaten, puin.
-- Een **tegenstander** zie je scherp als hij binnen je **zichtstraal** staat én er een vrije zichtlijn is.
-- **Zichtstraal:** standaard **12 T** rond je tank. Binnen die straal is alles scherp.
-- **Buiten de zichtstraal** wordt het beeld naar de rand van het venster toe steeds vager en donkerder. Terrein en sporen zijn daar nog vaag te herkennen. De uiterste rand van het venster is zeer vaag.
-- **Schim:** staat een tegenstander buiten je zichtstraal maar wel in je venster, en is er een vrije zichtlijn, dan zie je een **schim**: een vage, donkere vlek zonder details en zonder richting van de loop. Een bedekte tank (5.7) geeft geen schim.
-- **Zichtlijn:** `building` en `vegetation` blokkeren het zicht. Ligt er een gebouw of begroeiing tussen jou en een tegenstander, dan zie je hem niet, ook geen schim. Het terrein achter een gebouw of begroeiing wordt donkerder getekend.
-- **Rook** blokkeert de zichtlijn ook zolang hij er hangt.
-
-### 9.2 Weer en zicht
-
-Het weer verkleint de zichtstraal (zie per map). Gelden er meerdere waarden tegelijk, neem dan de kleinste.
+**Grote gebeurtenissen** (hele kaart):
+- gevaar raakt een tegenstander (geschut, artillerie, instortende gevel);
+- brug ontploft onder een tegenstander (Market Garden);
+- tegenstander gevangen in een zoeklicht (Oder-front);
+- stofspoor achter een tegenstander (Russische vlakte, zomer), eens per 10 s.
 
 ---
 
-## 10. De maps
+## §9. Weer
 
-| # | Jaar | Missie | Map | Map-id |
-| --- | --- | --- | --- | --- |
-| 1 | 1940 | Fall Gelb | Grebbeberg | `fall-gelb` |
-| 2 | 1941 | Barbarossa | Russische vlakte | `barbarossa` |
-| 3 | 1942 | Lightfoot | El Alamein | `el-alamein` |
-| 4 | 1942 | Beleg van Leningrad | Leningrad | `leningrad` |
-| 5 | 1943 | Zitadelle | Koersk | `koersk` |
-| 6 | 1944 | Overlord | Carentan | `carentan` |
-| 7 | 1944 | Market Garden | Arnhem | `market-garden` |
-| 8 | 1944 | Wacht am Rhein | Ardennen | `ardennen` |
-| 9 | 1945 | Seelower Hoogten | Oder-front | `seelow` |
-| 10 | 1945 | Val van Berlijn | Berlijn | `berlijn` |
+### 9.1 Weersregels
 
-### Overzicht: gevaar, schaars middel en weer
+Elke map heeft een eigen weerbeeld. Het weer begint bij de start van het spel en kan veranderen
+op een timer of per ronde (§2.4). Het weer kan drie dingen doen:
 
-| Map | Gevaar | Schaars middel | Weer |
-| --- | --- | --- | --- |
-| Grebbeberg | – | Munitie (alleen bij het depot in Rhenen) | Vanaf ronde 2 stijgt het water elke ronde; ronde 3 regen |
-| Barbarossa | – | Brandstof (dubbel verbruik in modder) | Ronde 1–2 zomer; vanaf ronde 3 modderseizoen |
-| El Alamein | Zand dat je tank beschadigt | – | Hitte met hallucinaties; zandstorm elke 90 s |
-| Leningrad | Breekbaar ijs | Motorwarmte | Sneeuwjacht elke 90 s; schemering per ronde; vanaf ronde 4 dooi |
-| Koersk | Brandend graan | Motorkoeling | Zomerhitte en rook; ronde 3 onweer |
-| Carentan | Verborgen antitankgeschut | – | Ronde 1 ochtendmist; daarna regenbuien |
-| Market Garden | Brug die ontploft | Munitie en brandstof via droppings | Ronde 1–2 helder; vanaf ronde 3 mist en regen, geen droppings |
-| Ardennen | Artilleriebarrage in het bos | Brandstofdepots, elke ronde ergens anders | Mist per ronde; sneeuwstorm elke 90 s; vanaf ronde 3 opklaring |
-| Seelower Hoogten | Artilleriebarrage | – | Ronde 1–2 nacht met zoeklichten; vanaf ronde 3 dageraad |
-| Val van Berlijn | Instortende gevels | Pantser (niet te herstellen) | Rook elke ronde dichter; ronde 3 regen en overstroming |
+1. **Zicht** veranderen (de zichtstraal, §7).
+2. **Sporen wissen** (sporenwisser, §9.2).
+3. **Terrein** veranderen (ijs smelt, grond wordt modder, water stijgt).
 
-**Gevaren** zijn neutraal: ze treffen alle spelers. Een gevaar is altijd herkenbaar (vooraf zichtbaar of met een korte waarschuwing), tenzij de map iets anders zegt. Een dood door een gevaar telt niet als kill.
+### 9.2 Sporenwisser
 
-**Schaarse middelen:** waar "–" staat, gelden de standaardregels: in je basis vul je pantser, brandstof en munitie aan.
+Zolang een sporenwisser actief is:
+- vervagen sporen op zacht en normaal **10× zo snel** en de minimale intensiteit geldt niet;
+- een tunneltegel van zacht of normaal die intensiteit 0 bereikt wordt weer **ongegraven**;
+- verhard, hard en permanente gaten (begroeiing, puin) blijven onveranderd.
+
+Sommige sporenwissers werken alleen in een deel van de kaart (zie per map).
+
+### 9.3 Verstuiving
+
+Op maps met sneeuwval of woestijnwind wisselt de sterkte van licht tot zwaar. Tunnels lopen
+dicht:
+
+| Sterkte | Vers spoor dicht na |
+|---|---|
+| Licht | ~2 minuten |
+| Zwaar | ~45 seconden |
+| Storm (20 s) | ~90% dicht |
+
+Sneeuw doet dat op elke grond even snel. Zand vooral in los zand; rotsige grond en de kustweg
+half zo snel.
+
+### 9.4 Regen en onweer
+
+Regen is alleen beeld (druppels, spatten, regengordijnen, donkerder lucht) en verandert niets
+aan tunnels, behalve de regenbui bij Carentan die bij het water sporen wist. In Carentan en
+Berlijn komen regenstormen met onweer: bliksem die voor iedereen tegelijk flitst.
 
 ---
 
-### 10.1 Fall Gelb — Grebbeberg (mei 1940)
+## §10. De tien maps
 
-**Sfeer:** lente, fris groen, rookpluimen in de verte. Palet: lentegroen `#6d8a3a`, bosgroen `#2f4a24`, inundatiewater `#3d5f6f`, beton `#9a9890`, zandweg `#c8b48a`. Tunnelkleur `#4a3a22`.
+### Overzicht
+
+| # | Jaar | Map | Gevaar | Schaars middel | Weer |
+|---|---|---|---|---|---|
+| 1 | 1940 | Grebbeberg | – | munitie alleen bij depot | inundatie, regen |
+| 2 | 1941 | Russische vlakte | – | dubbel brandstof in modder | zomer → modder |
+| 3 | 1942 | El Alamein | zandmeter, mijnen | – | hitte, woestijnwind, zandstorm |
+| 4 | 1942 | Leningrad | breekbaar ijs | motorwarmte | schemering, sneeuw, dooi |
+| 5 | 1943 | Koersk | brandend graan | motortemperatuur | zomer, rook, onweer |
+| 6 | 1944 | Carentan | – | – | ochtendmist, regenstorm |
+| 7 | 1944 | Arnhem | brug ontploft | droppings | helder → mist |
+| 8 | 1944 | Ardennen | bombardement nabij spelers | brandstofdepots (vast) | mist, sneeuwstorm |
+| 9 | 1945 | Oder-front | artilleriebarrage | – | nacht, zoeklichten, dageraad |
+| 10 | 1945 | Berlijn | instortende gevels | pantser niet hersteld | rook, regen, onweer |
+
+Gevaren zijn neutraal: ze treffen alle spelers. Een dood door een gevaar telt niet als kill.
+Gevaren en weer worden alleen in de browser verborgen (geen anti-cheat nodig).
+
+---
+
+### 10.1 Grebbeberg (mei 1940)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `normal` | 39 | Weilanden |
-| `soft` | 17 | Natte klei in de vallei |
-| `hard` | 10 | Droge grond op de heuvel |
-| `vegetation` (`tree`) | 15 | Loofbossen op de heuvel; ondergrond `hard` |
-| `marsh` | 7 | Drassige stroken langs sloten |
-| `rock` | 4 | Rotsen op de heuvelflank |
-| `paved` | 8 | Wegen en het dorp |
+| Klasse | % | Wat |
+|---|---|---|
+| normaal | 34 | weilanden |
+| zacht | 17 | natte klei in de vallei |
+| hard | 10 | droge grond op de heuvel |
+| begroeiing (loof) | 22 | loofbossen op de heuvel |
+| moeras | 7 | drassige stroken langs sloten |
+| rots | 2 | rotsen op de heuvelflank |
+| verhard | 8 | wegen en het dorp |
 
-Bij de start is er geen open water. Water ontstaat pas door de inundatie.
+Bij de start geen open water; water ontstaat pas door de inundatie.
 
 **Bijzonderheden:**
-
-- Er loopt **geen rivier** over de kaart.
-- De **vallei** (laag land) ligt bovenaan, tot ongeveer 55% van de hoogte. Daaronder loopt de groene **heuvel** over de volle breedte, met gras en loofbossen op de flanken.
-- **Dorp:** Rhenen ligt op de heuvel rond (0.35, 0.7); Achterberg ligt verderop rond (0.65, 0.7).
-- Een weg loopt vanuit de vallei naar Rhenen en vandaar verder over de heuvel.
+- De **vallei** (laag land) bovenaan tot ~55% van de hoogte; daaronder de **heuvel** met bossen.
+  In de onbegaanbare randstrook zit een rivier (bron van het inundatiewater); bij de start geen
+  open water in het speelbare deel.
+- **Dorpen:** Rhenen op (0,35; 0,7) en Achterberg op (0,65; 0,7).
+- Weg van de vallei naar Rhenen en verder over de heuvel.
 
 **Gevaar:** geen.
 
-**Schaars middel — munitie:** munitie wordt **niet** in de basis aangevuld, alleen bij het munitiedepot in Rhenen. Elke ronde begint met volle munitie.
+**Schaars middel — munitie:** munitie wordt **niet** in de basis aangevuld, alleen bij het
+munitiedepot in Rhenen. Elke ronde begint met volle munitie.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1 | Lente, helder | Zichtstraal 12 T |
-| Vanaf ronde 2, elke ronde | Inundatie | Het water stijgt een fase: in ronde 2, 3 en 4 schuift het telkens een derde verder de vallei in, beginnend bij de linkerrand. `normal` wordt `marsh`, `marsh` wordt `water`. Sporen op tegels die veranderen, verdwijnen. De heuvel blijft droog en de weg door de vallei blijft begaanbaar. |
-| Ronde 3 | Regen | Zichtstraal 8 T |
-| Hele spel | Rook van brandende boerderijen | Donkere rookvlekken drijven over de vallei en blokkeren het zicht |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1 | Helder, zicht 12 T |
+| Vanaf ronde 2, per ronde | Inundatie: water stijgt een fase de vallei in. Normaal → moeras → water. De heuvel en de weg blijven droog. |
+| Ronde 3 | Regen, zicht 8 T |
 
-**Tanks:** ploeg A grijsgroene pantserwagen met oranje driehoek (Nederland); ploeg B donkergrijze lichte tank, alleen een nummer.
+**Tanks:** A = Landsverk, B = Panther.
 
 ---
 
-### 10.2 Barbarossa — Russische vlakte (zomer tot herfst 1941)
-
-**Sfeer:** eindeloze vlakte, eerst zomers en stoffig, later grauw en modderig. Palet zomer: droog geel `#c2a868`, berk `#e8e4d8`, groen `#5f7a3a`; herfst: modder `#5a4632`. Tunnelkleur `#3e3022`.
+### 10.2 Russische vlakte (zomer–herfst 1941)
 
 **Terrein (zomer):**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `hard` | 55 | Droge, harde vlakte |
-| `normal` | 15 | Akkers |
-| `soft` | 5 | Zandige plekken |
-| `vegetation` (`birch`) | 12 | Berkenbossen; ondergrond `normal` |
-| `paved` | 6 | Zandwegen en dorp |
-| `rock` | 4 | Rotsblokken |
-| `water` | 3 | Kleine plassen |
+| Klasse | % | Wat |
+|---|---|---|
+| hard | 55 | droge, harde vlakte |
+| normaal | 15 | akkers |
+| zacht | 5 | zandige plekken |
+| begroeiing (berk) | 12 | berkenbossen |
+| verhard | 6 | zandwegen en dorp |
+| rots | 4 | rotsblokken |
+| water | 3 | kleine plassen |
 
 **Bijzonderheden:**
-
-- Eén **zandweg** loopt horizontaal over de kaart op ongeveer 50% van de hoogte.
-- **Dorp:** een rij van 5 houten boerderijtjes langs die zandweg, in het midden. Geen kruispunt.
+- **Rivier** verticaal door het midden (x 0,5), breedte 3, 2 bruggen, met doorwaadbare plekken.
+- **Twee zandwegen** horizontaal op ~35% en ~70% van de hoogte.
+- Boerderijen langs de wegen (2–5, afhankelijk van de kaartgrootte).
 
 **Gevaar:** geen.
 
-**Schaars middel — brandstof:** in de basis vul je brandstof gewoon aan, maar zodra het modderseizoen begint, verbruik je op `soft` en `marsh` **dubbel** zoveel brandstof.
+**Schaars middel — brandstof:** gewoon aanvullen in de basis, maar in het modderseizoen
+dubbel brandstofverbruik op zacht en moeras.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1–2 | Zomer | Zichtstraal 10 T met hittetrilling. Een tank die over `hard` rijdt, laat 2 seconden een stofwolk achter; dat geeft tegenstanders een richtingshint (eens per 10 seconden). |
-| Vanaf ronde 3 | Herfstregen, modderseizoen | Aan het begin van ronde 3 worden alle `hard`- en `normal`-tegels `soft`. Zichtstraal 8 T. Geen stofspoor meer. Bestaande sporen blijven. |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1–2 | Zomer, zicht 10 T. Stofspoor op hard terrein (2 s), geeft hint per 10 s. |
+| Vanaf ronde 3 | Modder: hard, normaal en verhard worden zacht. Zicht 8 T. Geen stofspoor. |
 
-**Tanks:** ploeg A groene Sovjettank met rode ster; ploeg B grijze Duitse tank, alleen een nummer.
+**Tanks:** A = T-34, B = Panther.
 
 ---
 
-### 10.3 Lightfoot — El Alamein (oktober 1942)
-
-**Sfeer:** verblindend licht, hitte. Palet: zand `#d8bc80`, gegraven zand `#8f6c3a`, rotsige grond `#b39a6a`, rots `#9a9a96`, zee `#2f5f7a`. Tunnelkleur `#6e5430`.
+### 10.3 El Alamein (oktober 1942)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `soft` | 50 | Woestijnzand |
-| `hard` | 20 | Rotsige grond |
-| `paved` | 5 | Kustweg |
-| `rock` | 10 | Rotsplateaus |
-| `water` | 10 | De zee |
-| `vegetation` (`shrub`) | 5 | Dorre struiken; ondergrond `soft` |
+| Klasse | % | Wat |
+|---|---|---|
+| zacht | 47 | woestijnzand |
+| hard | 28 | rotsige grond (geen sporen, geen tunnels) |
+| verhard | 5 | kustweg |
+| rots | 5 | rotsplateaus |
+| water | 10 | de zee |
+| begroeiing (struik) | 5 | dorre struiken |
 
 **Bijzonderheden:**
-
-- De **zee** ligt langs de hele bovenrand, ongeveer 10% van de hoogte.
-- De **kustweg** loopt direct onder de zee van links naar rechts.
-- 4 tot 6 **rotsplateaus** verspreid over de kaart.
-- De **rotsige grond** (`hard`) ligt in stroken en vlakken verspreid, zodat er altijd een route is waarop je regelmatig van het zand af kunt.
+- De zee langs de bovenrand (~10% van de hoogte). De kustweg direct eronder.
+- 4–6 rotsplateaus. Rotsige grond in stroken verspreid.
 - Geen dorp.
 
-**Gevaar — zand:** te lang door zand rijden beschadigt je tank, waardoor je steeds naar harde grond of de weg moet.
+**Gevaar — zandmeter:** te lang door zand rijden beschadigt de tank.
+- Zandmeter (0–100), zichtbaar op de tankkaart.
+- +2 per zachte tegel, −5 per harde of verharde tegel.
+- Boven 60: 1% pantserverlies per extra zachte tegel.
+- Bij 100: 30% langzamer tot de meter onder 60 is.
 
-- Elke tank heeft een **zandmeter** (0 tot 100), zichtbaar op het rapportkaartje.
-- Elke tegel `soft` die je graaft of berijdt: +2.
-- Elke tegel `hard` of `paved`: −5.
-- Boven 60 verlies je per extra `soft`-tegel 1% pantser.
-- Bij 100 rijdt de tank bovendien 30% langzamer tot de meter weer onder 60 is.
+**Mijnen:** onzichtbaar (keuze van de eigenaar).
 
 **Schaars middel:** geen. Standaardregels.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Hele spel | Hitte | Zichtstraal 10 T; de buitenste ring van het venster trilt. **Woestijnhallucinaties:** in het deel van je venster buiten je zichtstraal verschijnt gemiddeld eens per 15 seconden een **valse schim** die er precies uitziet als die van een tegenstander. Hij blijft 2 tot 4 seconden staan en laat geen sporen achter. Valse schimmen zijn per speler verschillend. |
-| Elke 90 seconden, 20 seconden lang | Zandstorm | Zichtstraal 4 T. Sporenwisser. Onderduiken (5.7). |
+| Wanneer | Effect |
+|---|---|
+| Hele spel | Hitte, zicht 10 T. Wisselende woestijnwind (verstuiving). |
+| Elke 45–120 s (willekeurig), 30 s lang | Zandstorm: zicht 2 T, sporenwisser, onderduiken. |
 
-**Tanks:** ploeg A Britse tank in lichte zandkleur met grijsblauwe hoekige camouflage; ploeg B zandgele Duitse tank, alleen een nummer.
+**Tanks:** A = Comet, B = Panther.
 
 ---
 
-### 10.4 Beleg van Leningrad — Leningrad (winter 1942)
-
-**Sfeer:** bitterkoud, kort daglicht, blauwige schemering. Palet: ijs `#a9c7d6`, sneeuw `#e6ecef`, water `#1e2e38`, veen `#4a3a2e`, rots `#8a8f94`. Tunnelkleur `#3a2f27`.
+### 10.4 Leningrad (winter 1942)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `soft` | 46 | Sneeuw op aarde |
-| `hard` | 15 | Bevroren veen |
-| `ice` | 12 | De bevroren Neva |
-| `rock` | 8 | Steile oever en ruïnes |
-| `vegetation` (`birch`) | 12 | Berkenbossen; ondergrond `soft` |
-| `paved` | 5 | Weg en brug |
-| `water` | 2 | Wakken in het ijs |
+| Klasse | % | Wat |
+|---|---|---|
+| zacht | 25 | sneeuw op aarde |
+| ijs | 40 | het bevroren meer |
+| begroeiing (berk) | 20 | berkenbossen |
+| verhard | 4 | wegen |
+| moeras | 3 | drassige plekken |
+| rots | 3 | steile oever |
+| water | 5 | wakken in het ijs |
 
 **Bijzonderheden:**
+- Een groot **bevroren meer** (ovaal, zwaartepunt op ~65% van de breedte, ~50% van de hoogte),
+  ongeveer ⅔ van de kaart.
+- Steile oever (`rots`, 1 T) rondom het meer met 4 openingen van 3 T.
+- Geen brug; het ijs is de oversteek.
+- 2 kleine wakken.
 
-- De **Neva** loopt horizontaal over de kaart op ongeveer 45% van de hoogte, 5 T breed, bevroren (`ice`).
-- Langs de noordoever een **steile oever** (`rock`, 1 T dik) over de hele lengte, met 3 openingen van 3 T breed waar je de rivier op kunt.
-- **1 brug** over de Neva, op ongeveer 70% van links, met een weg die aan beide kanten doorloopt.
-- **Ruïnes:** 3 tot 4 groepjes gebroken muren (`rock`) ten zuiden van de rivier.
-- 2 kleine wakken (`water`) in het ijs.
-
-**Gevaar — ijs:** zie 5.6.
+**Gevaar — breekbaar ijs:** zie §5.6.
 
 **Schaars middel — motorwarmte:**
-
-- Elke tank heeft een **warmtemeter** (0 tot 100), zichtbaar op het rapportkaartje.
-- Stilstaan of langzaam rijden (onder 30% van de maximale snelheid): −5 per seconde.
-- Gewoon rijden of in de eigen basis staan: +10 per seconde.
-- Bij 0 is de motor **bevroren**: de tank komt maar heel langzaam op gang. Hij heeft 4 seconden nodig om op normale snelheid te komen, in plaats van direct. In die tijd is hij een makkelijk doelwit.
-- Vanaf de dooi vervalt deze regel.
+- Warmtemeter (0–100), zichtbaar op de tankkaart.
+- Stilstaan of langzaam rijden (< 30%): −5/s.
+- Gewoon rijden of in de basis: +10/s.
+- Bij 0: motor bevroren, 4 s nodig om op snelheid te komen.
+- Vervalt bij de dooi (ronde 5).
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Elke ronde | Winterschemering | Zichtstraal van 12 T aan het begin van de ronde naar 6 T na 3 minuten |
-| Elke 90 seconden, 20 seconden lang, tot de dooi | Sneeuwjacht | Zichtstraal 4 T. Sporenwisser. Onderduiken (5.7). |
-| Vanaf ronde 4 | Dooi | Aan het begin van ronde 4 wordt alle `ice` `water`. De brug blijft de enige oversteek. Er ontstaan 4 tot 6 extra plassen (`water`, elk ongeveer 2×2 T) op `soft`-terrein. Geen sneeuwjacht en geen motorwarmte meer. |
+| Wanneer | Effect |
+|---|---|
+| Elke ronde | Schemering: zicht van 12 T naar 6 T na 3 minuten. Wisselende sneeuwval (verstuiving). |
+| Elke 45–120 s (willekeurig), 20 s, tot de dooi | Sneeuwjacht: zicht 2 T, sporenwisser, onderduiken. |
+| Ronde 3 | IJs wordt broos: 2× de breakkans. |
+| Ronde 4 | IJs kraakt: 4× de breakkans. |
+| Vanaf ronde 5 | Dooi: ijs → water. 4–6 extra plassen. Geen sneeuwjacht, geen motorwarmte. |
 
-**Tanks:** ploeg A groene Sovjettank met witte wintervlekken en rode ster; ploeg B donkergrijze Duitse tank, alleen een nummer.
+**Tanks:** A = T-34, B = Panther.
 
 ---
 
-### 10.5 Zitadelle — Koersk (juli 1943)
-
-**Sfeer:** heet, stoffig, fel zonlicht. Palet: graan `#b89a4a`, zwarte aarde `#3e3022`, steppe `#a89060`, rots `#8d8f8c`, rivier `#3d5a66`. Tunnelkleur `#2e2418`.
+### 10.5 Koersk (juli 1943)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `normal` | 45 | Graanvelden |
-| `hard` | 15 | Droge steppe |
-| `soft` | 12 | Zwarte aarde |
-| `paved` | 6 | Loopgraven |
-| `rock` | 8 | Balka's (ravijnen) |
-| `vegetation` (`tree`) | 8 | Bosjes; ondergrond `normal` |
-| `water` | 6 | De Psel |
+| Klasse | % | Wat |
+|---|---|---|
+| normaal | 45 | graanvelden |
+| hard | 15 | droge steppe |
+| zacht | 12 | zwarte aarde |
+| verhard | 6 | zandweg |
+| rots | 8 | balka's (ravijnen) |
+| begroeiing (loof) | 8 | bosjes |
+| water | 6 | de Psel (~3% rivier, rest plassen) |
 
 **Bijzonderheden:**
-
-- De rivier de **Psel** loopt diagonaal door de rechterbovenhoek, van ongeveer (0.6, 0) naar (1, 0.4), 3 T breed. **1 brug**.
-- **Loopgraven:** 3 zigzaggende lijnen van elk ongeveer een halve kaartbreedte, 2 T breed. Ze zijn snel en laten weinig spoor achter, maar zijn voor iedereen zichtbaar.
-- **Balka's:** 2 tot 3 lange, smalle ravijnen (`rock`) die je moet omrijden.
+- De **Psel** diagonaal door de rechterbovenhoek, 3 T breed. 1 brug.
+- **Geen loopgraven:** verhard is één zandweg met de brug over de Psel, aangevuld met zijwegen
+  vanaf de rand.
+- 2–3 balka's (ravijnen, `rots`).
 - Geen dorp.
 
 **Gevaar — brandend graan:**
+- Schot op normaal (graan): 10% kans op brand. Spontane brand elke 2 min (alleen in de zomer).
+- Vuur verspreidt per seconde naar 1 aangrenzend normaal, in de windrichting. Dooft na 15 s.
+- Tank in brand: 5% pantser/s.
+- Verbrande tegel → `verbrand` (§5.2), zwart. Sporen vallen extra op (beginintensiteit 1,0).
 
-- Een schot dat op `normal` (graan) landt, heeft 10% kans het graan aan te steken. Daarnaast ontstaat zolang het zomer is elke 2 minuten op een willekeurige plek een brand.
-- Vuur verspreidt zich elke seconde naar 1 aangrenzende `normal`-tegel, in de windrichting van dat spel, en dooft na 15 seconden.
-- Een tank in een brandende tegel verliest 5% pantser per seconde.
-- Verbrande tegels worden `hard` met een zwarte kleur. Bestaande sporen daarop verdwijnen, maar **nieuwe sporen op verbrande grond krijgen intensiteit 1.0**: ze vallen juist extra op.
-
-**Schaars middel — motorkoeling:**
-
-- Elke tank heeft een **temperatuurmeter** (0 tot 100), zichtbaar op het rapportkaartje.
-- Rijden op meer dan 80% van de maximale snelheid: +4 per seconde. In een brandende tegel: +15 per seconde.
-- Langzamer rijden of stilstaan: −6 per seconde. In de eigen basis: −20 per seconde.
-- Bij 100 is de motor oververhit: maximaal 40% snelheid tot de meter onder 50 is.
+**Schaars middel — motortemperatuur:**
+- Temperatuurmeter (0–100), zichtbaar op de tankkaart.
+- Snel rijden (> 80%): +4/s. In brand: +15/s.
+- Langzamer of stilstaan: −6/s. In de basis: −20/s.
+- Bij 100: max. 40% snelheid tot de meter onder 50 is.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1–2 | Zomerhitte | Zichtstraal 12 T. Branden en rook: elk vuurgevecht en elke brand laat een rookvlek achter die 20 seconden blijft hangen en het zicht blokkeert. |
-| Vanaf ronde 3 | Onweer | Alle branden doven en er ontstaan geen spontane branden meer; schoten kunnen nog wel graan aansteken, met 3% kans. De rook trekt weg. Alle zwarte aarde (`soft`) wordt `marsh`. Zichtstraal 8 T. |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1–2 | Zomerhitte, zicht 12 T. Branden en rook (rookvlek bij vuur, 20 s). |
+| Vanaf ronde 3 | Onweer: branden doven, schoten steken graan nog aan met 3% kans. Zwarte aarde → moeras. Zicht 8 T. |
 
-**Tanks:** ploeg A groene Sovjettank met rode ster; ploeg B zandgele Duitse tank met bruine en groene strepen, alleen een nummer.
+**Tanks:** A = T-34, B = Panther.
 
 ---
 
-### 10.6 Overlord — Carentan (juni 1944)
-
-**Sfeer:** groen, vochtig, bewolkt met zon die doorbreekt. Palet: weide `#56702f`, heg `#23381b`, moeras `#55696c`, steen `#8c8a80`, water `#1f3440`. Tunnelkleur `#4a3a22`.
+### 10.6 Carentan (juni 1944)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `normal` | 40 | Weilanden |
-| `marsh` | 15 | Moeras |
-| `vegetation` (`hedge`) | 15 | Heggen; ondergrond `normal` |
-| `paved` | 8 | Wegen en dorpsstraten |
-| `hard` | 7 | Dijkweg |
-| `soft` | 5 | Modder rond het moeras |
-| `water` | 6 | Rivier en kanaal |
-| `rock` | 4 | Rotsen |
+| Klasse | % | Wat |
+|---|---|---|
+| normaal | 46 | weilanden |
+| moeras | 17 | moeras |
+| begroeiing (heg) | 15 | heggen (bocage) |
+| verhard | 8 | wegen en dorpsstraten |
+| hard | 7 | dijkweg |
+| zacht | 6 | modder |
+| rots | 1 | rotsen |
 
 **Bijzonderheden:**
+- **Heggen** (1 T breed) vormen een raster van kleine weilanden: de bocage. Lange lijnen met
+  gaten van 2 T.
+- **Moeras** in de linkeronderhoek (~25% van de kaart).
+- **Dijkweg** over het moeras naar het dorp, met 1 brug.
+- **Dorp:** Carentan in de rechterbovenhoek (0,75; 0,25), omgeven door de bocage.
 
-- **Heggen** (1 T breed) vormen een raster van kleine weilanden: de bocage. Lange rechte lijnen met gaten van 2 T op willekeurige plekken.
-- Het **moeras** ligt in de linkeronderhoek, ongeveer een kwart van de kaart.
-- De **rivier** (Douve) loopt langs de onderrand van links naar ongeveer 60%, 3 T breed.
-- Een **kanaal** loopt verticaal door het moeras, 2 T breed.
-- Een **dijkweg** (`hard`, 2 T breed) loopt van de linkerrand dwars over het moeras naar het dorp. Waar de dijkweg het kanaal kruist: **1 brug**.
-- **Dorp:** Carentan, in de rechterbovenhoek rond (0.75, 0.25): stenen huizen rond een kruispunt met een kerk. Het dorp is **aan alle kanten omgeven door de bocage**: wie het dorp in of uit wil, moet door het heggenraster, via een gat of een weg.
-
-**Gevaar — verborgen antitankgeschut:** 2 stukken geschut achter een heg, onzichtbaar tot ze vuren (een uitzondering op de regel dat een gevaar altijd herkenbaar is). Schootsveld: kegel van 45° en 10 T lang. Ze vuren eens per 4 seconden op een tank in hun schootsveld, 25% pantser per treffer. Na het eerste schot zichtbaar en uit te schakelen met 4 treffers. Uitgeschakeld geschut blijft het hele spel uitgeschakeld.
+**Gevaar:** geen.
 
 **Schaars middel:** geen. Standaardregels.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1 | Ochtendmist | Zichtstraal 4 T |
-| Vanaf ronde 2 | Wisselend bewolkt | Zichtstraal 12 T |
-| Vanaf ronde 2, elke 2 minuten, 20 seconden lang | Regenbui | Zichtstraal 8 T. Sporenwisser, maar alleen op tegels binnen 3 T van moeras of water. |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1 | Ochtendmist, zicht 4 T |
+| Vanaf ronde 2 | Wisselend bewolkt, zicht 12 T |
+| Vanaf ronde 2, elke 30–90 s (willekeurig), 20 s | Regenstorm met onweer: zicht 8 T, sporenwisser bij het water |
 
-**Tanks:** ploeg A olijfgroene Amerikaanse tank met witte ster en takken als camouflage; ploeg B gele Duitse tank met groene en bruine vlekken, alleen een nummer.
+**Tanks:** A = Sherman, B = Panther.
 
 ---
 
-### 10.7 Market Garden — Arnhem (september 1944)
-
-**Sfeer:** nazomer, Hollands polderlandschap, rook boven de stad. Palet: gras `#6a8a3a`, klei `#6b5a3e`, dijk `#9a8a5a`, rivier `#3a5a6a`, baksteen `#8a5a46`. Tunnelkleur `#4a3a22`.
+### 10.7 Arnhem (september 1944)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `normal` | 40 | Polders |
-| `soft` | 12 | Natte klei |
-| `hard` | 10 | Dijken |
-| `water` | 12 | De Rijn en sloten |
-| `paved` | 8 | Wegen, brug en stad |
-| `vegetation` (`tree`) | 10 | Bomenrijen en boomgaarden; ondergrond `normal` |
-| `marsh` | 5 | Uiterwaarden |
-| `rock` | 3 | Rotsen |
+| Klasse | % | Wat |
+|---|---|---|
+| normaal | 45 | polders |
+| zacht | 12 | natte klei |
+| hard | 10 | dijken |
+| water | 12 | de Rijn en de Waal |
+| verhard | 8 | wegen, bruggen en stad |
+| begroeiing (loof) | 10 | bomenrijen en boomgaarden |
+| rots | 1 | rotsen |
 
 **Bijzonderheden:**
-
-- De **Rijn** loopt horizontaal over de hele kaart op ongeveer 40% van de hoogte, 5 T breed.
-- **1 brug** over de Rijn, ongeveer in het midden, minimaal 3 T breed.
-- **Doorwaadbare plekken** (`ford`, 3 T breed) door de Rijn: klein 1, middel 2, groot en extra groot 3. Ze liggen verspreid langs de rivier, niet bij de brug.
-- Langs beide oevers een **dijk** (`hard`, 2 T breed) over de hele lengte, met uiterwaarden (`marsh`) tussen dijk en rivier.
-- **Sloten** (`water`, 1 T breed) in een raster door de polders ten zuiden van de rivier, met dammen (`normal`) van 2 T om de paar sloten.
+- **Twee rivieren** verticaal: de Rijn op x 0,35 en de Waal op x 0,65, beide 3 T breed, met
+  bruggen bij de wegen en doorwaadbare plekken.
+- Dijken langs beide oevers.
+- Sloten in een raster door de polders met dammen.
 - **Dorp:** Arnhem, aan het noordelijke bruggenhoofd.
-- **Bases:** bij 2 spelers altijd één base ten noorden en één ten zuiden van de Rijn. Bij meer spelers verdeeld over beide kanten.
+- **Geen vaste bases** (`noBases`): spelers spawnen op een willekeurige plek.
 
-**Gevaar — de brug ontploft:**
+**Gevaar — de brug ontploft:** kans per oversteek 10%, +5% per eerdere oversteek
+(`chance`/`chanceStep`). De teller loopt door over de rondes; de brug is elke ronde weer heel.
+De tank verliest 40% pantser. De explosie geeft een hint aan iedereen.
 
-- Zodra een tank over de brug rijdt, ontploft hij. De tank verliest 40% pantser, maar haalt de overkant.
-- Daarna is de brug de rest van de ronde onbegaanbaar (`water`, met een zichtbaar wrak).
-- Aan het begin van de volgende ronde is de brug weer heel.
-- De explosie geeft alle andere spelers een richtingshint.
-
-**Schaars middel — munitie en brandstof via droppings:**
-
-- Munitie en brandstof worden **niet** in de basis aangevuld. Pantser wel.
-- Elke 30 seconden valt er een krat aan een parachute op een willekeurige plek op de kaart, met munitie of brandstof. De krat is te zien zodra hij in je venster valt. Wie eroverheen rijdt, krijgt de inhoud.
-- Kratten kunnen ook vlak bij een tegenstander of zijn basis vallen.
-- Elke ronde begint met volle munitie en brandstof.
+**Schaars middel — droppings:** munitie, brandstof en pantser worden **niet** in de basis
+aangevuld. Elke 30 s vallen 3 kratten met munitie of brandstof op willekeurige plekken. Wie
+eroverheen rijdt krijgt de inhoud. De droppings gaan het hele spel door (ook in de mist). Elke
+ronde begint met volle munitie en brandstof.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1–2 | Helder | Zichtstraal 12 T. Droppings. Rook boven de stad: rond het dorp drijven rookvlekken die het zicht blokkeren. |
-| Vanaf ronde 3 | Mist en regen | Zichtstraal 8 T. **Geen droppings meer**: alleen de kratten die al liggen. |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1, 2, 4, 5, … | Helder, zicht 12 T. Droppings. Rook boven de stad. |
+| Ronde 3, 6, 9, … | Mist en regen, zicht 8 T. Droppings blijven. |
 
-**Tanks:** ploeg A olijfgroene Britse tank met witte ster; ploeg B grijze Duitse tank, alleen een nummer.
+**Tanks:** A = Comet, B = Panther.
 
 ---
 
-### 10.8 Wacht am Rhein — Ardennen (december 1944)
-
-**Sfeer:** koud, stil, grijs licht. Palet: sneeuw `#dfe6ea`, ijsblauw `#9cc3e0`, dennengroen `#1f3a2a`, hout `#6a4a2c`, rots `#8d9196`, beek `#1e3a4a`. Tunnelkleur `#2b2118`.
+### 10.8 Ardennen (december 1944)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `soft` | 52 | Verse sneeuw |
-| `hard` | 12 | Bevroren grond |
-| `vegetation` (`pine`) | 18 | Dennenbossen; ondergrond `soft` |
-| `paved` | 8 | Bosweggen en Bastogne |
-| `rock` | 6 | Rotsblokken |
-| `water` | 4 | Bergbeek |
+| Klasse | % | Wat |
+|---|---|---|
+| zacht | 49 | verse sneeuw |
+| hard | 5 | bevroren grond |
+| begroeiing (den) | 30 | dennenbossen |
+| verhard | 8 | bosweggen en Bastogne |
+| rots | 2 | rotsblokken |
 
 **Bijzonderheden:**
+- **Dorp:** Bastogne in het midden (0,5; 0,5), groter dan standaard (~1/6 van de kaart). Plein
+  met kerk, 6–8 huizen.
+- **5 bosweggen** komen samen in Bastogne naar de rand.
 
-- **Dorp: Bastogne** in het midden van de kaart, rond (0.5, 0.5). Groter dan de standaardmodule: ongeveer een zesde van de kaart. Een plein met kerk en 6 tot 8 huizen langs de uitvalswegen.
-- **5 bosweggen** komen samen in Bastogne en lopen naar de rand: west, noord, oost, zuidwest en zuidoost. Elke weg minimaal 2 T breed.
-- Een **bergbeek** loopt horizontaal over de zuidkant van de kaart, op ongeveer 80% van de hoogte, 2 T breed.
-- **2 bruggen** over de beek: waar de zuidwestelijke en de zuidoostelijke weg de beek kruisen.
+**Gevaar — bombardement nabij spelers:** de server kiest een levende tank en plaatst een
+6 T × 6 T vak op maximaal 3 T afstand. 1 s waarschuwing, daarna 3–5 s opeenvolgende
+inslagen (rode flits + rook). Drie niveaus:
 
-**Gevaar — artilleriebarrage in het bos:**
+| Niveau | Kans | Pantserschade | Inslagen |
+|---|---|---|---|
+| licht | 3/6 | 10% | 3 |
+| gemiddeld | 2/6 | 20% | 6 |
+| zwaar | 1/6 | 30% | 10 |
 
-- Elke 20 seconden wordt een willekeurig stuk bos van ongeveer 6×6 T beschoten.
-- 2 seconden van tevoren is het gebied te herkennen aan een fluitend geluid en trillende boomtoppen.
-- Granaten ontploffen in de boomtoppen. Een tank in of direct naast (binnen 1 T van) bos in dat gebied verliest 15% pantser.
-- Er blijven kapotte boomtoppen liggen als permanent spoor.
+De automatische timer versnelt: 20 → 18 → 15 → 12 → 10 s (minimum). Kapotte bomen als
+permanent spoor. De host kan met **B** een extra barrage starten (telt niet mee voor de
+versnelling). Met **O** forceert de host een sneeuwstorm van 20 s.
 
-**Schaars middel — brandstofdepots:**
-
-- In de basis vul je brandstof gewoon aan, maar de basis ligt vaak ver weg.
-- Elke ronde liggen er **2 brandstofdepots** op een **nieuwe willekeurige plek**. Op groot en extra groot: 3.
-- Elk depot heeft één vulling. Wie hem gebruikt, maakt het depot leeg; een leeg depot blijft zichtbaar.
+**Schaars middel — brandstofdepots:** 3 vaste, onuitputtelijke depots met minimaal 5 T
+afstand onderling. De depots blijven op dezelfde plek tussen rondes.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1–2, aan het begin van elke ronde | Dichte mist | Zichtstraal 2 T, die in 2 minuten optrekt naar 12 T |
-| Elke 90 seconden, 20 seconden lang | Sneeuwstorm | Zichtstraal 4 T. Sporenwisser. Onderduiken (5.7). |
-| Vanaf ronde 3 | Opklaring | Geen mist meer; de sneeuwstormen blijven |
+| Wanneer | Effect |
+|---|---|
+| Hele spel | Pulserende mist: 60 s dicht (zicht 2 T), 30 s helder (zicht 12 T), herhalend. |
+| Elke 45–120 s (willekeurig), 20 s | Sneeuwstorm: zicht 2 T, sporenwisser, onderduiken. Wisselende sneeuwval (verstuiving). |
 
-**Tanks:** ploeg A olijfgroene Amerikaanse tank met witte ster en witte wintervlekken; ploeg B witgekalkte Duitse tank, alleen nummer 332.
+**Tanks:** A = Sherman, B = Panther.
 
 ---
 
-### 10.9 Seelower Hoogten — Oder-front (april 1945)
-
-**Sfeer:** nacht, koud, zoeklichten en lichtflitsen. Palet (donker): moeras `#2e3a36`, aarde `#3a3026`, heuvel `#4a4238`, rots `#5a5c5e`, water `#18242c`. Tunnelkleur `#1a1410`.
+### 10.9 Oder-front (april 1945)
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `soft` | 30 | Natte aarde in het Oderdal |
-| `marsh` | 15 | Moeras in het dal |
-| `hard` | 20 | Heuvelrug |
-| `normal` | 10 | Akkers |
-| `rock` | 10 | Steile helling |
-| `vegetation` (`tree`) | 5 | Bosjes op de heuvel; ondergrond `hard` |
-| `water` | 6 | De Oder en een kanaal |
-| `paved` | 4 | Wegen |
+| Klasse | % | Wat |
+|---|---|---|
+| zacht | 28 | natte aarde in het dal |
+| moeras | 15 | moeras in het dal |
+| hard | 20 | heuvelrug |
+| normaal | 15 | akkers |
+| rots | 7 | steile helling |
+| begroeiing (loof) | 5 | bosjes op de heuvel |
+| water | 6 | de Oder |
+| verhard | 4 | wegen |
 
 **Bijzonderheden:**
-
-- De **Oder** loopt verticaal langs de rechterrand, ongeveer 8% van de breedte.
-- Het **Oderdal** (moeras en natte aarde) beslaat de rechterhelft.
-- De **heuvelrug** beslaat het linkerderde. Op de grens loopt een **steile helling** (`rock`) van boven naar beneden, met 3 openingen van 3 T breed.
-- Een **kanaal** loopt verticaal door het midden van het dal, 2 T breed, met **2 bruggen**.
+- De **Oder** verticaal op x 0,65 (bij het midden, niet aan de rand).
+- Het **Oderdal** (moeras en natte aarde) in de rechterhelft.
+- De **heuvelrug** in het linkerderde, met een steile helling (`rots`) met openingen van 2 T
+  (1 eigen opening, 2 wegen erdoorheen).
 - Geen dorp.
 
-**Gevaar — artilleriebarrage:** elke 60 seconden licht een willekeurig vak van 6×6 T op de kaart op. Na 3 seconden wordt het beschoten: een tank in dat vak verliest 30% pantser. Daarna liggen er kraters (`soft`).
+**Gevaar — artilleriebarrage:** elke 60 s licht een willekeurig vak van 3×3 T op. Na 3 s
+beschoten: 30% pantser. Daarna kraters (zacht).
 
 **Schaars middel:** geen. Standaardregels.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1–2 | Nacht met zoeklichten | Zichtstraal 4 T. **Zoeklichten:** 3 bundels vanaf de rechterrand zwaaien heen en weer over de kaart (elke bundel een strook van 4 T breed, één zwaai per 12 seconden). Waar een bundel langskomt, worden alle **sporen** 1 seconde lang op volle intensiteit getekend, voor iedereen. In een bundel is je zichtstraal 12 T. Wordt de tank van een tegenstander gevangen in een bundel, dan krijg je een **richtingshint**, waar je ook bent. De tank zelf wordt niet zichtbaar, tenzij hij binnen je zichtstraal staat. |
-| Vanaf ronde 3 | Dageraad | Zichtstraal 8 T. De zoeklichten gaan uit. |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1–2 | Nacht, zicht 4 T. 3 **zoeklichten** in een Lissajous-patroon over de hele kaart (strook 4 T). In een bundel: sporen op volle intensiteit, zicht 12 T. Tank in een bundel: hint voor iedereen. |
+| Vanaf ronde 3 | Dageraad, zicht 8 T. Zoeklichten uit. |
 
-**Tanks:** ploeg A groene Sovjettank met rode ster; ploeg B grijze Duitse tank, alleen een nummer.
+**Tanks:** A = T-34, B = Panther.
 
 ---
 
-### 10.10 Val van Berlijn — Berlijn (april–mei 1945)
+### 10.10 Berlijn (april–mei 1945)
 
-**Sfeer:** stad in puin, rook, stof. Palet: straat `#7a7670`, gebouw `#8c8a86`, puin `#9a8f80`, park `#4a5a3a`, water `#2a3a44`. Tunnelkleur `#2a2420`.
+> **Let op:** deze map is nog in ontwikkeling (`hidden: true`) en niet kiesbaar in het menu.
 
 **Terrein:**
 
-| Klasse | % | Hier |
-| --- | --- | --- |
-| `paved` | 30 | Straten en pleinen |
-| `building` | 30 | Huizenblokken |
-| `soft` | 15 | Puin |
-| `normal` | 8 | Parken |
-| `vegetation` (`tree`) | 5 | Parkbomen; ondergrond `normal` |
-| `water` | 7 | De Spree en het Landwehrkanaal |
-| `rock` | 5 | Betonnen bunkers |
+| Klasse | % | Wat |
+|---|---|---|
+| verhard | 30 | straten en pleinen |
+| gebouw | 30 | huizenblokken (~25% bij 4 spelers, ~20% klein) |
+| zacht | 15 | puin |
+| normaal | 8 | parken |
+| begroeiing (loof) | 5 | parkbomen |
+| water | 7 | de Spree en het Landwehrkanaal |
+| rots | 5 | betonnen bunkers |
 
-**Bijzonderheden:**
+**Geen metro** (geschrapt).
 
-- De hele kaart is **stad**: een raster van huizenblokken met straten van minimaal 2 T breed. Geen dorpsmodule.
-- De **Spree** loopt horizontaal op ongeveer 35% van de hoogte, 3 T breed, met **2 bruggen**.
-- Het **Landwehrkanaal** loopt horizontaal op ongeveer 70% van de hoogte, 2 T breed, met **2 bruggen**.
-- **1 park** (Tiergarten) van ongeveer 15% van de kaart, links van het midden.
-- **Metro:** een vooraf gegraven tunnelnetwerk van 2 lijnen (één horizontaal, één verticaal) met **4 stations**. Metrotunnels zijn voor iedereen zichtbaar als gestippelde lijnen, rijden op volle snelheid zonder brandstofkosten en laten geen nieuwe sporen achter. Je kunt alleen in en uit bij een station. Wie de metro verlaat, graaft vanaf het station een nieuwe tunnel; stations zijn dus de plek om te bewaken.
+**Indeling van de kaart:**
+
+De hele kaart is stad: een raster van huizenblokken (blokken van 8–12 cellen) met straten van
+2 T (`type: 'city'`). Standaard gebouwen, geen segmenten.
+
+- **Spree:** rivier op y 0,35, 2 T breed. 2 bruggen.
+- **Landwehrkanaal:** op y 0,70, 1,5 T breed. 2 bruggen.
+- **Tiergarten:** park op (0,3; 0,5), maat 0,15 van de kaart.
 
 **Gevaar — instortende gevels:**
+- Direct naast een gebouw: 5% kans/s → 10% pantser.
+- Tegen een gebouw rijden: gevel stort zeker in → 25% pantser.
+- Gebouw met 3 treffers stort na 3 s helemaal in: 25% pantser op aangrenzende cellen.
+- Puin kan een straat afsluiten; geeft een hint.
 
-- Wie op een tegel direct naast een gebouw rijdt of staat, heeft elke seconde **5% kans** dat er een gevel naar beneden komt: 10% pantser.
-- Wie **tegen een gebouw aan rijdt**, laat de gevel zeker instorten: 25% pantser.
-- Een gebouw dat 3 treffers heeft gehad, stort na 3 seconden helemaal in. Een tank op een aangrenzende tegel verliest 25% pantser.
-- Een instorting laat puin (`soft`) achter dat een straat of tunnel kan afsluiten, en geeft een richtingshint.
-
-**Schaars middel — pantser:** pantser wordt tijdens een ronde **niet** hersteld, ook niet in de basis. Aan het begin van elke ronde heeft iedereen weer vol pantser. Brandstof en munitie vul je gewoon aan in de basis.
+**Schaars middel — pantser:** pantser wordt tijdens een ronde **niet** hersteld, ook niet in
+de basis. Brandstof en munitie gewoon aanvullen.
 
 **Weer:**
 
-| Wanneer | Weer | Effect |
-| --- | --- | --- |
-| Ronde 1 | Rook boven de stad | Zichtstraal 12 T |
-| Ronde 2 | Dichtere rook | Zichtstraal 8 T |
-| Vanaf ronde 3 | Dikke rook en regen | Zichtstraal 6 T. Aan het begin van ronde 3 loopt de horizontale metrolijn onder water: die lijn wordt `water` (onbegaanbaar). |
-| Hele spel | Stof | Na een instorting hangt er 10 seconden een stofwolk die het zicht blokkeert |
+| Wanneer | Effect |
+|---|---|
+| Ronde 1 | Rook boven de stad, zicht 12 T |
+| Ronde 2 | Dichtere rook, zicht 8 T |
+| Vanaf ronde 3 | Dikke rook en regen met onweersbuien, zicht 6 T |
+| Hele spel | Stof na instorting blokkeert 10 s het zicht |
 
-**Tanks:** ploeg A groene Sovjettank met rode ster; ploeg B grijze Duitse tank, alleen een nummer.
-
----
-
-## 11. Mapconfiguratie
-
-Elke map is een configuratiebestand. Voorbeeld (verkort):
-
-```json
-{
-  "id": "ardennen",
-  "year": 1944,
-  "mission": "Wacht am Rhein",
-  "name": "Ardennen",
-  "header": "BLITZKRIEG — WACHT AM RHEIN — ARDENNEN · DECEMBER 1944",
-  "terrainPercent": { "soft": 52, "hard": 12, "vegetation": 18, "paved": 8, "rock": 6, "water": 4 },
-  "vegetationType": "pine",
-  "vegetationGround": "soft",
-  "colors": { "soft": "#dfe6ea", "hard": "#bccfda", "paved": "#9b9184", "rock": "#8d9196", "water": "#1e3a4a", "tunnel": "#2b2118" },
-  "features": [
-    { "type": "village", "at": [0.5, 0.5], "size": 0.17, "name": "Bastogne" },
-    { "type": "road", "from": [0.5, 0.5], "to": [0.0, 0.5], "width": 2 },
-    { "type": "road", "from": [0.5, 0.5], "to": [0.5, 0.0], "width": 2 },
-    { "type": "road", "from": [0.5, 0.5], "to": [1.0, 0.5], "width": 2 },
-    { "type": "road", "from": [0.5, 0.5], "to": [0.15, 1.0], "width": 2 },
-    { "type": "road", "from": [0.5, 0.5], "to": [0.85, 1.0], "width": 2 },
-    { "type": "river", "from": [0.0, 0.8], "to": [1.0, 0.8], "width": 2, "frozen": false, "bridges": "atRoads" }
-  ],
-  "hazard": { "type": "forestBarrage", "everySeconds": 20, "area": 6, "warningSeconds": 2, "armorLoss": 0.15 },
-  "scarce": { "type": "fuelDepots", "count": { "small": 2, "medium": 2, "large": 3, "xlarge": 3 }, "relocateEachRound": true, "fillsPerDepot": 1 },
-  "weather": [
-    { "from": { "secondsInRound": 0 }, "untilRound": 2, "effect": { "visibility": { "start": 2, "end": 12, "overSeconds": 120 } } },
-    { "from": { "secondsInGame": 0 }, "every": 90, "duration": 20, "effect": { "visibility": 4, "trackEraser": true, "burial": true } },
-    { "from": { "round": 3 }, "effect": { "fog": false } }
-  ],
-  "tanks": { "A": "sherman-winter", "B": "kingtiger-white-332" }
-}
-```
+**Tanks:** A = T-34, B = Panther.
 
 ---
 
-## 12. Acceptatiecriteria
+## §11. Besturing
 
-1. Het spel heet overal **BLITZKRIEG**.
-2. Bovenaan staan een pull-down menu met de 10 maps in chronologische volgorde en een menu voor de kaartgrootte. De keuzes van de host worden naar de andere spelers gestuurd.
-3. Bij 2 spelers wint wie als eerste 3 rondes wint; bij meer spelers wie als eerste 5 kills heeft. Na elke dood begint iedereen weer in zijn basis, met vol pantser, brandstof en munitie.
-4. De kaart wordt één keer per spel gegenereerd en blijft het hele spel dezelfde.
-5. Alle tanks hebben dezelfde eigenschappen; alleen het uiterlijk verschilt per map.
-6. Per map komen de terreinpercentages binnen ±3 procentpunt uit, en alle vaste kenmerken staan op de beschreven plek, op elke kaartgrootte.
-7. Wegen zijn minimaal 2 T, bruggen minimaal 3 T, heggen 1 T en bossen tussen 1 en 5 T breed.
-8. Bases worden als eerste geplaatst, willekeurig, en de kaart wordt eromheen gemaakt. Vanuit je eigen base en binnen 3 T eromheen is geen andere base in je venster te zien. Rond elke base ligt 3 T vrije ruimte met een vrije in- en uitgang aan boven- en onderkant. Er is altijd een route tussen elk paar bases, ook na veranderingen door het weer.
-9. Hard terrein geeft lichte sporen, zacht terrein duidelijke tunnels; sporen vervagen volgens de tabel. Op ijs zijn alleen barsten te zien.
-10. Kogels vliegen over de grond en over water heen, graven niet, en stoppen pas bij een tank, begroeiing, gebouw, rots of object.
-11. Bij een sneeuwstorm, zandstorm of sneeuwjacht raakt een tank die 2 seconden stilstaat bedekt en is hij onzichtbaar voor tegenstanders tot hij rijdt of schiet.
-12. Zakt een tank door het ijs, dan verliest hij langzaam pantser, kan hij heel langzaam uit het wak rijden, en gaat hij dood als hij erin blijft.
-13. Een tegenstander is alleen scherp zichtbaar binnen de zichtstraal bij een vrije zichtlijn; daarbuiten in je venster als schim. Gebouwen, begroeiing en rook blokkeren het zicht. Bij El Alamein verschijnen valse schimmen.
-14. Elke map heeft het gevaar, het schaarse middel en het weer zoals beschreven, en het weer verandert op de juiste ronde of timer.
-15. Richtingshints verschijnen als gloed aan de rand van het scherm in een van 8 richtingen; geluiden alleen binnen 20 T.
-16. Iedereen ziet op elk moment dezelfde kaarttoestand, hetzelfde weer, dezelfde score en hetzelfde rondenummer.
+### 11.1 Toetsenbord
 
-## 13. Testen
+Pijltjes of WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = inzoomen,
+0 = uitzoomen. In je eigen basis: repareren en herladen.
 
-- Unittests: snelheid en brandstof per klasse, vervaging van sporen, sporenwisser, onderduiken na 2 seconden, levenspunten van begroeiing en gebouwen, kogelbaan, kans op breken van ijs en pantserverlies in een wak, de meters (zand, warmte, temperatuur), basisplaatsing (afstand, vrije ruimte, in- en uitgang), zichtlijn, zichtstraal en schim, gehoorafstand van hints, routecontrole, score en einde van een spel.
-- Weertest: speel per map een spel van 5 rondes met een snelle klok en controleer dat elke weersverandering op de juiste ronde of tijd begint.
-- Generatietest: genereer elke map 100 keer met verschillende seeds, op alle vier de kaartgroottes en met 2, 3 en 4 spelers, en controleer percentages, bruggen, doorwaadbare plekken, bases en routes.
-- Een debugoptie om de hele kaart zichtbaar te maken (alleen in ontwikkeling).
+**Host-commando's (alleen op de Ardennen):**
+- **B** = extra bombardement nabij een speler (telt niet mee voor de automatische versnelling).
+- **O** = geforceerde sneeuwstorm (20 s).
+- **N** = dag/nacht wisselen (alle spelers).
+- **[** / **]** = zon-/maanstand roteren (8 stappen, alle spelers).
 
-## 14. Bouwvolgorde (voorstel)
+**Per speler:**
+- **M** = lokale atmosferische mist aan/uit (alleen op je eigen scherm).
 
-1. Hernoemen, mapmenu en kaartgrootte.
-2. Spel- en rondelogica met score.
-3. Terreinklassen, sporen en vervaging.
-4. Kaartgeneratie met basisplaatsing, eerst voor de Ardennen.
-5. Begroeiing, gebouwen en dorpsmodule.
-6. Fog of war, schim en richtingshints.
-7. Het weersysteem, met gevaar en schaars middel voor de Ardennen.
-8. De overige maps één voor één.
+### 11.2 Touch (tablet en telefoon)
 
-## 15. Open vragen (eerst navragen of de voorgestelde keuze aanhouden)
+Alleen liggend (staand: "draai je scherm"). Linkerhelft = zwevende joystick (8 richtingen),
+rechterhelft = vuren, K-rondje bovenin 1 s vasthouden = zelfvernietiging. Op een telefoon
+(liggend, < 500 px): het zijpaneel wordt een kleine HUD rechtsboven.
 
-1. **Sporen tussen rondes:** de map blijft het hele spel dezelfde. Blijven de tunnels en sporen van een vorige ronde ook liggen? Voorstel: ja, maar dan ken je vanaf ronde 2 al veel routes van je tegenstander. Alternatief: tunnels worden aan het begin van elke ronde weer dichtgemaakt, terwijl blijvende veranderingen (weggeschoten bos, puin, gebroken ijs, weer) wel blijven.
-2. **Aantal spelers:** wat is het maximum? En op welke kaartgrootte past dat nog, gezien de regel dat je geen andere base mag kunnen zien?
-3. **Mapkeuze:** mag alleen de host de map en de grootte kiezen?
-4. **Gehoorafstand en kaartgrootte:** blijft 20 T gelijk op een extra grote kaart?
-5. **Meer dan 2 spelers en ploegen:** het uiterlijk van de tanks gaat uit van ploeg A en B. Hoe zien de tanks eruit bij meer spelers?
+---
+
+## §12. Zijpaneel en minikaart
+
+Het zijpaneel is op elke map hetzelfde: de tankkaart (plaatje, naam, land, zeges en meters),
+dan de minikaart, dan de legenda. Verder niets.
+
+**Minikaart:** alleen je eigen tank, je eigen basis, het terrein en brandstof/munitie. Geen
+tunnels, sporen, andere bases of andere tanks. Tijdens zand- en sneeuwstormen tijdelijk
+verborgen. De host kan de minikaart in de wachtkamer uitzetten; bij Tunneler-maps standaard
+uit.
+
+---
+
+## §13. Effecten verraden niets
+
+Mondingsvuur, splinters, flipbook-effecten, lichtvlekjes en kogels van anderen: alleen als je
+ze scherp ziet. Waterplanten die op een tunnel verdwijnen: alleen waar je zicht hebt. Geluiden
+lopen via de richtingshints.

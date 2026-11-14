@@ -4,18 +4,9 @@ Tankspel voor 2–4 spelers in het lokale netwerk, gebaseerd op het oude Tunnele
 De eigenaar speelt het met vrienden (die niet cheaten). **Lees eerst `README.md`**: spelregels,
 maps, starten, testen, bestandsoverzicht en de bewuste afwijkingen van de spec staan daar.
 
-**De oorspronkelijke specificatie staat in `docs/SPEC-blitzkrieg.md`** (hoofdstukken §0–§15; de
-code en tests verwijzen ernaar, bv. "§6.2"). Waar het spel ervan afwijkt, gelden in deze volgorde:
-1. de keuzes hieronder;
-2. de afwijkingen in `README.md`;
-3. de spec.
-
-Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beantwoord (zie de keuzes):
-- tunnels blijven liggen;
-- max. 4 spelers, klein = 2;
-- alleen de host kiest;
-- gehoord blijft 20 T;
-- tank C/D zijn varianten van A/B.
+**De spelspecificatie staat in `docs/SPEC-blitzkrieg.md`** (§1–§13). Alle spelregels, maps,
+tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
+`docs/open-punten.md`.
 
 ## Taal en stijl
 - Alles in het **Nederlands**: commentaar, teksten in het spel, testnamen, commitberichten, en je
@@ -58,10 +49,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   weerdeeltjes, lichtbron, vignet, ijs). Alleen voor de weergave; zie README "Uiterlijk per map".
 - **Assets**: sprites en texturen staan in `public/assets/` (`manifest.json` is de bron, `LEESMIJ.md`
   zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
-  tekent de weergave het procedureel of zoals vroeger. De opdracht voor de graphics staat in
-  `docs/opdracht-claude-code-graphics.md` (fases 0–8). Reparaties en wensen daarna (mist en rook,
-  rotsrand, berm, waterlijn, ingesneeuwde tank, maten van huizen en bomen, rand van de kaart) staan in
-  `docs/spec-grafische-reparaties.md` (§1–§9).
+  tekent de weergave het procedureel of zoals vroeger.
 - **Effecten verraden niets**: mondingsvuur, splinters, flipbook-effecten, lichtvlekjes en kogels van
   anderen alleen als je ze scherp ziet; waterplanten die op een tunnel verdwijnen alleen waar je zicht hebt; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
@@ -102,7 +90,7 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
   - een tegenstander die je scherp ziet, geeft geen hint;
   - gehoord binnen 20 T.
 - Tanks zijn per map alleen anders van **uiterlijk**; de eigenschappen zijn overal gelijk. Vijf tanks
-  (`TANKS` in config.js, `docs/SPEC-tanks.md`), op elke map en in elke stijl hetzelfde; een kaart
+  (`TANKS` in config.js, §4 van de spec), op elke map en in elke stijl hetzelfde; een kaart
   kiest er per ploeg één. Geen embleem of nummer op de tanksprite. Romp + rupsen die meeschuiven
   (`public/view/tanks-view.js`); de plaatjes maakt `node tools/maak-tanks.mjs` uit `input/tanks/`.
 - Mijnen bij El Alamein zijn onzichtbaar. Gevaren en weer worden alleen in de browser verborgen
@@ -116,6 +104,10 @@ Zo is de metro in Berlijn (§10.10) geschrapt. De open vragen in §15 zijn beant
 - Huizen zijn groter dan een tank (`BUILDINGS.footprints`, ~1,7 × de tekening); bomen 7–10 cellen,
   kruinen hangen hoogstens `OBJECTS.overhang` cel over open grond.
 - K = zelfvernietiging: dood, telt voor niemand als kill.
+- **Host-commando's (Ardennen):** B = extra barrage, O = geforceerde sneeuwstorm (20 s),
+  N = dag/nacht wisselen, [ ] = zon-/maanstand roteren. Alleen voor de host, gedeeld voor
+  alle spelers. M = lokale atmosferische mist (per speler, niet gedeeld).
+  Dit zijn `cmd`-berichten naar de server; de server checkt host + play-fase.
 - De minikaart staat aan via `DISPLAY.minimap` (per map te overschrijven) en de host kan hem in de
   wachtkamer uitzetten; dan is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter
   staat hij standaard uit. Er staat alleen je eigen tank, je eigen basis, het terrein en

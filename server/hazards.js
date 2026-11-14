@@ -66,7 +66,14 @@ function nearForestIn(w, t, [x0, y0, x1, y1]) {
 // beschermde zones. Eén vulling per depot: wie erover rijdt, tankt vol; leeg blijft zichtbaar.
 const fuelDepots = {
   roundStart(room, events) {
-    const cfg = room.rules.scarce, w = room.world, n = cfg.count[room.size] ?? 2;
+    const cfg = room.rules.scarce, w = room.world;
+    // fixed: depots blijven het hele spel op dezelfde plek
+    if (cfg.fixed && room.hz.depots?.length) {
+      for (const d of room.hz.depots) d[2] = 1; // hervul
+      events.push({ t: 'dep', list: room.hz.depots });
+      return;
+    }
+    const n = typeof cfg.count === 'number' ? cfg.count : (cfg.count[room.size] ?? 2);
     room.hz.depots = [];
     for (let tries = 0; room.hz.depots.length < n && tries < 2000; tries++) {
       const x = Math.floor(rnd() * G.W), y = Math.floor(rnd() * G.H);
@@ -83,8 +90,9 @@ const fuelDepots = {
       const t = room.tanks.find((o) => o?.alive && Math.abs(o.x - d[0]) <= reach && Math.abs(o.y - d[1]) <= reach);
       if (!t) return;
       t.fuel = G.FUEL_MAX;
-      if (!room.rules.scarce.infinite) d[2] = 0;
-      events.push({ t: 'depu', k, i: t.id });
+      const inf = !!room.rules.scarce.infinite;
+      if (!inf) d[2] = 0;
+      events.push({ t: 'depu', k, i: t.id, inf });
     });
   },
   snapshot(room) { return { depots: room.hz.depots || [] }; },
@@ -462,15 +470,17 @@ function weatherTankStep(room, t, info, events) {
 }
 
 // ---------- Bombardement (Ardennen §10.8, Seelow §10.9) ----------
-// Drie zwaartegraden (licht/gemiddeld/zwaar), 5 seconden met meerdere inslagen in een 3T×3T
-// gebied. Timer-gebaseerd (everySeconds) of zoeklicht-gebaseerd (searchlightDelay): detectie
-// in een zoeklichtbundel triggert een bombardement op die positie na N seconden.
+// Drie zwaartegraden (licht/gemiddeld/zwaar), inslagen verspreid over durationSeconds in een
+// areaT×areaT-gebied. Triggers: timer (everySeconds of intervals[]), zoeklicht (searchlightDelay),
+// of handmatig door de host (hostBarrage). nearPlayer centreert nabij een levende tank.
 const bombardment = {
   roundStart(room) {
     const cfg = room.rules.hazard;
-    room.hz.next = cfg.everySeconds ? room.tick + ticks(cfg.everySeconds) : Infinity;
-    room.hz.active = room.hz.active || []; // lopende bombardementen
-    room.hz.lightTargets = room.hz.lightTargets || new Map(); // tank-id → {x, y, at}
+    room.hz.active = room.hz.active || [];
+    room.hz.lightTargets = room.hz.lightTargets || new Map();
+    room.hz.barrageCount = 0;
+    const first = cfg.intervals ? cfg.intervals[0] : cfg.everySeconds;
+    room.hz.next = first ? room.tick + ticks(first) : Infinity;
   },
   step(room, tick, events, hurt) {
     const cfg = room.rules.hazard, hz = room.hz, w = room.world;
@@ -478,20 +488,18 @@ const bombardment = {
     // lopende bombardementen: inslagen verspreid over durationSeconds
     for (let k = hz.active.length - 1; k >= 0; k--) {
       const b = hz.active[k];
-      if (tick >= b.end) { hz.active.splice(k, 1); events.push({ t: 'zb', box: b.box }); continue; }
-      if (tick >= b.nextImpact) {
-        const ix = Math.round(b.box[0] + rnd() * (b.box[2] - b.box[0]));
-        const iy = Math.round(b.box[1] + rnd() * (b.box[3] - b.box[1]));
-        const r = 2 + Math.floor(rnd() * 2);
-        G.markArtillery(w, b.box, [[ix, iy, r]]);
+      if (tick >= b.end) { hz.active.splice(k, 1); events.push({ t: 'zb', box: b.box, kind: 'bomb' }); continue; }
+      // inslagen uit de vooraf gekozen lijst, gelijkmatig verdeeld over [start, end)
+      while (b.nextIdx < b.impacts.length) {
+        const frac = b.impacts.length <= 1 ? 0 : b.nextIdx / (b.impacts.length - 1);
+        if (tick < b.start + Math.round(frac * (b.end - b.start))) break;
+        const [ix, iy, r] = b.impacts[b.nextIdx++];
         if (cfg.destroysPine) destroyPineIn(w, ix, iy, r);
         events.push({ t: 'zi', x: ix, y: iy, r });
         for (const t of room.tanks) if (t?.alive && t.x >= b.box[0] && t.x <= b.box[2] && t.y >= b.box[1] && t.y <= b.box[3]) hurt(t, b.armorLoss, events);
-        b.hits++;
-        b.nextImpact = b.hits >= b.totalImpacts ? Infinity : tick + Math.round((b.end - b.start) / b.totalImpacts);
       }
     }
-    // zoeklicht-triggering: tank in een bundel → bombardement na searchlightDelay seconden
+    // zoeklicht-triggering
     if (cfg.searchlightDelay && room.wx?.flags?.searchlights) {
       for (const t of room.tanks) {
         if (!t?.alive) continue;
@@ -507,20 +515,38 @@ const bombardment = {
         startBombardment(hz, tick, lt.x, lt.y, half, cfg, events);
       }
     }
-    // timer-gebaseerd bombardement
-    if (cfg.everySeconds && tick >= hz.next) {
-      hz.next = tick + ticks(cfg.everySeconds);
-      const x = half + rnd() * (G.W - 2 * half), y = half + rnd() * (G.H - 2 * half);
-      startBombardment(hz, tick, Math.round(x), Math.round(y), half, cfg, events);
+    // timer-gebaseerd bombardement (vast interval of versnellend)
+    if (tick >= hz.next) {
+      const { x, y } = bombardmentCenter(room, cfg, half);
+      startBombardment(hz, tick, x, y, half, cfg, events);
+      hz.barrageCount++;
+      const iv = cfg.intervals
+        ? cfg.intervals[Math.min(hz.barrageCount, cfg.intervals.length - 1)]
+        : cfg.everySeconds;
+      hz.next = iv ? tick + ticks(iv) : Infinity;
     }
   },
   snapshot(room) {
     return {
-      barrage: room.hz.active?.map((b) => ({ box: b.box, level: b.level, end: b.end })) || [],
+      barrage: room.hz.active?.map((b) => ({ box: b.box, level: b.level, end: b.end, impacts: b.impacts })) || [],
       lightTargets: [...(room.hz.lightTargets || new Map()).entries()].map(([id, lt]) => ({ id, ...lt })),
     };
   },
 };
+// Bepaal het centrum van een bombardement: nabij een levende speler of willekeurig op de kaart
+function bombardmentCenter(room, cfg, half) {
+  if (cfg.nearPlayer) {
+    const alive = room.tanks.filter((t) => t?.alive);
+    if (alive.length) {
+      const target = alive[Math.floor(rnd() * alive.length)];
+      const angle = rnd() * Math.PI * 2, dist = rnd() * (cfg.nearOffsetT || 0) * G.T;
+      const x = Math.round(Math.max(half, Math.min(G.W - half, target.x + Math.cos(angle) * dist)));
+      const y = Math.round(Math.max(half, Math.min(G.H - half, target.y + Math.sin(angle) * dist)));
+      return { x, y };
+    }
+  }
+  return { x: Math.round(half + rnd() * (G.W - 2 * half)), y: Math.round(half + rnd() * (G.H - 2 * half)) };
+}
 function pickLevel(levels) {
   const total = Object.values(levels).reduce((a, l) => a + l.weight, 0);
   let r = rnd() * total;
@@ -531,13 +557,23 @@ function pickLevel(levels) {
 function startBombardment(hz, tick, cx, cy, half, cfg, events) {
   const [level, lv] = pickLevel(cfg.levels);
   const box = [Math.round(cx - half), Math.round(cy - half), Math.round(cx + half), Math.round(cy + half)];
-  const dur = ticks(cfg.durationSeconds || 5);
+  const ds = cfg.durationSeconds;
+  const dur = ticks(Array.isArray(ds) ? ds[0] + rnd() * (ds[1] - ds[0]) : (ds || 3));
+  // alle inslagposities vooraf kiezen
+  const impacts = [];
+  for (let k = 0; k < lv.impacts; k++) {
+    impacts.push([
+      Math.round(box[0] + rnd() * (box[2] - box[0])),
+      Math.round(box[1] + rnd() * (box[3] - box[1])),
+      2 + Math.floor(rnd() * 2),
+    ]);
+  }
+  const warnEnd = tick + ticks(cfg.warningSeconds);
   hz.active.push({
-    box, level, armorLoss: lv.armorLoss, totalImpacts: lv.impacts,
-    hits: 0, start: tick + ticks(cfg.warningSeconds), end: tick + ticks(cfg.warningSeconds) + dur,
-    nextImpact: tick + ticks(cfg.warningSeconds),
+    box, level, armorLoss: lv.armorLoss, impacts, nextIdx: 0,
+    start: warnEnd, end: warnEnd + dur,
   });
-  events.push({ t: 'z', box, at: tick + ticks(cfg.warningSeconds), kind: 'bomb', level });
+  events.push({ t: 'z', box, at: warnEnd, kind: 'bomb', level, impacts });
 }
 function destroyPineIn(w, cx, cy, r) {
   for (let y = cy - r; y <= cy + r; y++) {
@@ -645,6 +681,14 @@ export function bulletLanded(room, x, y, events) {
 // Een kogel op (x, y): raakt hij een object (geschut)? Dan true: de kogel is op.
 export function bulletAt(room, x, y, events) {
   return parts(room).some((p) => p.bulletAt?.(room, x, y, events));
+}
+// Host drukt B: extra bombardement nabij een speler (telt niet mee voor de versnelling)
+export function hostBarrage(room, events) {
+  const cfg = room.rules.hazard;
+  if (!cfg?.levels) return;
+  const half = ((cfg.areaT || 3) * G.T) / 2;
+  const { x, y } = bombardmentCenter(room, cfg, half);
+  startBombardment(room.hz, room.tick, x, y, half, cfg, events);
 }
 export function snapshot(room) {
   return Object.assign({}, ...parts(room).map((p) => p.snapshot?.(room) || {}));

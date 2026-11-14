@@ -151,6 +151,10 @@
   "woestijn": "woestijn/objects.json"
  },
  "files": {
+  "effects/artillerie-inslag.png": [
+   1280,
+   1280
+  ],
   "effects/explosie.png": [
    1024,
    1024

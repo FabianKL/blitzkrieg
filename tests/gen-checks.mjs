@@ -2,7 +2,7 @@
 // Gebruikt door tests.mjs (een paar seeds) en gen.mjs (npm run test:gen, 100 seeds per geval).
 import * as G from '../shared/game.js';
 import { terrainShares, MARGIN, toleranceOf, villageSize } from '../shared/mapgen.js';
-import { VIEW_CELLS } from '../shared/config.js';
+import { BUILDINGS, VIEW_CELLS } from '../shared/config.js';
 import { check } from './helpers.mjs';
 
 // Afstand (in cellen) van elke cel in de vorm tot de dichtstbijzijnde cel erbuiten (chamfer 1/√2)
@@ -137,7 +137,7 @@ export function checkGeneratedMap(id, w, players, size) {
     check(maxD <= 2.5 * T + 1.5, `${tag}: bos van ${(maxD * 2).toFixed(0)} cellen breed, max 5 T = ${5 * T}`);
   }
   // geen huis of kerk op of pal tegen de weg (zonder stad is verhard altijd weg of dorpsplein)
-  if (!(rules.features || []).some((f) => f.type === 'city')) {
+  if (!(rules.features || []).some((f) => f.type === 'city' || (f.type === 'village' && f.layout === 'roadside'))) {
     let bad = -1;
     for (let i = 0; i < w.map.length && bad < 0; i++) {
       if (w.map[i] !== G.BUILDING) continue;
@@ -160,6 +160,71 @@ export function checkGeneratedMap(id, w, players, size) {
   if (villages.length) check(totalBuildings >= totalMin && totalBuildings <= totalMax, `${tag}: ${totalBuildings} gebouwen (incl. ${farmMax} boerderijen), verwacht ${totalMin}–${totalMax}`);
   for (const f of villages) {
     if (f.landmark) check(w.landmarks.length >= 1, `${tag}: geen herkenningspunt (${f.landmark}) in ${f.name}`);
+  }
+  if (id === 'ardennen') {
+    const village = w.villages[0], cfg = villages[0], centerX = Math.round(cfg.at[0] * (G.W - 1)), centerY = Math.round(cfg.at[1] * (G.H - 1));
+    check(village.x === centerX && village.y === centerY, `${tag}: Bastogne ligt niet exact midden op de kaart`);
+    const roadFeatures = (rules.features || []).filter((f) => f.type === 'road');
+    check(roadFeatures.length === 5, `${tag}: verwacht vijf wegen`);
+    roadFeatures.forEach((_, i) => {
+      const path = w.roads[i]?.path || [];
+      const endpointDistance = Math.min(
+        Math.hypot(path[0]?.[0] - centerX, path[0]?.[1] - centerY),
+        Math.hypot(path.at(-1)?.[0] - centerX, path.at(-1)?.[1] - centerY),
+      );
+      check(endpointDistance < 1, `${tag}: weg ${i + 1} komt niet op het centrale kruispunt uit`);
+    });
+
+    let rows = 0, detached = 0, churchBox = null;
+    const rowByRoadSide = new Map();
+    for (const cells of w.vegCells) {
+      if (!cells.length || w.map[cells[0]] !== G.BUILDING) continue;
+      const xs = cells.map((i) => i % G.W), ys = cells.map((i) => (i / G.W) | 0);
+      const box = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      const width = box.x1 - box.x0 + 1, height = box.y1 - box.y0 + 1;
+      if (Math.abs(cells.length - BUILDINGS.footprints['huis-rij'][0] * BUILDINGS.footprints['huis-rij'][1]) <= 24) {
+        rows++;
+        const cx = xs.reduce((sum, x) => sum + x + 0.5, 0) / cells.length;
+        const cy = ys.reduce((sum, y) => sum + y + 0.5, 0) / cells.length;
+        let cxx = 0, cyy = 0, cxy = 0;
+        for (let k = 0; k < cells.length; k++) {
+          const dx = xs[k] + 0.5 - cx, dy = ys[k] + 0.5 - cy;
+          cxx += dx * dx; cyy += dy * dy; cxy += dx * dy;
+        }
+        const angle = 0.5 * Math.atan2(2 * cxy, cxx - cyy);
+        const roads = w.roads.map((road, i) => {
+          const [[ax, ay], [bx, by]] = road.path, dx = bx - ax, dy = by - ay, lengthSq = dx * dx + dy * dy;
+          const t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lengthSq));
+          return { i, dx, dy, distance: Math.hypot(cx - (ax + t * dx), cy - (ay + t * dy)) };
+        }).sort((a, b) => a.distance - b.distance);
+        const road = roads[0], roadAngle = Math.atan2(road.dy, road.dx);
+        const angleDiff = Math.abs(Math.atan2(Math.sin(angle - roadAngle), Math.cos(angle - roadAngle)));
+        check(angleDiff < 0.12 || Math.abs(angleDiff - Math.PI) < 0.12, `${tag}: huizenrij draait niet mee met de weg (${angleDiff.toFixed(2)} rad)`);
+        check(road.distance <= roadFeatures[road.i].width * T / 2 + BUILDINGS.footprints['huis-rij'][1] / 2 + 2, `${tag}: huizenrij staat te ver van de weg (${road.distance.toFixed(1)} cellen)`);
+        const feature = roadFeatures[road.i], center = [centerX, centerY];
+        const fromCenter = Math.hypot(Math.round(feature.from[0] * (G.W - 1)) - center[0], Math.round(feature.from[1] * (G.H - 1)) - center[1]) < 1;
+        const outer = fromCenter ? feature.to : feature.from;
+        const dx = Math.round(outer[0] * (G.W - 1)) - centerX, dy = Math.round(outer[1] * (G.H - 1)) - centerY;
+        const side = Math.sign(dx * (cy - centerY) - dy * (cx - centerX));
+        const key = `${road.i}/${side}`;
+        rowByRoadSide.set(key, (rowByRoadSide.get(key) || 0) + 1);
+      } else if (Math.abs(cells.length - BUILDINGS.footprints['huis-woon'][0] * BUILDINGS.footprints['huis-woon'][1]) <= 12) {
+        detached++;
+      } else if (width === BUILDINGS.footprints.kerk[0] && height === BUILDINGS.footprints.kerk[1]) {
+        churchBox = box;
+      } else if (height === BUILDINGS.footprints.kerk[0] && width === BUILDINGS.footprints.kerk[1]) {
+        churchBox = box;
+      }
+    }
+    check(rows === roadFeatures.length * 4, `${tag}: ${rows} huizenrijen, verwacht ${roadFeatures.length * 4}`);
+    for (let road = 0; road < roadFeatures.length; road++) {
+      check(rowByRoadSide.get(`${road}/-1`) === 2, `${tag}: weg ${road + 1} heeft niet twee blokken aan zijde -1`);
+      check(rowByRoadSide.get(`${road}/1`) === 2, `${tag}: weg ${road + 1} heeft niet twee blokken aan zijde 1`);
+    }
+    check(detached >= cfg.looseHouses.min && detached <= cfg.looseHouses.max, `${tag}: ${detached} losse huizen, verwacht ${cfg.looseHouses.min}–${cfg.looseHouses.max}`);
+    const church = w.landmarks.find((landmark) => landmark.kind === 'kerk');
+    const churchDistance = churchBox && Math.hypot(Math.max(churchBox.x0 - centerX, 0, centerX - churchBox.x1), Math.max(churchBox.y0 - centerY, 0, centerY - churchBox.y1));
+    check(church && churchDistance < 3 * G.T, `${tag}: kerk ligt niet aan het kruispunt`);
   }
   // rivieren op de plek: de route ligt gemiddeld binnen 10% van de opgegeven lijn
   (rules.features || []).filter((f) => f.type === 'river').forEach((f, k) => {

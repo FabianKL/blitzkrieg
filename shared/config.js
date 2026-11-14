@@ -60,6 +60,20 @@ export const AUTH = {
 // T is hier in cellen; de tank zelf is 7 lang en 5 breed.
 export const T = 5;
 
+// Lichtposities voor [ ] (host-commando): 8 stappen rond een cirkel, straal ~0.75.
+// Stap 3 (ZO) is de standaard op de meeste kaarten.
+export const LIGHT_DIRS = [
+  { dx: 0, dy: -0.75, tint: 0xfff8e0, alpha: 0.06 },   // 0 N  hoge zon, licht warm
+  { dx: 0.53, dy: -0.53, tint: 0xffe8a0, alpha: 0.10 }, // 1 NO ochtendgloed
+  { dx: 0.75, dy: 0, tint: 0xffcc60, alpha: 0.14 },     // 2 O  vroege ochtend
+  { dx: 0.53, dy: 0.53, tint: 0x000000, alpha: 0 },     // 3 ZO standaard (geen overlay)
+  { dx: 0, dy: 0.75, tint: 0xfff8e0, alpha: 0.06 },     // 4 Z  middagzon
+  { dx: -0.53, dy: 0.53, tint: 0xffcc60, alpha: 0.14 }, // 5 ZW namiddaggloed
+  { dx: -0.75, dy: 0, tint: 0xff8830, alpha: 0.20 },    // 6 W  zonsondergang
+  { dx: -0.53, dy: -0.53, tint: 0xcc4420, alpha: 0.25 },// 7 NW schemering
+];
+export const NIGHT_TINT = { tint: 0x182850, alpha: 0.45 };
+
 // Kaartgroottes (§6.0): factor op breedte en hoogte van middel (400 x 250 cellen).
 // Breedtes in T schalen niet mee; posities als fractie van de kaart wel.
 export const MAP_SIZES = {
@@ -260,7 +274,7 @@ export const OBJECTS = {
   height: { tall: 2.2, low: 0.6 },
 };
 
-// De vijf tanks (docs/SPEC-tanks.md). Een kaart kiest er per ploeg één: tanks: { A: 't34', B: 'panther' }.
+// De vijf tanks (spec §4). Een kaart kiest er per ploeg één: tanks: { A: 't34', B: 'panther' }.
 // Alleen uiterlijk: name en nation op de tankkaart; mini de kleur op de minikaart; hull, mark en
 // number alleen voor de getekende tank van de stijl (als de sprites ontbreken; op de sprite komt
 // geen embleem of nummer, keuze van de eigenaar). De tekening staat in public/assets/tanks/<sleutel>/.
@@ -330,8 +344,9 @@ export const BURIAL = { px: 24, length: 7.2, width: 6.2, at: -0.4, turretAt: 0.2
 // speed = beelden per tick van Pixi (60/s); impact = inslagblad per stijl; light* = lichtvlekje
 // bij schoten en explosies (kleur, dekking, seconden)
 export const FX = {
-  sheets: ['explosie', 'rook', 'mondingsvuur', 'inslag-aarde', 'inslag-sneeuw', 'inslag-zand'],
+  sheets: ['explosie', 'rook', 'mondingsvuur', 'inslag-aarde', 'inslag-sneeuw', 'inslag-zand', 'artillerie-inslag'],
   speed: 0.4, muzzle: 3, hit: 4, death: 14, bridge: 18, impactSize: 3.5,
+  artillerySize: 8, shellFallMs: 120,
   impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand' },
   lightColor: 0xffc070, lightAlpha: 0.55, lightLife: 0.25,
 };

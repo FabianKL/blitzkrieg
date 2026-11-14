@@ -1,4 +1,4 @@
-// Maakt de tanksprites uit de bronvellen in input/tanks/ (docs/SPEC-tanks.md §2). Elk vel heeft
+// Maakt de tanksprites uit de bronvellen in input/tanks/ (spec §4). Elk vel heeft
 // drie banden onder elkaar: de complete tank, de romp zonder rupsen (zelfde schaal) en een
 // rupsstrook. Per tank komt in public/assets/tanks/<naam>/: tank.png, romp.png, rups.png en
 // tank.json, en manifest.json wordt bijgewerkt. Alleen Node (zlib), geen beeldbibliotheek.

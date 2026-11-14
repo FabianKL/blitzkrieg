@@ -1,0 +1,417 @@
+{
+ "frames": {
+  "artillerie-inslag-00": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-01": {
+   "frame": {
+    "x": 320,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-02": {
+   "frame": {
+    "x": 640,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-03": {
+   "frame": {
+    "x": 960,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-04": {
+   "frame": {
+    "x": 0,
+    "y": 320,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-05": {
+   "frame": {
+    "x": 320,
+    "y": 320,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-06": {
+   "frame": {
+    "x": 640,
+    "y": 320,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-07": {
+   "frame": {
+    "x": 960,
+    "y": 320,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-08": {
+   "frame": {
+    "x": 0,
+    "y": 640,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-09": {
+   "frame": {
+    "x": 320,
+    "y": 640,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-10": {
+   "frame": {
+    "x": 640,
+    "y": 640,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-11": {
+   "frame": {
+    "x": 960,
+    "y": 640,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-12": {
+   "frame": {
+    "x": 0,
+    "y": 960,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-13": {
+   "frame": {
+    "x": 320,
+    "y": 960,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-14": {
+   "frame": {
+    "x": 640,
+    "y": 960,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "artillerie-inslag-15": {
+   "frame": {
+    "x": 960,
+    "y": 960,
+    "w": 320,
+    "h": 320
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 320
+   },
+   "sourceSize": {
+    "w": 320,
+    "h": 320
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  }
+ },
+ "animations": {
+  "artillerie-inslag": [
+   "artillerie-inslag-00",
+   "artillerie-inslag-01",
+   "artillerie-inslag-02",
+   "artillerie-inslag-03",
+   "artillerie-inslag-04",
+   "artillerie-inslag-05",
+   "artillerie-inslag-06",
+   "artillerie-inslag-07",
+   "artillerie-inslag-08",
+   "artillerie-inslag-09",
+   "artillerie-inslag-10",
+   "artillerie-inslag-11",
+   "artillerie-inslag-12",
+   "artillerie-inslag-13",
+   "artillerie-inslag-14",
+   "artillerie-inslag-15"
+  ]
+ },
+ "meta": {
+  "image": "artillerie-inslag.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 1280,
+   "h": 1280
+  },
+  "scale": "1"
+ }
+}

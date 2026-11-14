@@ -37,7 +37,7 @@
 //   burialColor                kleur van de hoop sneeuw, zand of stof op je ingesneeuwde tank (BURIAL)
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
-import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, CAMERA_ZOOM, FOG, HINTS, LOOK, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
+import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, CAMERA_ZOOM, FOG, HINTS, LOOK, LIGHT_DIRS, NIGHT_TINT, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
 import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt, searchlightBeams } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
@@ -153,6 +153,9 @@ export function startWorld(style, game) {
   const L = {};
   for (const name of ['ground', 'marks', 'shadows', 'objects', 'tanks', 'canopy', 'effects', 'fog']) L[name] = world.addChild(new Container());
   L.searchlights = world.addChild(new Container());
+  // Lichtoverlay: kleurlaag over het speelveld voor zonstand en nacht
+  const lightOverlay = world.addChild(new Sprite(Texture.WHITE));
+  lightOverlay.tint = 0x000000; lightOverlay.alpha = 0; lightOverlay.visible = false;
   L.ui = stage.addChild(new Container());
   // Rand van de kaart (EDGE, G.BAND): over alles in de onbegaanbare strook een verloop van helder
   // (binnenrand, zacht begin: geen lijn) naar zwart (buitenrand), en zwart buiten de kaart. Zo lijkt
@@ -275,6 +278,17 @@ export function startWorld(style, game) {
   }
   let shake = 0;
   function onEvent(e) {
+    // Kraters zijn altijd zichtbaar (CLAUDE.md): markeer de cellen als gezien
+    if (seenDug) {
+      if ((e.t === 'x' || e.t === 'k' || e.t === 'm') && e.r) {
+        markSeenBox([e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r]);
+      }
+      if (e.t === 'x' && e.fell && e.box) markSeenBox(e.box);
+      if (e.t === 'zb' && e.craters) {
+        for (const [cx, cy, r] of e.craters) markSeenBox([cx - r, cy - r, cx + r, cy + r]);
+      }
+      if (e.t === 'zb') markSeenBox(e.box);
+    }
     if (e.t === 'x' && e.fell) { // plant of gebouw weg: alleen daar de randen en objecten opnieuw
       plantFelled(fields, game.map, gpu, e.box);
       buildObjects(e.box);
@@ -325,19 +339,23 @@ export function startWorld(style, game) {
     if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, gpu, e.box); buildObjects(e.box); objectView.rebuild(e.box); }
     if (e.t === 'fc') gpu.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
     if (e.t === 'gun' && e.tx !== undefined) { particles.spawn('flash', e.x, e.y, 1, { life: 0.2, r0: 1, r1: 3 }); }
-    if (e.t === 'zb') { // barrage: inslagen en kapotte boomtoppen
+    if (e.t === 'zi') { objectView.addCrater(e.x, e.y, e.r); shake = Math.max(shake, 0.15); }
+    if (e.t === 'zb') { // barrage: kapotte boomtoppen (bos) of artillerie
       const [x0, y0, x1, y1] = e.box;
       gpu.markRect(x0, y0, x1, y1);
       buildObjects(e.box);
       objectView.rebuild(e.box);
-      for (const [cx, cy, r] of e.craters || []) objectView.addCrater(cx, cy, r);
-      for (let k = 0; k < 8; k++) {
-        const x = x0 + Math.random() * (x1 - x0), y = y0 + Math.random() * (y1 - y0);
-        particles.spawn('flash', x, y, 1, { life: 0.3, r0: 1.5, r1: 5 });
-        if ((style.clouds || { smoke: 1 }).smoke) particles.spawn('smoke', x, y, 3, { speed: 3, life: 2, r0: 1, r1: 5 });
+      if (e.kind !== 'bomb') { // bombardement: individuele inslagen doen het effect al via zi
+        for (const [cx, cy, r] of e.craters || []) objectView.addCrater(cx, cy, r);
+        for (let k = 0; k < 8; k++) {
+          const x = x0 + Math.random() * (x1 - x0), y = y0 + Math.random() * (y1 - y0);
+          particles.spawn('flash', x, y, 1, { life: 0.3, r0: 1.5, r1: 5 });
+          if ((style.clouds || { smoke: 1 }).smoke) particles.spawn('smoke', x, y, 3, { speed: 3, life: 2, r0: 1, r1: 5 });
+        }
+        shake = Math.max(shake, 0.3);
       }
-      shake = Math.max(shake, 0.3);
     }
+    if (e.t === 'z' && e.kind === 'bomb') barrageGlow = { t0: performance.now(), dur: 1300 };
     hintFor(e);
     hz.onEvent(e);
     flipbooks(e);
@@ -351,9 +369,35 @@ export function startWorld(style, game) {
 
   // ---------- Verbinding ----------
   const setOverlay = createOverlay($('overlay'));
+  // Geziene tunnels en sporen: alleen wat de speler ooit heeft gezien, verschijnt op de grond.
+  // seenDug[i] = 1 als cel i als tunnel gezien is; seenTrack[i] = laatst geziene spoorwaarde.
+  // game.seen verwijst naar dezelfde arrays zodat ground-gpu.js ze kan lezen.
+  let seenDug = null, seenTrack = null;
+  function initSeen() {
+    const n = G.W * G.H;
+    seenDug = new Uint8Array(n);
+    seenTrack = new Uint16Array(n);
+    game.seen = { dug: seenDug, track: seenTrack };
+  }
+  // Kraters en omgevallen bomen altijd als gezien markeren (ze horen bij zichtbare/hoorbare events)
+  function markSeenBox(box) {
+    if (!seenDug) return;
+    const [x0, y0, x1, y1] = box;
+    let any = false;
+    for (let y = Math.max(0, y0); y <= Math.min(G.H - 1, y1); y++) {
+      for (let x = Math.max(0, x0); x <= Math.min(G.W - 1, x1); x++) {
+        const i = y * G.W + x;
+        if (game.map[i] === G.EMPTY && !seenDug[i]) { seenDug[i] = 1; any = true; }
+        seenTrack[i] = game.track[i];
+      }
+    }
+    if (any) gpu.markRect(Math.max(0, x0), Math.max(0, y0), Math.min(G.W - 1, x1), Math.min(G.H - 1, y1));
+  }
+
   function loadMap(map) {
     G.setMapSize(game.mapW, game.mapH, G.edgeBand(game.rules)); // deze module kan een eigen kopie van game.js hebben (iframe)
     G.applyTerrainOverrides(game.rules);
+    initSeen();
     layoutEdge();
     const specs = G.teamsFor(game.rules);
     if (specs && style.teamLook) {
@@ -397,6 +441,15 @@ export function startWorld(style, game) {
   const hooks = {
     onMap(map) { mapReady = false; loadMap(map); mapReady = true; },
     onDig: (x, y) => {
+      // Tunnels en sporen bij je eigen tank meteen als gezien markeren (geen frame vertraging)
+      if (seenDug && G.inBounds(x, y)) {
+        const me = game.tanks.get(game.me);
+        if (me && me.a && (x - me.x) ** 2 + (y - me.y) ** 2 < (G.TANK_R * 3) ** 2) {
+          const i = y * G.W + x;
+          if (game.map[i] === G.EMPTY) seenDug[i] = 1;
+          seenTrack[i] = game.track[i];
+        }
+      }
       side.paintMini(x, y); mapVersion++;
       gpu.markCell(x, y);
       plantView.cellChanged(x, y);
@@ -729,10 +782,32 @@ export function startWorld(style, game) {
     }
   }
 
+  let appliedLightStep = undefined;
   function drawWorld(now, dt) {
     updateRenderPositions(game, now); // eigen tank voorspeld, de rest vloeiend uit de buffer
     smoothTankAngles(game, dt);
     if (shake > 0) shake -= dt;
+    // lichtstand: [ ] draait de schaduwrichting voor iedereen
+    if (game.lightStep !== appliedLightStep) {
+      appliedLightStep = game.lightStep;
+      const ld = game.lightStep != null ? LIGHT_DIRS[game.lightStep] : look.light;
+      Object.assign(SHADOW, { dx: ld.dx, dy: ld.dy });
+      objTiles.shadow(SHADOW.dx * OBJ_SHADOW, SHADOW.dy * OBJ_SHADOW, SHADOW.color, SHADOW.alpha);
+    }
+    // lichtoverlay: zonnetint of nacht
+    {
+      const night = game.night;
+      const ld = game.lightStep != null ? LIGHT_DIRS[game.lightStep] : null;
+      const t = night ? NIGHT_TINT : ld;
+      if (t && t.alpha > 0) {
+        lightOverlay.tint = t.tint; lightOverlay.alpha = t.alpha;
+        lightOverlay.position.set(-500, -500);
+        lightOverlay.width = G.W + 1000; lightOverlay.height = G.H + 1000;
+        lightOverlay.visible = true;
+      } else {
+        lightOverlay.visible = false;
+      }
+    }
     const self = game.tanks.get(game.me);
     if (self?.s !== undefined) {
       if (lastShield !== null && self.s < lastShield && self.a) shake = Math.max(shake, look.shakeOnHit);
@@ -763,6 +838,7 @@ export function startWorld(style, game) {
 
     effects.clear();
     hz.drawBarrage(now);
+    hz.drawShells(now);
     hz.drawFires(now);
     hz.drawDust();
     particles.update(dt);
@@ -933,6 +1009,8 @@ export function startWorld(style, game) {
   // kleiner maken
   const visionRadius = () => {
     const cfg = game.weather?.flags.searchlights, me = eye(), viewH = view.cam?.h ?? style.viewCells;
+    // M-toets (host): mist uit voor iedereen → standaardzicht
+    if (game.fogOff) return G.visionRadius(viewH, G.VISION.defaultT);
     // in een zoeklicht zie je verder (§10.9)
     if (cfg && me && searchlightAt(cfg, game.tick - game.mapTick, me.x, me.y)) return G.visionRadius(viewH, cfg.visibility);
     return G.visionRadius(viewH, game.vision ?? G.VISION.defaultT);
@@ -1006,7 +1084,7 @@ export function startWorld(style, game) {
   let visionKey = '';
   function drawFog(me, cam) {
     const r = visionRadius(), far = Math.max(r + 1, Math.hypot(cam.w, cam.h) / 2 + Math.hypot(me.x + 0.5 - (cam.x + cam.w / 2), me.y + 0.5 - (cam.y + cam.h / 2)));
-    const fade = game.weather?.flags.night ? 0.92 : FOG.fade; // 's nachts veel donkerder
+    const fade = (game.weather?.flags.night || game.night) ? 0.92 : FOG.fade; // 's nachts veel donkerder
     const ratio = Math.round((r / far) * 400) / 400, key = `${ratio},${fade},${look.fogSoft}`;
     if (key !== visionKey) {
       visionKey = key;
@@ -1065,6 +1143,25 @@ export function startWorld(style, game) {
           const x = x0 + i * SH, y = y0 + j * SH;
           const isVisible = visibleCell(game.map, me, x, y, r, game.smokes);
           if (isVisible) visible[j * gw + i] = 1;
+        }
+      }
+      // Geziene tunnels en sporen bijwerken: zichtbare cellen onthouden
+      if (seenDug) {
+        for (let j = 0; j < gh; j++) {
+          for (let i = 0; i < gw; i++) {
+            if (!visible[j * gw + i]) continue;
+            for (let dy = 0; dy < SH; dy++) {
+              for (let dx = 0; dx < SH; dx++) {
+                const cx = x0 + i * SH + dx, cy = y0 + j * SH + dy;
+                if (!G.inBounds(cx, cy)) continue;
+                const ci = cy * G.W + cx;
+                let dirty = false;
+                if (game.map[ci] === G.EMPTY && !seenDug[ci]) { seenDug[ci] = 1; dirty = true; }
+                if (game.track[ci] !== seenTrack[ci]) { seenTrack[ci] = game.track[ci]; dirty = true; }
+                if (dirty) gpu.markCell(cx, cy);
+              }
+            }
+          }
         }
       }
       for (let j = 0; j < gh; j++) {
@@ -1142,6 +1239,8 @@ export function startWorld(style, game) {
   }
   // zijde: [positie, draaiing, lengte] van het verloop (vol aan de rand, naar binnen weg)
   const HINT_SIDES = (W, H) => [[W, 0, Math.PI / 2, W], [W, H, Math.PI, H], [0, H, -Math.PI / 2, W], [0, 0, 0, H]];
+  // ---------- Bombardementsgloed: alle schermranden rood (§10.8) ----------
+  let barrageGlow = null; // { t0, dur } — actief tijdens de waarschuwingsfase
   function drawHints(now) {
     const W = canvas.width, H = canvas.height, d = Math.min(W, H) * 0.16;
     hintSprites.begin(); hintCorners.begin();
@@ -1158,6 +1257,28 @@ export function startWorld(style, game) {
         const [cx, cy] = [[W, 0], [W, H], [0, H], [0, 0]][(dir - 1) / 2], s = hintCorners.next();
         s.position.set(cx, cy); s.width = s.height = d * 4.4;
         s.tint = 0xff4628; s.alpha = alpha;
+      }
+    }
+    // bombardementsgloed: alle randen tegelijk, pulserende rode gloed
+    if (barrageGlow) {
+      const age = now - barrageGlow.t0;
+      if (age > barrageGlow.dur) { barrageGlow = null; }
+      else {
+        const fadeIn = Math.min(1, age / 100);
+        const fadeOut = age > barrageGlow.dur - 300 ? (barrageGlow.dur - age) / 300 : 1;
+        const pulse = 0.5 + 0.5 * Math.sin(now / 100);
+        const a = fadeIn * fadeOut * (0.4 + 0.3 * pulse);
+        const sides = HINT_SIDES(W, H), corners = [[W, 0], [W, H], [0, H], [0, 0]];
+        for (const [x, y, rot, len] of sides) {
+          const s = hintSprites.next();
+          s.position.set(x, y); s.rotation = rot; s.scale.set(d / 64, len / 4);
+          s.tint = 0xff2200; s.alpha = a;
+        }
+        for (const [cx, cy] of corners) {
+          const s = hintCorners.next();
+          s.position.set(cx, cy); s.width = s.height = d * 4.4;
+          s.tint = 0xff2200; s.alpha = a;
+        }
       }
     }
     hintSprites.end(); hintCorners.end();
@@ -1242,7 +1363,7 @@ export function startWorld(style, game) {
 
   // ---------- Gevaren en schaarse middelen in beeld (view/hazards-view.js) ----------
   const hz = createHazardView({
-    game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius,
+    game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius, fx,
     get pal() { return pal; }, get bridgeSprites() { return bridgeView.active; },
     texture: (name) => objectView.texture(name), props: L.marks.addChild(new Container()), seesSharp,
   });

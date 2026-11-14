@@ -240,6 +240,8 @@ addEventListener('keydown', (event) => {
   if (game.status !== 'playing' || (game.lobby && game.game.phase === 'lobby') || !view) return;
   const tag = event.target?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // Backspace: shortkeys tonen/verbergen over de minikaart
+  if (event.code === 'Backspace' && !event.repeat) { event.preventDefault(); toggleHotkeys(); return; }
   const delta = event.code === 'Digit9' || event.code === 'Numpad9' ? CAMERA_ZOOM.step
     : event.code === 'Digit0' || event.code === 'Numpad0' ? -CAMERA_ZOOM.step
       : 0;
@@ -247,6 +249,30 @@ addEventListener('keydown', (event) => {
   event.preventDefault();
   if (!event.repeat) view.zoomBy(delta);
 });
+
+// Shortkey-overlay over de minikaart (Backspace toggle)
+function toggleHotkeys() {
+  const el = $('hotkeys');
+  if (!el) return;
+  if (!el.hidden) { el.hidden = true; return; }
+  const isHost = game.me === game.host;
+  const hk = (key, label) => `<div class="hk"><kbd>${key}</kbd><span>${label}</span></div>`;
+  const head = (t) => `<div class="hk-head">${t}</div>`;
+  let h = hk('WASD / ←→↑↓', 'Rijden');
+  h += hk('SPATIE', 'Schieten');
+  h += hk('K', 'Zelfvernietiging');
+  h += hk('M', 'Mist aan/uit');
+  h += hk('9 / 0', 'Zoom in/uit');
+  if (isHost) {
+    h += head('HOST');
+    h += hk('B', 'Extra barrage');
+    h += hk('O', 'Sneeuwstorm');
+    h += hk('N', 'Dag/nacht');
+    h += hk('[ ]', 'Zon/maan draaien');
+  }
+  el.innerHTML = h;
+  el.hidden = false;
+}
 
 // ---------- Lobby bijwerken ----------
 let lastBriefMap = '';

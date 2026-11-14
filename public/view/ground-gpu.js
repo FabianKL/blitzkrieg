@@ -658,20 +658,26 @@ export function createGroundGpu({ container, game, style, getRenderer }) {
   const swatches = []; // legendavakjes die wachten op de renderer
 
   // Gegevens van cel i in de texturen. Een spoor telt in een tunnel, en als rimpels op grond
-  // waar geen tunnel komt (moeras, doorwaadbare plek)
+  // waar geen tunnel komt (moeras, doorwaadbare plek).
+  // game.seen (gezet door world-view): alleen geziene tunnels en sporen tonen
   function fill(i) {
     // weggeschoten plant zonder kapotte variant: daar is het gewoon grond, zonder gat of splinters
     const gone = vanish && game.world.scar[i] === G.SCAR_PLANT;
-    const c = game.map[i], k = i * 4, dug = c === G.EMPTY && !gone;
-    const tm = dug || (c === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? trackMix(game, i) : 0;
-    cells.data[k] = c; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
+    const c = game.map[i], k = i * 4;
+    const seen = game.seen;
+    // niet-geziene tunnel verbergen: toon als grond
+    const vc = (c === G.EMPTY && seen && !seen.dug[i]) ? G.DIRT : c;
+    const dug = vc === G.EMPTY && !gone;
+    const seenTm = seen ? G.trackStage(seen.track[i]) / (G.TRACK_STAGES - 1) : trackMix(game, i);
+    const tm = dug || (vc === G.DIRT && G.CLASSES[game.terrain[i]].noTunnel) ? seenTm : 0;
+    cells.data[k] = vc; cells.data[k + 1] = game.terrain[i]; cells.data[k + 2] = roads.road[i];
     const scar = gone || (rubbleCover[i] && game.world.scar[i] === G.SCAR_RUBBLE) ? 0 : game.world.scar[i] & 3;
     cells.data[k + 3] = scar | (bridge[i] ? 128 : 0) | (bridge[i] === 2 ? 64 : 0) | (rubbleCover[i] ? 32 : 0);
     fields.data[k] = src.rockField[i] * 255; fields.data[k + 1] = water[i] * 255; fields.data[k + 2] = src.fields.veg[i] * 255;
     fields.data[k + 3] = (depth[i] / DEPTH_MAX) * 255;
     track.data[k] = tm * 255; track.data[k + 1] = dug ? 255 : 0; track.data[k + 2] = dug && tm >= 0.5 ? 255 : 0;
-    track.data[k + 3] = game.terrain[i] === G.CLASS.ice && (dug || c === G.DIRT) ? 255 : 0;
-    solid.data[k] = c === G.ROCK ? 255 : 0; solid.data[k + 1] = c === G.WATER ? 255 : 0; solid.data[k + 2] = c === G.VEG ? 255 : 0;
+    track.data[k + 3] = game.terrain[i] === G.CLASS.ice && (dug || vc === G.DIRT) ? 255 : 0;
+    solid.data[k] = vc === G.ROCK ? 255 : 0; solid.data[k + 1] = vc === G.WATER ? 255 : 0; solid.data[k + 2] = vc === G.VEG ? 255 : 0;
     solid.data[k + 3] = roads.under[i];
   }
   // Rechthoek bijwerken; dicht bij elkaar liggende rechthoeken worden er één (graven = veel cellen)

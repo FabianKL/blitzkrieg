@@ -1,4 +1,4 @@
-// Tanks in beeld (docs/SPEC-tanks.md): per tank één container die meedraait, met twee rupsen
+// Tanks in beeld (spec §4): per tank één container die meedraait, met twee rupsen
 // (TilingSprite, rups.png) en daarboven de romp (romp.png); de spatborden van de romp vallen zo over
 // de rupsen. De rupsen schuiven mee met het rijden en draaien. De schaduw is tank.png.
 // Ontbreken romp, rups of tank.json, dan tank.png als één plaatje; ontbreekt die ook, dan de

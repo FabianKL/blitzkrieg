@@ -8,11 +8,11 @@
 import * as G from '/shared/game.js';
 import { sightAt, contourAlpha } from '/shared/vision.js';
 import { pack, REFILL_COLORS } from '/render-common.js';
-import { PROPS } from '/shared/config.js';
+import { PROPS, FX } from '/shared/config.js';
 import { spritePool } from '/pixi-scene.js';
 
 export function createHazardView(v) {
-  const { game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius } = v;
+  const { game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius, fx } = v;
   const props = spritePool(v.props, undefined, (s) => s.anchor.set(0.5));
   // sprite uit de atlas op (x, y), size = schaal (1 = getekende maat), of false als die er niet is
   function prop(name, x, y, size = 1, alpha = 1, rot = 0) {
@@ -23,6 +23,11 @@ export function createHazardView(v) {
     return true;
   }
   const dropped = new Map(); // krat -> tijd waarop hij in beeld neerkwam (parachute zakt)
+
+  // Vallende granaten (bombardement): een kort projectiel dat vanuit het noordwesten naar
+  // de inslagplek valt, gevolgd door het inslageffect uit de spritesheet.
+  const shells = [];
+  const SHELL_ANG = Math.PI * 0.75; // richting NW → ZO
 
   // Waar je brandstof of munitie laadt: een badge met B of M en een zacht pulserende ring.
   // Alleen volle plekken; de mist erboven verbergt ze buiten je zicht, net als het ding zelf.
@@ -66,6 +71,7 @@ export function createHazardView(v) {
       effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xfff0b4, alpha: 0.12 + 0.18 * p });
       return;
     }
+    if (b.kind === 'bomb') return; // bombardement: rode schermrandgloed (in world-view.js)
     effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xff7828, alpha: 0.08 + 0.12 * p });
     // gestippelde rand: streepjes van 1,5 met gaten van 1
     for (const [ax, ay, bx, by] of [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]]) {
@@ -211,12 +217,42 @@ export function createHazardView(v) {
     }
   }
 
+  // Vallende granaten tekenen: puur cosmetisch projectiel dat naar de inslagplek daalt
+  function drawShells(now) {
+    for (let k = shells.length - 1; k >= 0; k--) {
+      const s = shells[k];
+      const p = (now - s.t0) / FX.shellFallMs;
+      if (p >= 1) { shells.splice(k, 1); continue; }
+      const ip = 1 - p;
+      const dx = -5 * ip, dy = -5 * ip;
+      const sx = s.x + dx, sy = s.y + dy;
+      const sc = 0.3 + 0.7 * p;
+      effects.circle(s.x, s.y, 1.5 * p).fill({ color: 0x000000, alpha: 0.15 * p });
+      const len = 1.8 * sc;
+      effects.save();
+      effects.translateTransform(sx, sy);
+      effects.rotateTransform(SHELL_ANG);
+      effects.moveTo(-len * 2.5, 0).lineTo(0, 0).stroke({ color: 0x999080, alpha: 0.25 * p, width: 0.25 * sc });
+      effects.ellipse(0, 0, len, 0.3 * sc).fill({ color: 0x3a3428, alpha: 0.6 + 0.4 * p });
+      effects.restore();
+    }
+  }
+
   // Nieuwe dropping (parachute zakt, alleen in beeld) en een laadplek die leeg raakt (stofwolkje)
   function onEvent(e) {
     if (e.t === 'drop' && e.c && v.seesSharp(e.c[0], e.c[1])) dropped.set(e.k, performance.now());
     const spot = e.t === 'depu' ? game.depots[e.k] : e.t === 'dropu' ? game.crates[e.k] : null;
     if (spot && v.seesSharp(spot[0], spot[1])) particles.spawn('smoke', spot[0], spot[1], 6, { speed: 3, life: 1.2, r0: 0.8, r1: 3.5 });
+    // Bombardement-inslag: flipbook en deeltjes direct, vallende granaat als cosmetiek
+    if (e.t === 'zi') {
+      const cx = e.x + 0.5, cy = e.y + 0.5;
+      fx.play('artillerie-inslag', cx, cy, { size: FX.artillerySize });
+      fx.light(cx, cy, e.r * 2);
+      particles.spawn('flash', cx, cy, 1, { life: 0.2, r0: e.r * 1.5, r1: e.r * 0.4, color: 0xffcc44 });
+      particles.spawn('smoke', cx, cy, 6, { speed: 3, life: 2.0, r0: 1.0, r1: 5.0 });
+      shells.push({ x: cx, y: cy, t0: performance.now() });
+    }
   }
 
-  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawObjects: drawObjectsOfHazards, drawFires, drawDust, drawSearchlights, drawMirages, drawLandmarks };
+  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawShells, drawObjects: drawObjectsOfHazards, drawFires, drawDust, drawSearchlights, drawMirages, drawLandmarks };
 }

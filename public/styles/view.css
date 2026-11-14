@@ -44,8 +44,18 @@ aside { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12
 .card.dead { filter: grayscale(.7) brightness(.8); }
 @keyframes blink { 50% { opacity: .25; } }
 
+.minimap-wrap { position: relative; }
 #mini { width: 100%; aspect-ratio: 8 / 5; display: block; }
 #mini[hidden] { display: none; }
+.hotkeys {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+  gap: 2px; padding: 8px 12px; background: rgba(0,0,0,.82); font-size: 11px; line-height: 1.5;
+  letter-spacing: .5px; color: #ccc; pointer-events: none;
+}
+.hotkeys[hidden] { display: none; }
+.hotkeys .hk { display: flex; justify-content: space-between; }
+.hotkeys .hk kbd { color: #fff; font-family: inherit; font-weight: 600; min-width: 20px; }
+.hotkeys .hk-head { color: #888; font-size: 10px; letter-spacing: 1px; margin-top: 4px; }
 .legend { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 8px; row-gap: 5px; align-items: center; }
 .legend-row { display: contents; }
 .legend-swatch { width: 22px; height: 22px; image-rendering: pixelated; }

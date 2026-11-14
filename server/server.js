@@ -209,6 +209,10 @@ function newWorld(room, made = makeWorld(room)) {
   room.mapTick = room.tick; // begin van deze kaart (mist in de Ardennen, stormklok)
   room.roundTick = room.tick; // begin van de ronde (weer per ronde)
   room.hz = {};
+  room.forcedStorm = null;
+  room.fogOff = false;
+  room.night = false;
+  room.lightStep = null;
   if (!room.lobby) Hazards.roundStart(room, []); // depots e.d. (staan in het instapbericht)
   room.bullets = [];
   // nieuw spel: ronde 1, scores op 0
@@ -322,6 +326,35 @@ function newGame(room, made) {
   return true;
 }
 
+// ---------- Host-commando's tijdens het spel ----------
+function forceStorm(room) {
+  room.forcedStorm = { end: room.tick + Math.round(20 * G.TICK_RATE) };
+  room.pendingEvents.push({ t: 'fs', end: room.forcedStorm.end });
+}
+function applyForcedStorm(room, tick) {
+  if (!room.forcedStorm || tick >= room.forcedStorm.end) { room.forcedStorm = null; return; }
+  const wx = room.wx;
+  wx.visibility = wx.visibility === null ? 2 : Math.min(wx.visibility, 2);
+  wx.eraser = true;
+  wx.burial = true;
+  wx.drift = Math.max(wx.drift, 1);
+  wx.flags.hidesMinimap = true;
+  if (!wx.storm || !wx.storm.active) wx.storm = { label: 'Sneeuwstorm', active: true, warn: false, secs: Math.ceil((room.forcedStorm.end - tick) / G.TICK_RATE) };
+}
+function toggleNight(room) {
+  room.night = !room.night;
+  room.pendingEvents.push({ t: 'dn', n: room.night ? 1 : 0 });
+}
+function stepLight(room, dir) {
+  if (dir !== -1 && dir !== 1) return;
+  room.lightStep = ((room.lightStep ?? 3) + dir + 8) % 8; // standaard stap 3 (ZO)
+  room.pendingEvents.push({ t: 'la', s: room.lightStep });
+}
+function toggleFog(room) {
+  room.fogOff = !room.fogOff;
+  room.pendingEvents.push({ t: 'mf', off: room.fogOff ? 1 : 0 });
+}
+
 // Volledige snapshot voor één speler: bij het instappen en bij een nieuw spel (nieuwe kaart).
 // Daarna alleen nog delta's en gebeurtenissen.
 function sendInit(room, t) {
@@ -352,6 +385,10 @@ function sendInit(room, t) {
     m0: room.mapTick, r0: room.roundTick, wx: WEATHER_SCALE,
     hz: Hazards.snapshot(room), // depots, aangekondigde barrage
     game: gameState(room),
+    dn: room.night ? 1 : 0,
+    la: room.lightStep,
+    fs: room.forcedStorm ? { end: room.forcedStorm.end } : null,
+    mf: room.fogOff ? 1 : 0,
   };
   if (room.rules.mines) init.mines = [...room.mines]; // de velden zelf blijven geheim
   t.ws.send(JSON.stringify(init));
@@ -457,6 +494,7 @@ function step(room) {
     // het weer van nu (zicht rekent elke client zelf uit; hier: sporenwisser en onderduiken)
     const wxScale = WEATHER_SCALE * (room.settings?.stormFreq ?? 1);
     room.wx = Weather.weatherAtTick(room.rules, room.round, tick, room.mapTick, room.roundTick, wxScale);
+    applyForcedStorm(room, tick);
     stepBullets(room, live, events);
     for (const t of live) stepTank(room, t, live, events);
     // gevaren en schaarse middelen van deze kaart
@@ -675,6 +713,13 @@ wss.on('connection', (ws, req) => {
       stopGame(room, t);
     } else if (msg.t === 'sd') {
       t.selfDestruct = true; // zelfvernietiging (toets K), bij de volgende tick
+    } else if (msg.t === 'cmd') {
+      if (t.id !== hostOf(room) || room.phase !== 'play') return;
+      if (msg.cmd === 'barrage') Hazards.hostBarrage(room, room.pendingEvents);
+      else if (msg.cmd === 'storm') forceStorm(room);
+      else if (msg.cmd === 'night') toggleNight(room);
+      else if (msg.cmd === 'light') stepLight(room, msg.dir);
+      else if (msg.cmd === 'fog') toggleFog(room);
     }
   });
 

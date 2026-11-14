@@ -336,7 +336,8 @@ function tryMap(seed, rules, players) {
   const roads = [];
   of('road').forEach((f, k) => {
     const width = f.width * T;
-    const path = routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 700 + k, 0.1, false);
+    const path = f.straight ? [pt(f.from), pt(f.to)]
+      : routePath(pt(f.from), pt(f.to), zone, width / 2 + 1 + (f.dikes ? (f.dikes.floodplain + f.dikes.width) * T : 0), noise, 700 + k, 0.1, false);
     roads.push({ path, width, class: f.class || 'paved' });
     stroke(path, width / 2, (i) => {
       if (!open(i)) return;
@@ -456,16 +457,73 @@ function tryMap(seed, rules, players) {
     // kerk (herkenningspunt) aan een schuine kant van het plein: de kern van het dorp
     let church = false, churchX = v.cx, churchY = v.cy;
     const [kw, kh] = BUILDINGS.footprints.kerk;
+    const villageRoads = of('road').map((feature, i) => ({ feature, road: roads[i] })).filter(({ feature, road }) => {
+      if (!road) return false;
+      const center = pt(v.f.at);
+      return Math.hypot(...pt(feature.from).map((n, k) => n - center[k])) < 1
+        || Math.hypot(...pt(feature.to).map((n, k) => n - center[k])) < 1;
+    });
+    const churchOffset = v.f.layout === 'roadside'
+      ? Math.max(T / 2, ...villageRoads.map(({ road }) => road.width / 2)) + 1
+      : null;
+    const churchPlaces = v.f.layout === 'roadside'
+      ? [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [sx, sy, churchOffset])
+      : [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [sx, sy, Math.round(1.6 * T) + 2 + (k - 1) * T]));
     for (const [cw, ch] of [[kw, kh], [kh, kw]]) {
-      for (const [sx, sy, off] of [1, 2, 3].flatMap((k) => [[1, -1], [-1, -1], [1, 1], [-1, 1]].map(([a, b]) => [a, b, Math.round(1.6 * T) + 2 + (k - 1) * T]))) {
+      for (const [sx, sy, off] of churchPlaces) {
         if (church) break;
         const x0 = sx > 0 ? v.cx + off : v.cx - off - cw, y0 = sy > 0 ? v.cy + off : v.cy - off - ch;
-        if (placeBuilding(x0, y0, cw, ch)) {
+        if (placeBuilding(x0, y0, cw, ch, v.f.layout === 'roadside' ? 0 : undefined)) {
           landmarks.push({ kind: v.f.landmark || 'kerk', x: x0 + cw / 2, y: y0 + ch / 2 });
           churchX = x0 + cw / 2; churchY = y0 + ch / 2;
           church = true;
         }
       }
+    }
+    if (v.f.layout === 'roadside') {
+      const loose = v.f.looseHouses;
+      const want = loose.min + Math.floor(rnd() * (loose.max - loose.min + 1));
+      const [houseW, houseH] = BUILDINGS.footprints['huis-woon'];
+      for (let n = 0, tries = 0; n < want && tries < loose.attempts; tries++) {
+        const x0 = Math.round(v.x0 + rnd() * (v.x1 - v.x0 - houseW));
+        const y0 = Math.round(v.y0 + rnd() * (v.y1 - v.y0 - houseH));
+        const distance = Math.hypot(x0 + houseW / 2 - churchX, y0 + houseH / 2 - churchY);
+        if (distance < loose.minDistanceT * T || distance > loose.maxDistanceT * T) continue;
+        if (!nearPaved(x0, y0, houseW, houseH, T)) continue;
+        if (placeBuilding(x0, y0, houseW, houseH)) n++;
+      }
+
+      const cfg = v.f.roadsideRows;
+      const [rw, rh] = BUILDINGS.footprints['huis-rij'];
+      let rowCount = 0;
+      for (const { feature, road } of villageRoads) {
+        const center = pt(v.f.at), fromCenter = Math.hypot(...pt(feature.from).map((n, k) => n - center[k])) < 1;
+        const outer = pt(fromCenter ? feature.to : feature.from);
+        const length = Math.hypot(outer[0] - center[0], outer[1] - center[1]) || 1;
+        const dx = (outer[0] - center[0]) / length, dy = (outer[1] - center[1]) / length;
+        const nx = -dy, ny = dx, sideReach = rh / 2;
+        for (const side of [-1, 1]) {
+          let nextDistance = cfg.distanceT * T;
+          for (let block = 0; block < cfg.blocks; block++) {
+            let placed = false;
+            let placedAt = nextDistance;
+            for (let attempt = 0; attempt < cfg.alongAttempts && !placed; attempt++) {
+              const distance = nextDistance + attempt * cfg.alongStepCells;
+              for (let search = 0; search <= cfg.sideSearchCells && !placed; search++) {
+                const sideOffset = road.width / 2 + sideReach + 1 + search;
+                const cx = v.cx + dx * distance + nx * side * sideOffset;
+                const cy = v.cy + dy * distance + ny * side * sideOffset;
+                const facing = Math.atan2(dy, dx) + (side > 0 ? Math.PI : 0);
+                placed = placeBuilding(cx - rw / 2, cy - rh / 2, rw, rh, 0, facing);
+                if (placed) placedAt = distance;
+              }
+            }
+            if (placed) { rowCount++; nextDistance = placedAt + rw + cfg.blockGapCells; }
+          }
+        }
+      }
+      v.roadsideRows = rowCount;
+      continue;
     }
     // huizen dicht om de kerk heen: willekeurig in het dorpsvak, maar ver weg wordt vaker afgewezen
     const want = lo + Math.floor(rnd() * (hi - lo + 1)) - (church ? 1 : 0);
@@ -481,7 +539,30 @@ function tryMap(seed, rules, players) {
       if (placeBuilding(x0, y0, bw, bh, houseGap)) n++;
     }
   }
-  function placeBuilding(x0, y0, bw, bh, gap = BUILDINGS.gap) {
+  function placeBuilding(x0, y0, bw, bh, gap = BUILDINGS.gap, angle = 0) {
+    if (angle) {
+      const cx = x0 + bw / 2, cy = y0 + bh / 2;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const ex = Math.abs(cos * bw / 2) + Math.abs(sin * bh / 2);
+      const ey = Math.abs(sin * bw / 2) + Math.abs(cos * bh / 2);
+      const cells = [];
+      for (let y = Math.floor(cy - ey); y < Math.ceil(cy + ey); y++) {
+        for (let x = Math.floor(cx - ex); x < Math.ceil(cx + ex); x++) {
+          const lx = (x + 0.5 - cx) * cos + (y + 0.5 - cy) * sin;
+          const ly = -(x + 0.5 - cx) * sin + (y + 0.5 - cy) * cos;
+          if (Math.abs(lx) >= bw / 2 || Math.abs(ly) >= bh / 2) continue;
+          if (!inBounds(x, y)) return false;
+          const i = y * W + x;
+          if (map[i] !== DIRT || isRoad(i) || zone[i] || border[i]) return false;
+          cells.push(i);
+        }
+      }
+      if (!cells.length) return false;
+      const id = vegHp.length + 1;
+      vegHp.push(BUILDING_HP);
+      for (const i of cells) { map[i] = BUILDING; veg[i] = id; terrain[i] = CLASS.soft ?? terrain[i]; fixedClass[i] = 1; }
+      return true;
+    }
     for (let y = y0 - gap; y < y0 + bh + gap; y++) {
       for (let x = x0 - gap; x < x0 + bw + gap; x++) {
         if (!inBounds(x, y)) return false;
@@ -719,7 +800,7 @@ function tryMap(seed, rules, players) {
   const result = {
     ...w, bases, fields, mines, border, landmarks, zone, rivers: riverCells.map((r) => r.path), roads,
     bridges: components(bridgeCells).map((b) => ({ ...b, ...bridgeLine(b, bridgeCells, bridgeIce, roads, bridgeLines) })),
-    villages: villages.map((v) => ({ name: v.f.name, x: v.cx, y: v.cy, depot: v.f.depot }))
+    villages: villages.map((v) => ({ name: v.f.name, x: v.cx, y: v.cy, depot: v.f.depot, roadsideRows: v.roadsideRows }))
   };
   // Onvermijdelijke afwijking: kenmerken met een vaste breedte in T (§6.0) schalen niet mee met
   // de kaart. Verhard (wegen; niet in een stad) kan op een kleine kaart te veel zijn, ijs (een
@@ -758,6 +839,15 @@ function misplaced(w, rules) {
     }
     const r = Math.sqrt(villageSize(f)) / 2, [lo, hi] = f.buildings || [0, Infinity];
     if (n < lo || n > hi || Math.abs(sx / n / W - f.at[0]) >= r || Math.abs(sy / n / H - f.at[1]) >= r) return true;
+    if (f.layout === 'roadside') {
+      const village = w.villages?.find((item) => item.name === f.name);
+      const at = (p) => Math.round(p * (W - 1));
+      const roads = feats.filter((item) => item.type === 'road' && (
+        (Math.abs(at(item.from[0]) - at(f.at[0])) < 1 && Math.abs(at(item.from[1]) - at(f.at[1])) < 1)
+        || (Math.abs(at(item.to[0]) - at(f.at[0])) < 1 && Math.abs(at(item.to[1]) - at(f.at[1])) < 1)
+      ));
+      if (village?.roadsideRows !== roads.length * f.roadsideRows.blocks * 2) return true;
+    }
   }
   return false;
 }
@@ -929,7 +1019,8 @@ function protectedZone(bases, clearance = 0) {
 // hebben een vaste maat, dus op een kleine kaart moet het dorp naar verhouding groter
 export const villageSize = (f) => (typeof f.size === 'object' ? f.size[sizeName()] ?? f.size.middel : f.size);
 function villageRect(f, rnd) {
-  const cx = Math.round((f.at[0] + (rnd() - 0.5) * 0.04) * (W - 1)), cy = Math.round((f.at[1] + (rnd() - 0.5) * 0.04) * (H - 1));
+  const jitter = f.layout === 'roadside' ? 0 : 0.04;
+  const cx = Math.round((f.at[0] + (rnd() - 0.5) * jitter) * (W - 1)), cy = Math.round((f.at[1] + (rnd() - 0.5) * jitter) * (H - 1));
   const hx = Math.round((Math.sqrt(villageSize(f)) * W) / 2), hy = Math.round((Math.sqrt(villageSize(f)) * H) / 2);
   return { f, cx, cy, x0: cx - hx, y0: cy - hy, x1: cx + hx, y1: cy + hy };
 }

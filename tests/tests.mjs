@@ -233,14 +233,14 @@ export const tests = [
     },
   },
   {
-    name: 'gevaren en schaarse middelen (Ardennen): barrage met waarschuwing in het bos, brandstofdepots per ronde',
+    name: 'gevaren en schaarse middelen (Ardennen): bombardement nabij spelers, vaste brandstofdepots',
     async run() {
       try {
         const room = fakeRoom('ardennen'), t = room.tanks[0], events = [];
         const hurt = (tank, pct, ev) => { tank.shield -= (pct * G.SHIELD_MAX) / 100; ev.push({ t: 'hint', i: tank.id }); };
         Hz.roundStart(room, events);
         const dep = events.find((e) => e.t === 'dep');
-        check(dep?.list.length === 2, `${dep?.list.length} depots op middel, verwacht 2`);
+        check(dep?.list.length === 3, `${dep?.list.length} depots, verwacht 3`);
         // depot: erover rijden = voltanken; Ardennen heeft infinite depots (blijven vol)
         [t.x, t.y] = dep.list[0];
         Hz.step(room, 1, events, hurt);
@@ -249,30 +249,27 @@ export const tests = [
         t.fuel = 10;
         Hz.step(room, 2, events, hurt);
         check(t.fuel === G.FUEL_MAX, 'infinite depot tankte niet opnieuw vol');
-        // barrage: na 20 s aangekondigd, 2 s later inslag; wie bij het bos in het vak staat verliest 15%
+        // vaste depots: na roundStart blijven ze op dezelfde plek
+        const before = JSON.stringify(dep.list);
+        Hz.roundStart(room, events);
+        const dep2 = events.filter((e) => e.t === 'dep').pop();
+        check(JSON.stringify(dep2.list) === before, 'vaste depots verplaatst na roundStart');
+        // bombardement: na 20 s aangekondigd, 1 s waarschuwing
         let tick = 3;
         for (; tick < 25 * G.TICK_RATE && !events.some((e) => e.t === 'z'); tick++) Hz.step(room, tick, events, hurt);
         const z = events.find((e) => e.t === 'z');
         check(z && Math.abs(tick - 20 * G.TICK_RATE) <= 2, `barrage aangekondigd na ${tick} ticks, verwacht 20 s`);
-        check(z.at - tick === 2 * G.TICK_RATE - 1 || z.at - tick === 2 * G.TICK_RATE, 'waarschuwing niet 2 s van tevoren');
-        // tank naast het bos in het vak zetten
+        check(z.at - tick === 1 * G.TICK_RATE - 1 || z.at - tick === 1 * G.TICK_RATE, 'waarschuwing niet 1 s van tevoren');
+        check(z.kind === 'bomb', `barrage kind=${z.kind}, verwacht bomb`);
+        // tank in het vak zetten en doorlopen tot het bombardement eindigt (zb)
         const [x0, y0, x1, y1] = z.box;
-        let spot = null;
-        for (let y = y0; y <= y1 && !spot; y++) for (let x = x0; x <= x1 && !spot; x++) if (room.world.map[y * G.W + x] === G.VEG) spot = [x, y];
-        [t.x, t.y] = spot;
-        for (; tick <= z.at; tick++) Hz.step(room, tick, events, hurt);
-        check(t.shield === G.SHIELD_MAX * 0.85, `pantser ${t.shield} na de barrage, verwacht 85`);
-        check(events.some((e) => e.t === 'zb') && events.some((e) => e.t === 'hint'), 'geen inslag of geen hint');
-        check(room.world.scar.some((v) => v === G.SCAR_TREETOPS), 'geen kapotte boomtoppen');
-        // nieuwe ronde: depots op een nieuwe plek
-        const before = JSON.stringify(dep.list);
-        Hz.roundStart(room, events);
-        check(JSON.stringify(events.filter((e) => e.t === 'dep').pop().list) !== before, 'depots niet verplaatst');
-        const big = fakeRoom('ardennen', 'groot'), ev2 = [];
-        Hz.roundStart(big, ev2);
-        check(ev2.find((e) => e.t === 'dep').list.length === 3, 'niet 3 depots op groot');
+        [t.x, t.y] = [(x0 + x1) / 2, (y0 + y1) / 2];
+        for (; tick < z.at + 10 * G.TICK_RATE && !events.some((e) => e.t === 'zb'); tick++) Hz.step(room, tick, events, hurt);
+        check(events.some((e) => e.t === 'zi'), 'geen inslag (zi)');
+        check(events.some((e) => e.t === 'zb'), 'geen einde-bombardement (zb)');
+        check(t.shield < G.SHIELD_MAX, `pantser niet afgenomen na bombardement`);
       } finally { G.setMapSize(G.BASE_W_CELLS, G.BASE_H_CELLS); }
-      return 'barrage elke 20 s, 2 s waarschuwing, -15% bij het bos; 2 depots (3 op groot), één vulling, elke ronde nieuw';
+      return 'bombardement na 20 s, 1 s waarschuwing, kind=bomb; 3 vaste depots, infinite, niet verplaatst';
     },
   },
   {

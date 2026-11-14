@@ -259,6 +259,11 @@ Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = 
 0 = uitzoomen. Na een zoomtoets verschijnt het zoomniveau kort bovenin beeld. De zoom verandert
 alleen jouw weergave. Terug in je eigen basis tank, repareer en herlaad je.
 
+**Host-commando's (Ardennen):** B = extra bombardement, O = geforceerde sneeuwstorm (20 s),
+N = dag/nacht wisselen, [ ] = zon-/maanstand roteren (8 stappen). Alleen de host kan deze
+toetsen gebruiken; het effect geldt voor alle spelers. **Per speler:** M = lokale atmosferische
+mist aan/uit (alleen op je eigen scherm).
+
 Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de knoppen verschijnen bij
 de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
 richtingen), rechterhelft = vuren, het K-rondje bovenin 1 s vasthouden = zelfvernietiging. Staand
@@ -333,7 +338,7 @@ uit rotsbloksprites uit de atlas van de stijl. Bomen zijn met twee treffers kapo
 | 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer met regen vanaf ronde 3 |
 | 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenstorm met onweer elke 120 s (wist sporen bij het water) |
 | 1944 Arnhem | de brug kan ontploffen (10% per oversteek, +5% na elke oversteek) | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
-| 1944 Ardennen | barrage in het bos | brandstofdepots | mist, wisselende sneeuwval; sneeuwstorm elke 90 s |
+| 1944 Ardennen | bombardement nabij spelers (B/O) | brandstofdepots (vast) | mist (M), dag/nacht (N), licht ([ ]), sneeuwstorm |
 | 1945 Oder-front | artilleriebarrage | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
 | 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter; ronde 3 regen met onweersbuien |
 
@@ -438,7 +443,7 @@ De spelregels kijken er niet naar.
 | `ice` | IJs: `depthCells` en `deep` (donker, diep ijs naar het midden), `frost` (witte ijzel), `sheen` (glans), `stress` (donkerder, nat ijs in een vak dat bijna breekt), `crackWidth` en `crackGrow` (barsten dikker per stadium). Met een ijstextuur in het manifest (`ice` per stijl of kaart): `texScale` (maat t.o.v. de grondtextuur) en `texDeep` (donkerder naar het midden). |
 | `road` | Wegen (de middellijnen uit de kaartmaker): `verge`, `vergeColor` (`null` = modder in de tunnelkleur), `vergeAmount` en `vergeInside` (berm; hij begint al op de rijbaan, zodat er geen lijn langs de weg komt), `edgeNoise` (rafelige rand), rijsporen met `ruts`, `rutOffset` en `rutWidth`, `smooth` (afronding van binnenhoeken), `junction` (zo ver van een kruising krijgt de weg weer een richting), `curb` en `curbColor` (stoeprand, ook langs het stadsrooster), `line` (middenstreep). De textuur van de klasse van de weg loopt mee met de bocht. |
 | `objects` | Bomen en rotsen als sprites: `rocks` (op zo'n deel van de rots staat een rotsblok), `rockGround` (de rotsblokken liggen op de gewone grond, zonder grijze rotsplaat; standaard aan, Berlijn uit voor de betonnen bunkers) en `rockShade` (zoveel donkerder is de grond midden in een rotsveld). Welke soorten een kaart heeft staat bij `vegetation` in het kaartbestand: `sprites` (`{ struik: 0.65, cactus: 0.35 }`, anders de soort bij `type`) en `palmCoast` (tot zo ver van zee wordt begroeiing een palm). Maten en schaduw in `OBJECTS` (config.js): een boomkruin is 7–10 cellen, groter dan een tank; aan de rand van een bos of rotsveld worden ze kleiner, zodat een kruin hoogstens `overhang` cel over open grond hangt (hij staat boven de tanks). |
-| tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: welke tank elke ploeg rijdt, bijv. `{ A: 'comet', B: 'panther' }`. De vijf tanks (Landsverk, T-34, Panther, Sherman, Comet) met naam, land en minikaartkleur staan in `TANKS` in config.js, op elke map met hetzelfde uiterlijk. Tekening: `public/assets/tanks/<naam>/` (romp, rupsstrook, `tank.json`; zie `docs/SPEC-tanks.md`); de rupsen schuiven mee met het rijden. Hoe donker ploeg C/D is: `TANK_ART`. Zonder bestand tekent de stijl de tank. |
+| tanks | Niet in `look`, maar bij `tanks` in het kaartbestand: welke tank elke ploeg rijdt, bijv. `{ A: 'comet', B: 'panther' }`. De vijf tanks (Landsverk, T-34, Panther, Sherman, Comet) met naam, land en minikaartkleur staan in `TANKS` in config.js, op elke map met hetzelfde uiterlijk. Tekening: `public/assets/tanks/<naam>/` (romp, rupsstrook, `tank.json`; zie spec §4); de rupsen schuiven mee met het rijden. Hoe donker ploeg C/D is: `TANK_ART`. Zonder bestand tekent de stijl de tank. |
 | `waterPlants` | Waterplanten: `density` (kans per roosterpunt, 0 = uit), `width` (zo ver van de waterlijn een waterlelie of ijsblad), `reach`, `offset` en `clump` (oeverplanten staan in groepjes tegen de getekende waterlijn). |
 | `grain` | Korrel over het beeld (0..1); samen met `grade` en `vignette` in één nabewerkingsfilter. |
 | `bridge` | Bruggen als sprite: `kind` (`hout` of `staal`: welke tekening uit `public/assets/<stijl>/bridges/`, anders getekend), `land` (zo'n deel van het landhoofd ligt op de oever), `height` (lengte van de schaduw). |

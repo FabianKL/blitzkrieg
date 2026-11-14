@@ -47,6 +47,10 @@ export function createState() {
     bridge: null, // de brug die kan ontploffen (Market Garden): {box, cells, blown}
     ammoDepots: [], // munitiedepots (Grebbeberg): [[x, y], ...]
     stuckBeams: null, // vastgeplakte zoeklichtbundels: Map(beam → {x, y})
+    night: false, // dag/nacht (N-toets, host)
+    lightStep: null, // lichtstand 0–7 ([ ]-toetsen, host); null = standaard
+    fogOff: false, // mist uit (M-toets, host): voor alle spelers
+    forcedStorm: null, // geforceerde storm (O-toets): { end: tick }
     vision: null, // zichtstraal in T volgens het weer (null = standaard)
     roundTick: 0, // tick waarop deze ronde begon (weer per ronde)
     weatherScale: 1, // de tests laten het weer sneller lopen
@@ -64,7 +68,7 @@ export function createState() {
 // Gevaren en schaarse middelen uit een snapshot (instapbericht, of bij de start vanuit de wachtkamer)
 function applyHz(state, hz = {}) {
   state.depots = hz.depots || [];
-  state.barrage = hz.barrage || null;
+  state.barrage = Array.isArray(hz.barrage) ? (hz.barrage[0] || null) : (hz.barrage || null);
   state.fires = new Set(hz.fires || []);
   state.guns = hz.guns || [];
   state.crates = hz.crates || [];
@@ -119,6 +123,10 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.mapTick = msg.m0 ?? msg.k;
   state.roundTick = msg.r0 ?? state.mapTick;
   state.weatherScale = msg.wx ?? 1;
+  state.night = !!msg.dn;
+  state.lightStep = msg.la ?? null;
+  state.fogOff = !!msg.mf;
+  state.forcedStorm = msg.fs ?? null;
   updateWeather(state);
   updateClock(state, msg.k, now);
   resetPrediction(state, now);
@@ -231,9 +239,11 @@ const ON = {
   },
   hz(state, e) { applyHz(state, e.hz); }, // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
   h(state, e) { state.host = e.i; }, // andere host (de vorige is weg)
-  z(state, e) { state.barrage = { box: e.box, at: e.at, kind: e.kind }; }, // (artillerie)barrage aangekondigd
+  z(state, e) { state.barrage = { box: e.box, at: e.at, kind: e.kind, impacts: e.impacts }; }, // (artillerie)barrage aangekondigd
   zb(state, e, c) { // inslag: kraters (artillerie) of kapotte boomtoppen (bos)
-    if (e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed); else G.markBarrage(state.world, e.box, c.changed);
+    if (e.kind === 'bomb') { /* bombardement: kraters zijn al per zi-event gegraven */ }
+    else if (e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed);
+    else G.markBarrage(state.world, e.box, c.changed);
     state.barrage = null;
   },
   fi(state, e) { state.fires.add(e.tile); }, // brand
@@ -259,7 +269,7 @@ const ON = {
     e.building = true;
   },
   dep(state, e) { state.depots = e.list; }, // depots voor deze ronde
-  depu(state, e) { if (state.depots[e.k]) state.depots[e.k][2] = 0; }, // depot leeg
+  depu(state, e) { if (state.depots[e.k] && !e.inf) state.depots[e.k][2] = 0; }, // depot leeg (tenzij oneindig)
   smoke(state, e, c) { // rookvlek die het zicht blokkeert {x, y, r, s: seconden}
     state.smokes.push({ x: e.x, y: e.y, r: e.r, until: c.tick + Math.round(e.s * G.TICK_RATE) });
   },
@@ -271,6 +281,11 @@ const ON = {
   W(state, e, c) { G.applyTerrainChange(state.world, e.change, e.extra, c.changed); }, // het weer verandert het terrein
   sls(state, e) { state.stuckBeams ??= new Map(); state.stuckBeams.set(e.beam, { x: e.x, y: e.y }); }, // zoeklicht plakt vast
   slr(state, e) { state.stuckBeams?.delete(e.beam); }, // zoeklicht losgelaten
+  zi(state, e) { }, // bombardement-inslag (alleen visueel: kratersprite in world-view)
+  fs(state, e) { state.forcedStorm = { end: e.end }; }, // geforceerde storm (O-toets)
+  dn(state, e) { state.night = !!e.n; }, // dag/nacht wisselt (N-toets)
+  la(state, e) { state.lightStep = e.s; }, // lichtstand draait ([ ]-toetsen)
+  mf(state, e) { state.fogOff = !!e.off; }, // mist aan/uit (M-toets, host)
 };
 
 // ---------- Klok: waar staat de server nu, gezien vanaf deze computer ----------
@@ -421,7 +436,21 @@ export function updateRenderPositions(state, now) {
 function updateWeather(state) {
   const lobby = state.game.phase === 'lobby';
   state.weather = lobby ? Weather.weatherAt(null, 1, 0, 0) : Weather.weatherAtTick(state.rules, state.game.round, state.tick, state.mapTick, state.roundTick, state.weatherScale);
-  state.vision = state.weather.visibility;
+  // geforceerde storm (O-toets): stormeffecten mergen zolang actief
+  const fs = state.forcedStorm;
+  if (fs && state.tick < fs.end) {
+    const wx = state.weather;
+    wx.visibility = wx.visibility === null ? 2 : Math.min(wx.visibility, 2);
+    wx.eraser = true;
+    wx.burial = true;
+    wx.drift = Math.max(wx.drift, 1);
+    wx.flags.hidesMinimap = true;
+    if (!wx.storm || !wx.storm.active) wx.storm = { label: 'Sneeuwstorm', active: true, warn: false, secs: Math.ceil((fs.end - state.tick) / G.TICK_RATE) };
+  } else if (fs) {
+    state.forcedStorm = null;
+  }
+  // M-toets (host): mist uit → standaardzicht (weer-visibility negeren)
+  state.vision = state.fogOff ? null : state.weather.visibility;
 }
 
 // Storm van nu voor in beeld: null (geen) of {label, active, warn, secs} met secs = seconden

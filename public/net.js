@@ -52,6 +52,15 @@ export function connect(hooks = {}, { room = 'carentan', size, name } = {}) {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     // K: zelfvernietiging (niet bij ingedrukt houden herhalen)
     if (e.code === 'KeyK') { e.preventDefault(); if (e.type === 'keydown' && !e.repeat) state.selfDestruct(); return; }
+    // Host-commando's (B/O/N/[/]) en lokale mist (M)
+    if (e.type === 'keydown' && !e.repeat) {
+      if (e.code === 'KeyB') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'barrage' }); return; }
+      if (e.code === 'KeyO') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'storm' }); return; }
+      if (e.code === 'KeyN') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'night' }); return; }
+      if (e.code === 'KeyM') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'fog' }); return; }
+      if (e.code === 'BracketLeft') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'light', dir: -1 }); return; }
+      if (e.code === 'BracketRight') { e.preventDefault(); state.send({ t: 'cmd', cmd: 'light', dir: 1 }); return; }
+    }
     const k = KEYS[e.code];
     if (!k) return;
     e.preventDefault();

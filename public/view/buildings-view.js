@@ -30,28 +30,50 @@ export function createBuildingView({ layer, shadows, game, particles, shadowColo
     for (let i = 0; i < game.map.length; i++) {
       if (game.map[i] !== G.BUILDING) continue;
       const id = game.world.veg[i] - 1, x = i % G.W, y = (i / G.W) | 0;
-      const b = box.get(id) || { id, x0: x, y0: y, x1: x, y1: y };
+      const b = box.get(id) || { id, x0: x, y0: y, x1: x, y1: y, sx: 0, sy: 0, cells: 0 };
       b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y);
+      b.sx += x + 0.5; b.sy += y + 0.5; b.cells++;
       box.set(id, b);
     }
-    return [...box.values()];
+    return [...box.values()].map((b) => ({ ...b, cx: b.sx / b.cells, cy: b.sy / b.cells }));
   }
   // Welk getekend gebouw past op dit grondvlak (en gedraaid of niet)
-  function match(w, h) {
+  function match(w, h, cells, roadside) {
     for (const [name, [fw, fh]] of Object.entries(BUILDINGS.footprints)) {
       if (w === fw && h === fh) return { name, turned: false };
       if (w === fh && h === fw) return { name, turned: true };
     }
+    const rowArea = BUILDINGS.footprints['huis-rij'].reduce((a, b) => a * b, 1);
+    if (roadside && Math.abs(cells - rowArea) <= 24) return { name: 'huis-rij', turned: false };
     return null;
+  }
+  function streetRotation(b) {
+    let best = null;
+    for (const road of game.roads || []) {
+      for (let i = 0; i < road.p.length - 1; i++) {
+        const [ax, ay] = road.p[i], [bx, by] = road.p[i + 1], dx = bx - ax, dy = by - ay;
+        const lengthSq = dx * dx + dy * dy;
+        if (!lengthSq) continue;
+        const t = Math.max(0, Math.min(1, ((b.cx - ax) * dx + (b.cy - ay) * dy) / lengthSq));
+        const x = ax + t * dx, y = ay + t * dy, distance = Math.hypot(b.cx - x, b.cy - y);
+        if (!best || distance < best.distance) best = { x, y, dx, dy, distance };
+      }
+    }
+    if (!best) return null;
+    let angle = Math.atan2(best.dy, best.dx);
+    const towardRoadX = best.x - b.cx, towardRoadY = best.y - b.cy;
+    if (-Math.sin(angle) * towardRoadX + Math.cos(angle) * towardRoadY < 0) angle += Math.PI;
+    return angle;
   }
 
   async function load(lookNow, ground) {
     look = lookNow;
     clear();
     const run = ++gen, style = game.rules?.style || 'zomer', m = await loadManifest();
+    const roadside = game.rules?.features?.some((f) => f.type === 'village' && f.layout === 'roadside');
     const found = findBuildings(), used = {}, cover = new Uint8Array(G.W * G.H);
     for (const b of found) {
-      const fit = match(b.x1 - b.x0 + 1, b.y1 - b.y0 + 1);
+      const fit = match(b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, b.cells, roadside);
       if (!fit) continue;
       const tex = await Promise.all(STAGES.map((s) => texture(m, `${style}/buildings/${fit.name}-${s}.png`)));
       if (run !== gen) return;
@@ -59,8 +81,9 @@ export function createBuildingView({ layer, shadows, game, particles, shadowColo
       const make = (container) => {
         const s = container.addChild(new Sprite(tex[0]));
         s.anchor.set(0.5);
-        s.position.set((b.x0 + b.x1 + 1) / 2, (b.y0 + b.y1 + 1) / 2);
-        s.rotation = fit.turned ? Math.PI / 2 : 0;
+        s.position.set(b.cx, b.cy);
+        const angle = roadside && fit.name === 'huis-rij' ? streetRotation(b) : null;
+        s.rotation = angle ?? (fit.turned ? Math.PI / 2 : 0);
         [s.width, s.height] = BUILDINGS.footprints[fit.name]; // op het grondvlak geschaald (de tekening kan kleiner zijn)
         return s;
       };

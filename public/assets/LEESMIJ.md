@@ -3,7 +3,7 @@
 Gemaakt uit `input/`: uitgesneden, op maat gezet (32 px per cel) en per stijl gebundeld.
 `manifest.json` bevat alle bestanden met hun maat, de maten van gebouwen, tanks en bruggen,
 en welke grondtextuur bij welke terreinklasse hoort (per stijl, met uitzonderingen per map).
-De code die dit gebruikt, bouwt Claude Code met `opdracht-claude-code-graphics.md`.
+De code die dit gebruikt staat in `public/assets.js` en de weergavemodules in `public/view/`.
 Zolang een bestand ontbreekt, tekent het spel het oude object.
 
 ## Mappen
@@ -29,7 +29,7 @@ gebouwen smaller en langer zijn. Anders worden ze te veel uitgerekt.
 
 ## Tanks
 
-Vijf tanks, op elke map hetzelfde (`docs/SPEC-tanks.md`). Gemaakt met `node tools/maak-tanks.mjs`
+Vijf tanks, op elke map hetzelfde (spec §4). Gemaakt met `node tools/maak-tanks.mjs`
 uit de vellen in `input/tanks/` (bovenaan de complete tank, daaronder de romp, onderaan de rupsstrook).
 
 | Map | Uit `input/tanks/` | Tank |

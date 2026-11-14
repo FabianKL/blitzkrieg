@@ -20,7 +20,7 @@ export function setMapSize(w, h, band = 0) {
   W = w; H = h; BAND = band;
   ICE_BW = Math.ceil(W / ICE_B); ICE_BH = Math.ceil(H / ICE_B);
 }
-// Rand van de kaart (§9 van docs/spec-grafische-reparaties.md): het terrein loopt door tot de rand,
+// Rand van de kaart (spec §6.3): het terrein loopt door tot de rand,
 // maar een strook van BAND cellen is onbegaanbaar; tanks, kogels en gevaren blijven erbuiten.
 export let BAND = 0;
 export const edgeBand = (rules) => (rules?.features ? EDGE.band : 0);
