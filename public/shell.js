@@ -261,14 +261,15 @@ function toggleHotkeys() {
   let h = hk('WASD / ←→↑↓', 'Rijden');
   h += hk('SPATIE', 'Schieten');
   h += hk('K', 'Zelfvernietiging');
-  h += hk('M', 'Mist aan/uit');
   h += hk('9 / 0', 'Zoom in/uit');
   if (isHost) {
     h += head('HOST');
-    h += hk('B', 'Extra barrage');
-    h += hk('O', 'Sneeuwstorm');
+    if (game.rules?.hazard?.levels) h += hk('B', 'Extra barrage'); // alleen op een kaart met bombardementen
+    h += hk('O', G.FORCED_STORM.labels[game.rules?.style] ?? G.FORCED_STORM.labels.zomer);
+    h += hk('M', 'Mist aan/uit (iedereen)');
     h += hk('N', 'Dag/nacht');
     h += hk('[ ]', 'Zon/maan draaien');
+    h += hk(', .', 'Tanksnelheid −/+');
   }
   el.innerHTML = h;
   el.hidden = false;

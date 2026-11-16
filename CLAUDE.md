@@ -96,6 +96,13 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
 - Mijnen bij El Alamein zijn onzichtbaar. Gevaren en weer worden alleen in de browser verborgen
   (geen anti-cheat nodig).
 - **Geen loopgraven bij Koersk** (en geen zigzag-optie in de kaartmaker): één zandweg met de brug.
+  **Geen graanbrand bij Koersk**: de kaart heeft geen gevaar, alleen de motortemperatuur.
+- **Bases**: één per speler, bij teams één per team (je vult bij in de basis van je team). De kaart
+  heeft nooit meer bases dan nodig: een ander speleraantal of een andere modus in de wachtkamer geeft
+  een nieuwe kaart, en bij START komt er een kaart voor wie er dan is. Een rechte weg (Ardennen)
+  loopt nooit door een basiszone; een zijweg legt geen brug en loopt om water, rots en huizen heen.
+- **Instelling Storm** verandert alleen de pauze tussen terugkerende stormen (`storm` in
+  `shared/weather.js`), niet hun duur of het andere weer; server en browser rekenen met dezelfde waarde.
 - **Geen metrotunnels in Berlijn.** Geen aparte pagina's per map: alles via de spelpagina.
 - Een weggeschoten plant ruimt alles binnen 4 cellen op (`FELL.clearRadius`), zodat een tank erdoor past.
 - **Geen rotsrand om de kaart**, behalve op Tunneler-winter: daar is de onbegaanbare randstrook van
@@ -104,10 +111,19 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
 - Huizen zijn groter dan een tank (`BUILDINGS.footprints`, ~1,7 × de tekening); bomen 7–10 cellen,
   kruinen hangen hoogstens `OBJECTS.overhang` cel over open grond.
 - K = zelfvernietiging: dood, telt voor niemand als kill.
-- **Host-commando's (Ardennen):** B = extra barrage, O = geforceerde sneeuwstorm (20 s),
-  N = dag/nacht wisselen, [ ] = zon-/maanstand roteren. Alleen voor de host, gedeeld voor
-  alle spelers. M = lokale atmosferische mist (per speler, niet gedeeld).
+- **Host-commando's (op elke map):** O = geforceerde storm (`FORCED_STORM`: 20 s, label naar de
+  stijl), N = dag/nacht wisselen, [ ] = zon-/maanstand roteren, M = mist aan/uit (zicht niet meer
+  beperkt door het weer). B = extra barrage, alleen op een map met bombardementen (Ardennen).
+  Alleen voor de host, gedeeld voor alle spelers; ook M.
   Dit zijn `cmd`-berichten naar de server; de server checkt host + play-fase.
+- **Winnen**: rondes (2 spelers, teams) of kills (meer spelers), hetzelfde aantal: de rondekeuze uit
+  de wachtkamer. De telwijze ligt vast bij START en volgt niet wie er daarna in- of uitstapt.
+- **Carentan heeft geen antitankgeschut** (en geen ander gevaar). **Ardennen**: brandstof alleen bij
+  de depots, niet in de basis. **Leningrad**: dooi vanaf ronde 4.
+- **Tanksnelheid (host, elke map):** , = maximumsnelheid van alle tanks omlaag, . = omhoog
+  (`SPEED` in config.js: 50–200% in stappen van 10%). De stand staat kort bovenin beeld; er is geen
+  blijvende aanduiding. Het schaalt de rijklok (`world.speedMul` in `moveTank`), niet het terrein.
+  Een nieuw spel begint op 100%.
 - De minikaart staat aan via `DISPLAY.minimap` (per map te overschrijven) en de host kan hem in de
   wachtkamer uitzetten; dan is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter
   staat hij standaard uit. Er staat alleen je eigen tank, je eigen basis, het terrein en

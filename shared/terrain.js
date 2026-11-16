@@ -205,21 +205,6 @@ export function markArtillery(w, [x0, y0, x1, y1], craters, onChange) {
     }
   }
 }
-// Brand (Koersk): een vak van T x T is uitgebrand: graan wordt verbrande grond, sporen weg
-export function burnTile(w, tile, onChange) {
-  const tw = Math.ceil(W / T), bx = (tile % tw) * T, by = ((tile / tw) | 0) * T;
-  for (let y = by; y < Math.min(H, by + T); y++) {
-    for (let x = bx; x < Math.min(W, bx + T); x++) {
-      const i = y * W + x;
-      if (w.terrain[i] !== CLASS.normal || (w.map[i] !== DIRT && w.map[i] !== EMPTY)) continue;
-      w.terrain[i] = CLASS.burnt;
-      if (w.map[i] === EMPTY && !w.scar[i]) w.map[i] = DIRT;
-      w.track[i] = 0;
-      if (onChange) onChange(x, y);
-    }
-  }
-}
-export const fireTileAt = (x, y) => ((y / T) | 0) * Math.ceil(W / T) + ((x / T) | 0);
 // Instortende gevel (Berlijn): puin (zachte grond met puinpatroon) in het vak; sluit tunnels af
 export function collapseRubble(w, [x0, y0, x1, y1], onChange) {
   for (let y = Math.max(0, y0); y <= Math.min(H - 1, y1); y++) {
@@ -237,6 +222,19 @@ export function destroyObstacleAt(w, x, y, onFell) {
   if (w.map[i] !== BUILDING && w.map[i] !== VEG) return false;
   w.vegHp[w.veg[i] - 1] = 1;
   return hitObstacle(w, x, y, onFell);
+}
+// Inslag van een bombardement (Ardennen): alle begroeiing binnen r cellen van (cx, cy) gaat om, zoals
+// bij een kogel (dus ook wat er binnen FELL.clearRadius omheen staat). Server en clients doen
+// hetzelfde. onFell(x, y) per cel die verandert; geeft de rechthoek die veranderd is (of null).
+export function blastVegetation(w, cx, cy, r, onFell) {
+  let box = null;
+  for (let y = cy - r; y <= cy + r; y++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (!inBounds(x, y) || w.map[y * W + x] !== VEG) continue;
+      destroyObstacleAt(w, x, y, (fx, fy) => { box = growBox(box, fx, fy); if (onFell) onFell(fx, fy); });
+    }
+  }
+  return box;
 }
 // Brug (Market Garden): opgeblazen = water met een wrak, aan het begin van de ronde weer heel
 export function setBridge(w, cells, blown, onChange) {

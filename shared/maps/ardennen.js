@@ -10,7 +10,7 @@ export default { // §10.8
     weather: 'Dichte mist die langzaam optrekt, sneeuwval die wisselt van licht tot zwaar, en sneeuwstormen.',
     special: 'Artilleriebombardementen in drie zwaartegraden: licht, gemiddeld en zwaar. Dennenbomen worden verwoest door inslagen. Brandstofdepots zijn je enige bron.',
   },
-  // bijna geen bevroren grond (3%), veel meer sneeuw; minder rotsen, meer bos; geen water
+  // weinig bevroren grond (5%), veel sneeuw; weinig rotsen, veel bos; geen water
   terrainPercent: { soft: 49, hard: 5, vegetation: 30, paved: 8, rock: 2, water: 0 },
   tolerance: { klein: 1, default: 0, groot: 2, extragroot: 4 },
   classes: {
@@ -20,7 +20,6 @@ export default { // §10.8
   },
   rocks: { label: 'Rotsblokken', color: '#8d9196' },
   vegetation: { type: 'pine', label: 'Dennenbossen', color: '#1f3a2a', groundAfter: 'soft' },
-  // geen noPonds: de 2% water wordt bevroren bospoelen
   features: [
     { type: 'village', at: [0.5, 0.5], size: 0.25, name: 'Bastogne', layout: 'roadside',
       roadsideRows: { blocks: 2, distanceT: 3.2, blockGapCells: 0, sideSearchCells: 3, alongAttempts: 20, alongStepCells: 3 },
@@ -49,4 +48,5 @@ export default { // §10.8
     },
   },
   scarce: { type: 'fuelDepots', count: 3, fromBase: 40, apart: 25, reach: 4, infinite: true, fixed: true },
+  refill: { fuel: false }, // brandstof alleen bij de depots, niet in de basis
 };

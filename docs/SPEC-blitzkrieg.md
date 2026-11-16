@@ -175,7 +175,6 @@ trager en hoe duidelijker de tunnel.
 | moeras | 0,30 | 4 | 0,60 | 0,100 | 0,00 |
 | doorwaadbaar | 0,25 | 3 | 0,60 | 0,100 | 0,00 |
 | ijs | 1,00 | 1 | alleen barsten | – | – |
-| verbrand | 0,80 | 2 | 1,00 | 0,008 | 0,10 |
 | begroeiing | 0 (tot weggeschoten) | – | – | – | – |
 | gebouw | 0 (tot kapotgeschoten) | – | – | – | – |
 | rots | 0 (onbegaanbaar) | – | – | – | – |
@@ -246,7 +245,7 @@ Op maps met sneeuwstorm, zandstorm of sneeuwjacht:
 ### 5.8 Schieten
 
 - Kogels **graven standaard niet** (`BULLETS.dig` staat uit; per map aan te zetten).
-- Een kogel vliegt over grond en water, stopt bij tank, begroeiing, gebouw, rots of geschut.
+- Een kogel vliegt over grond en water, stopt bij tank, begroeiing, gebouw of rots.
 - De krater van een ontploffende tank blijft.
 
 ---
@@ -354,7 +353,7 @@ Een tegenstander die je scherp ziet geeft geen hint.
 - krakend ijs onder een tegenstander (Leningrad).
 
 **Grote gebeurtenissen** (hele kaart):
-- gevaar raakt een tegenstander (geschut, artillerie, instortende gevel);
+- gevaar raakt een tegenstander (artillerie, instortende gevel);
 - brug ontploft onder een tegenstander (Market Garden);
 - tegenstander gevangen in een zoeklicht (Oder-front);
 - stofspoor achter een tegenstander (Russische vlakte, zomer), eens per 10 s.
@@ -413,7 +412,7 @@ Berlijn komen regenstormen met onweer: bliksem die voor iedereen tegelijk flitst
 | 2 | 1941 | Russische vlakte | – | dubbel brandstof in modder | zomer → modder |
 | 3 | 1942 | El Alamein | zandmeter, mijnen | – | hitte, woestijnwind, zandstorm |
 | 4 | 1942 | Leningrad | breekbaar ijs | motorwarmte | schemering, sneeuw, dooi |
-| 5 | 1943 | Koersk | brandend graan | motortemperatuur | zomer, rook, onweer |
+| 5 | 1943 | Koersk | – | motortemperatuur | zomer, rook, onweer |
 | 6 | 1944 | Carentan | – | – | ochtendmist, regenstorm |
 | 7 | 1944 | Arnhem | brug ontploft | droppings | helder → mist |
 | 8 | 1944 | Ardennen | bombardement nabij spelers | brandstofdepots (vast) | mist, sneeuwstorm |
@@ -567,7 +566,7 @@ dubbel brandstofverbruik op zacht en moeras.
 - Stilstaan of langzaam rijden (< 30%): −5/s.
 - Gewoon rijden of in de basis: +10/s.
 - Bij 0: motor bevroren, 4 s nodig om op snelheid te komen.
-- Vervalt bij de dooi (ronde 5).
+- Vervalt bij de dooi (ronde 4).
 
 **Weer:**
 
@@ -575,9 +574,9 @@ dubbel brandstofverbruik op zacht en moeras.
 |---|---|
 | Elke ronde | Schemering: zicht van 12 T naar 6 T na 3 minuten. Wisselende sneeuwval (verstuiving). |
 | Elke 45–120 s (willekeurig), 20 s, tot de dooi | Sneeuwjacht: zicht 2 T, sporenwisser, onderduiken. |
-| Ronde 3 | IJs wordt broos: 2× de breakkans. |
-| Ronde 4 | IJs kraakt: 4× de breakkans. |
-| Vanaf ronde 5 | Dooi: ijs → water. 4–6 extra plassen. Geen sneeuwjacht, geen motorwarmte. |
+| Ronde 2 | IJs wordt broos: 2× de breakkans. |
+| Ronde 3 | IJs kraakt: 4× de breakkans. |
+| Vanaf ronde 4 | Dooi: ijs → water. 4–6 extra plassen. Geen sneeuwjacht, geen motorwarmte. |
 
 **Tanks:** A = T-34, B = Panther.
 
@@ -604,15 +603,11 @@ dubbel brandstofverbruik op zacht en moeras.
 - 2–3 balka's (ravijnen, `rots`).
 - Geen dorp.
 
-**Gevaar — brandend graan:**
-- Schot op normaal (graan): 10% kans op brand. Spontane brand elke 2 min (alleen in de zomer).
-- Vuur verspreidt per seconde naar 1 aangrenzend normaal, in de windrichting. Dooft na 15 s.
-- Tank in brand: 5% pantser/s.
-- Verbrande tegel → `verbrand` (§5.2), zwart. Sporen vallen extra op (beginintensiteit 1,0).
+**Gevaar:** geen. De graanbrand is geschrapt (keuze van de eigenaar).
 
 **Schaars middel — motortemperatuur:**
 - Temperatuurmeter (0–100), zichtbaar op de tankkaart.
-- Snel rijden (> 80%): +4/s. In brand: +15/s.
+- Snel rijden (> 80%): +4/s.
 - Langzamer of stilstaan: −6/s. In de basis: −20/s.
 - Bij 100: max. 40% snelheid tot de meter onder 50 is.
 
@@ -734,11 +729,12 @@ inslagen (rode flits + rook). Drie niveaus:
 | zwaar | 1/6 | 30% | 10 |
 
 De automatische timer versnelt: 20 → 18 → 15 → 12 → 10 s (minimum). Kapotte bomen als
-permanent spoor. De host kan met **B** een extra barrage starten (telt niet mee voor de
-versnelling). Met **O** forceert de host een sneeuwstorm van 20 s.
+permanent spoor. Een inslag velt de dennen eromheen. De host kan met **B** een extra barrage starten (telt niet mee
+voor de versnelling). Met **O** forceert de host een storm van 20 s (op elke map).
 
 **Schaars middel — brandstofdepots:** 3 vaste, onuitputtelijke depots met minimaal 5 T
-afstand onderling. De depots blijven op dezelfde plek tussen rondes.
+afstand onderling. De depots blijven op dezelfde plek tussen rondes. In de basis wordt geen
+brandstof aangevuld: de depots zijn de enige bron.
 
 **Weer:**
 
@@ -850,6 +846,10 @@ Pijltjes of WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = inzoomen
 - **O** = geforceerde sneeuwstorm (20 s).
 - **N** = dag/nacht wisselen (alle spelers).
 - **[** / **]** = zon-/maanstand roteren (8 stappen, alle spelers).
+
+**Host-commando op elke map:**
+- **,** / **.** = maximumsnelheid van alle tanks omlaag / omhoog (stappen van 10%, 50–200%).
+  De stand staat kort in beeld bij alle spelers; een nieuw spel begint op 100%.
 
 **Per speler:**
 - **M** = lokale atmosferische mist aan/uit (alleen op je eigen scherm).

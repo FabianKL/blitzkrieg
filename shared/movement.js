@@ -16,7 +16,7 @@ export function minesUnder(mines, x, y, dir) {
 // ---------- Rijden ----------
 // Eén tick rijden met de ingedrukte richting. Gedeeld zodat de browser je eigen tank
 // kan voorspellen met exact dezelfde regels als de server.
-// t: {x, y, dir, mv, fuel, input: {dx, dy}}; others: andere levende tanks {x, y}.
+// t: {x, y, dir, mv, sp, fuel, input: {dx, dy}}; others: andere levende tanks {x, y}.
 // mv telt op tot een hele stap: door traag terrein rijdt een tank niet elke tick.
 const overlaps = (x, y, o) => Math.abs(x - o.x) <= 2 * TANK_R && Math.abs(y - o.y) <= 2 * TANK_R;
 function tankBlocked(t, nx, ny, others) {
@@ -24,7 +24,21 @@ function tankBlocked(t, nx, ny, others) {
   return others.some((o) => overlaps(nx, ny, o) && !overlaps(t.x, t.y, o));
 }
 
+// w.speedMul: de maximumsnelheid die de host instelt (SPEED_ONE = normaal). Die schaalt de
+// rijklok: bij 150% rijdt een tank anderhalve "rijtick" per tick, bij 50% een halve. Terrein,
+// meters en brandstof per cel blijven daardoor precies zoals ze zijn. t.sp telt de rest op.
+// Geeft terug hoeveel rijticks er deze tick waren (0 = de tank wacht op de volgende).
+export const speedMul = (pct) => Math.round((pct * SPEED_ONE) / 100);
 export function moveTank(t, w, others) {
+  const k = w.speedMul ?? SPEED_ONE;
+  if (k === SPEED_ONE) { moveStep(t, w, others); return 1; }
+  let steps = 0;
+  t.sp = (t.sp || 0) + k;
+  for (; t.sp >= SPEED_ONE; steps++) { t.sp -= SPEED_ONE; moveStep(t, w, others); }
+  return steps;
+}
+
+function moveStep(t, w, others) {
   const { dx, dy } = t.input;
   if (!dx && !dy) return;
   if (waterUnder(w.map, t.x, t.y, t.dir) > 0) { moveWet(t, w, others); return; }

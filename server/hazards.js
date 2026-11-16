@@ -4,7 +4,7 @@
 // richtingshint (een groot geluid, §8).
 //
 // Een kaart heeft (config):
-//   hazard  {type, ...}: forestBarrage, grainFire, atGuns, bridgeBlast, artillery, facades
+//   hazard  {type, ...}: forestBarrage, bridgeBlast, artillery, facades, bombardment
 //   scarce  {type, ...}: fuelDepots, ammoDepot, airDrops
 //   meter   {type, ...}: sand, heat, temp (per tank, zie METERS)
 // De server roept aan: roundStart(room, events) bij elke nieuwe ronde (en bij het begin),
@@ -89,7 +89,7 @@ const fuelDepots = {
       if (!d[2]) return;
       const t = room.tanks.find((o) => o?.alive && Math.abs(o.x - d[0]) <= reach && Math.abs(o.y - d[1]) <= reach);
       if (!t) return;
-      t.fuel = G.FUEL_MAX;
+      t.fuel = G.effectiveMax(room.settings).fuel; // vol volgens de instelling van de wachtkamer
       const inf = !!room.rules.scarce.infinite;
       if (!inf) d[2] = 0;
       events.push({ t: 'depu', k, i: t.id, inf });
@@ -119,7 +119,7 @@ const ammoDepot = {
   step(room, tick) {
     const ds = room.hz.ammoDepots, cfg = room.rules.scarce;
     if (!ds?.length || tick % Math.round(G.TICK_RATE / cfg.perSecond)) return;
-    for (const d of ds) for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= cfg.radiusT * G.T) t.ammo = Math.min(G.AMMO_MAX, t.ammo + 1);
+    for (const d of ds) for (const t of room.tanks) if (t?.alive && Math.hypot(t.x - d[0], t.y - d[1]) <= cfg.radiusT * G.T) t.ammo = Math.min(G.effectiveMax(room.settings).ammo, t.ammo + 1);
   },
   snapshot(room) { return { ammoDepots: room.hz.ammoDepots }; },
 };
@@ -137,115 +137,9 @@ function smokeStep(room, tick, events) {
     if (v) events.push({ t: 'smoke', x: Math.round(v.x + (rnd() - 0.5) * sx * G.T), y: Math.round(v.y + (rnd() - 0.5) * sy * G.T), r: city.rT * G.T, s: city.seconds });
   }
 }
-export function battleSmoke(room, x, y, events) { // tank geraakt of brand: rookvlek van 20 s
+export function battleSmoke(room, x, y, events) { // tank geraakt: rookvlek van 20 s
   if (room.wx?.flags.battleSmoke) events.push({ t: 'smoke', x, y, r: SMOKE.battle.rT * G.T, s: SMOKE.battle.seconds });
 }
-
-// ---------- Brandend graan (Koersk, §10.5) ----------
-// Vuur in vakken van T x T. Een schot op graan steekt het aan (kans), en zolang het zomer is
-// elke everySeconds een spontane brand. Elke seconde springt het vuur naar het volgende vak in
-// de windrichting (als dat graan is); een vak brandt burnSeconds en wordt dan verbrande grond.
-// Wie in een brandend vak staat, verliest armorPerSecond% pantser per seconde.
-const grainFire = {
-  roundStart(room) {
-    const hz = room.hz;
-    hz.wind ??= G.DIRS[Math.floor(rnd() * 8)]; // windrichting van dit spel
-    hz.fires ??= new Map(); // vak -> tick waarop het uitbrandt
-    hz.nextFire = room.tick + ticks(room.rules.hazard.everySeconds);
-  },
-  step(room, tick, events, hurt) {
-    const cfg = room.rules.hazard, hz = room.hz, w = room.world, tw = Math.ceil(G.W / G.T);
-    const summer = room.wx?.flags.fires;
-    if (!summer && hz.fires.size && room.wx?.flags.thunder) { // onweer: alle branden doven
-      for (const tile of hz.fires.keys()) { G.burnTile(w, tile); events.push({ t: 'fo', tile }); }
-      hz.fires.clear();
-    }
-    if (summer && tick >= hz.nextFire) { // spontane brand op graan
-      hz.nextFire = tick + ticks(cfg.everySeconds);
-      for (let tries = 0; tries < 200; tries++) {
-        const x = Math.floor(rnd() * G.W), y = Math.floor(rnd() * G.H);
-        if (w.terrain[y * G.W + x] === G.CLASS.normal && w.map[y * G.W + x] === G.DIRT) { ignite(room, G.fireTileAt(x, y), tick, events); break; }
-      }
-    }
-    if (tick % ticks(cfg.spreadSeconds) === 0) {
-      for (const [tile, until] of [...hz.fires]) {
-        if (tick >= until) { hz.fires.delete(tile); G.burnTile(w, tile); events.push({ t: 'fo', tile }); continue; }
-        const nx = (tile % tw) + hz.wind[0], ny = ((tile / tw) | 0) + hz.wind[1];
-        if (nx >= 0 && ny >= 0 && nx < tw && ny * G.T < G.H) {
-          const next = ny * tw + nx, cx = nx * G.T + 2, cy = ny * G.T + 2;
-          if (!hz.fires.has(next) && G.inBounds(cx, cy) && w.terrain[cy * G.W + cx] === G.CLASS.normal) ignite(room, next, tick, events);
-        }
-      }
-    }
-    if (tick % G.TICK_RATE === 0) { // schade in een brandend vak
-      for (const t of room.tanks) if (t?.alive && hz.fires.has(G.fireTileAt(t.x, t.y))) hurt(t, cfg.armorPerSecond, events);
-    }
-  },
-  // schot geland op (x, y): kans op brand als het graan is
-  bulletLanded(room, x, y, events) {
-    const cfg = room.rules.hazard, w = room.world;
-    if (!G.inBounds(x, y) || w.terrain[y * G.W + x] !== G.CLASS.normal) return;
-    if (rnd() < (room.wx?.flags.thunder ? cfg.stormShotChance : cfg.shotChance)) ignite(room, G.fireTileAt(x, y), room.tick, events);
-  },
-  snapshot(room) { return { fires: [...(room.hz.fires || new Map()).keys()] }; },
-};
-function ignite(room, tile, tick, events) {
-  room.hz.fires.set(tile, tick + ticks(room.rules.hazard.burnSeconds));
-  events.push({ t: 'fi', tile });
-  const tw = Math.ceil(G.W / G.T);
-  battleSmoke(room, (tile % tw) * G.T + 2, ((tile / tw) | 0) * G.T + 2, events);
-}
-export const isBurning = (room, x, y) => !!room.hz?.fires?.has(G.fireTileAt(x, y));
-
-// ---------- Verborgen antitankgeschut (Carentan, §10.6) ----------
-// count stukken achter een heg, onzichtbaar tot ze vuren. Elke everySeconds schieten ze op een
-// tank in hun schootsveld (kegel van coneDegrees, rangeT lang): armorLoss%. Daarna zichtbaar
-// en met hp treffers uit te schakelen (blijft het hele spel uit).
-const atGuns = {
-  roundStart(room) {
-    if (room.hz.guns) return; // eenmaal per spel geplaatst
-    const cfg = room.rules.hazard, w = room.world, guns = [];
-    for (let tries = 0; guns.length < cfg.count && tries < 4000; tries++) {
-      const x = 10 + Math.floor(rnd() * (G.W - 20)), y = 10 + Math.floor(rnd() * (G.H - 20)), i = y * G.W + x;
-      if (w.map[i] !== G.DIRT || w.zone?.[i] || w.bases.some((b) => Math.hypot(b.x - x, b.y - y) < 60)) continue;
-      // achter een heg: begroeiing vlak naast, schootsveld de andere kant op
-      const d = G.DIRS.findIndex(([dx, dy]) => w.map[(y + dy * 3) * G.W + x + dx * 3] === G.VEG);
-      if (d < 0 || guns.some((g) => Math.hypot(g.x - x, g.y - y) < 80)) continue;
-      const [fx, fy] = G.DIRS[(d + 4) % 8];
-      guns.push({ x, y, ang: Math.atan2(fy, fx), hp: cfg.hp, seen: false, next: room.tick + ticks(cfg.everySeconds) });
-    }
-    room.hz.guns = guns;
-  },
-  step(room, tick, events, hurt) {
-    const cfg = room.rules.hazard, range = cfg.rangeT * G.T, half = (cfg.coneDegrees / 2) * (Math.PI / 180);
-    room.hz.guns.forEach((g, k) => {
-      if (g.hp <= 0 || tick < g.next) return;
-      const target = room.tanks.find((t) => {
-        if (!t?.alive) return false;
-        const dx = t.x - g.x, dy = t.y - g.y, d = Math.hypot(dx, dy);
-        let a = Math.atan2(dy, dx) - g.ang;
-        a = Math.atan2(Math.sin(a), Math.cos(a));
-        return d <= range && Math.abs(a) <= half;
-      });
-      if (!target) return;
-      g.next = tick + ticks(cfg.everySeconds);
-      g.seen = true;
-      events.push({ t: 'gun', k, x: g.x, y: g.y, ang: g.ang, hp: g.hp, tx: target.x, ty: target.y });
-      hurt(target, cfg.armorLoss, events);
-    });
-  },
-  // kogel bij (x, y): raakt hij een zichtbaar stuk geschut? Dan is hij op.
-  bulletAt(room, x, y, events) {
-    for (const [k, g] of (room.hz.guns || []).entries()) {
-      if (!g.seen || g.hp <= 0 || Math.abs(g.x - x) > 2 || Math.abs(g.y - y) > 2) continue;
-      g.hp--;
-      events.push({ t: 'gun', k, x: g.x, y: g.y, ang: g.ang, hp: g.hp });
-      return true;
-    }
-    return false;
-  },
-  snapshot(room) { return { guns: (room.hz.guns || []).map((g, k) => (g.seen ? { k, x: g.x, y: g.y, ang: g.ang, hp: g.hp } : null)).filter(Boolean) }; },
-};
 
 // ---------- De brug ontploft (Market Garden, §10.7) ----------
 // Wie over de brug over de Rijn rijdt, haalt de overkant; daarna ontploft hij met kans chance,
@@ -307,11 +201,12 @@ const airDrops = {
         }
       }
     }
+    const max = G.effectiveMax(room.settings); // een krat vult een deel van de tank van dit spel
     hz.crates.forEach((c, k) => {
       if (!c[3]) return;
       const t = room.tanks.find((o) => o?.alive && Math.abs(o.x - c[0]) <= 4 && Math.abs(o.y - c[1]) <= 4);
       if (!t) return;
-      if (c[2] === 'fuel') t.fuel = Math.min(G.FUEL_MAX, t.fuel + cfg.fuel * G.FUEL_MAX); else t.ammo = Math.min(G.AMMO_MAX, t.ammo + cfg.ammo);
+      if (c[2] === 'fuel') t.fuel = Math.min(max.fuel, t.fuel + cfg.fuel * max.fuel); else t.ammo = Math.min(max.ammo, t.ammo + cfg.ammo);
       c[3] = 0;
       events.push({ t: 'dropu', k, i: t.id });
     });
@@ -494,8 +389,9 @@ const bombardment = {
         const frac = b.impacts.length <= 1 ? 0 : b.nextIdx / (b.impacts.length - 1);
         if (tick < b.start + Math.round(frac * (b.end - b.start))) break;
         const [ix, iy, r] = b.impacts[b.nextIdx++];
-        if (cfg.destroysPine) destroyPineIn(w, ix, iy, r);
-        events.push({ t: 'zi', x: ix, y: iy, r });
+        // v: de inslag velt de begroeiing; de clients doen hetzelfde (terrain.js blastVegetation)
+        if (cfg.destroysPine) G.blastVegetation(w, ix, iy, r);
+        events.push({ t: 'zi', x: ix, y: iy, r, ...(cfg.destroysPine ? { v: 1 } : {}) });
         for (const t of room.tanks) if (t?.alive && t.x >= b.box[0] && t.x <= b.box[2] && t.y >= b.box[1] && t.y <= b.box[3]) hurt(t, b.armorLoss, events);
       }
     }
@@ -575,17 +471,8 @@ function startBombardment(hz, tick, cx, cy, half, cfg, events) {
   });
   events.push({ t: 'z', box, at: warnEnd, kind: 'bomb', level, impacts });
 }
-function destroyPineIn(w, cx, cy, r) {
-  for (let y = cy - r; y <= cy + r; y++) {
-    for (let x = cx - r; x <= cx + r; x++) {
-      if (!G.inBounds(x, y)) continue;
-      const i = y * G.W + x;
-      if (w.map[i] === G.VEG) G.hitObstacle(w, i, 100); // vernietig de boom
-    }
-  }
-}
 
-const HAZARDS = { forestBarrage, grainFire, atGuns, bridgeBlast, artillery, facades, bombardment };
+const HAZARDS = { forestBarrage, bridgeBlast, artillery, facades, bombardment };
 const SCARCE = { fuelDepots, ammoDepot, airDrops };
 const parts = (room) => [HAZARDS[room.rules.hazard?.type], SCARCE[room.rules.scarce?.type]].filter(Boolean);
 
@@ -608,7 +495,7 @@ const cellsPerSecond = (t) => { // hoe hard rijdt de tank (gemeten over de laats
   if (t.trail.length > G.TICK_RATE) t.trail.shift();
   return t.trail.reduce((a, b) => a + b, 0);
 };
-const inOwnBase = (room, t) => room.world.map[t.y * G.W + t.x] === G.BASE + t.id;
+const inOwnBase = (room, t) => room.world.map[t.y * G.W + t.x] === G.BASE + G.baseIndex(t.id, room.gameMode);
 const classUnder = (room, t) => G.CLASSES[room.world.terrain[t.y * G.W + t.x]].name;
 
 // Zandmeter (El Alamein, §10.3): per vak (T cellen gereden) +2 op zand, -5 op hard of verhard.
@@ -622,7 +509,7 @@ registerMeter('sand', (room, t, info) => {
   t.meterState.cells = 0;
   const cls = classUnder(room, t);
   if (cls === 'soft') {
-    if (t.gauge > m.danger) t.shield = Math.max(0, t.shield - Math.round((m.armorPct * G.SHIELD_MAX) / 100));
+    if (t.gauge > m.danger) t.shield = Math.max(0, t.shield - Math.round((m.armorPct * G.effectiveMax(room.settings).shield) / 100));
     t.gauge += m.soft;
   } else if (cls === 'hard' || cls === 'paved') t.gauge += m.firm;
   if (t.gauge >= 100) t.slow = SLOW(m.slow);
@@ -648,16 +535,15 @@ registerMeter('heat', (room, t, info) => {
   }
 });
 
-// Motortemperatuur (Koersk, §10.5): boven 80% van de topsnelheid +4 per seconde, in een
-// brandend vak +15; langzamer of stil -6; in de eigen basis -20. Bij 100 oververhit: hoogstens
+// Motortemperatuur (Koersk, §10.5): boven 80% van de topsnelheid +4 per seconde, langzamer of
+// stil -6; in de eigen basis -20. Bij 100 oververhit: hoogstens
 // 40% snelheid tot de meter onder 50 is.
 registerMeter('temp', (room, t, info) => {
   const m = room.rules.meter;
   t.moved = info.moved;
   const speed = cellsPerSecond(t);
   if (room.tick % G.TICK_RATE === 0) {
-    if (isBurning(room, t.x, t.y)) t.gauge += m.fire;
-    else if (inOwnBase(room, t)) t.gauge += m.base;
+    if (inOwnBase(room, t)) t.gauge += m.base;
     else if (speed > m.fastAbove * G.TICK_RATE) t.gauge += m.fast;
     else t.gauge += m.idle;
   }
@@ -673,14 +559,6 @@ export function roundStart(room, events) {
 export function step(room, tick, events, hurt) {
   smokeStep(room, tick, events);
   for (const p of parts(room)) p.step?.(room, tick, events, hurt);
-}
-// Een kogel is ergens geland (x, y): kans op brand (Koersk)
-export function bulletLanded(room, x, y, events) {
-  for (const p of parts(room)) p.bulletLanded?.(room, x, y, events);
-}
-// Een kogel op (x, y): raakt hij een object (geschut)? Dan true: de kogel is op.
-export function bulletAt(room, x, y, events) {
-  return parts(room).some((p) => p.bulletAt?.(room, x, y, events));
 }
 // Host drukt B: extra bombardement nabij een speler (telt niet mee voor de versnelling)
 export function hostBarrage(room, events) {

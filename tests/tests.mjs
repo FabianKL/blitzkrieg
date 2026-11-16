@@ -311,7 +311,7 @@ export const tests = [
         }
         check(Math.max(...seen) - Math.min(...seen) > 0.2, `${map.name}: verstuiving wisselt nauwelijks`);
       }
-      check(Wx.weatherAt(Ln, 4, 10, 10).drift > 0 && Wx.weatherAt(Ln, 5, 10, 10).drift === 0, 'Leningrad: sneeuw na de dooi (of niet ervoor)');
+      check(Wx.weatherAt(Ln, 3, 10, 10).drift > 0 && Wx.weatherAt(Ln, 4, 10, 10).drift === 0, 'Leningrad: sneeuw na de dooi (of niet ervoor)');
       check(!Wx.weatherAt(G.MAPS.carentan, 2, 110, 110).driftRate, 'regenbui verstuift');
       // een vers spoor: hoe lang tot dicht, en wat er na een storm over is
       const snowed = (cls, rate, seconds, ground) => {
@@ -528,6 +528,45 @@ export const tests = [
     },
   },
   {
+    name: 'robuust: een bericht "null", een bericht dat geen object is en een nul-byte in het adres laten de server niet crashen',
+    async run(port) {
+      const a = await connectBot(port, 'blitzkrieg');
+      for (const raw of ['null', '7', '"tekst"', '[]', '{"t":"cfg","settings":7}']) a.ws.send(raw);
+      const res = await fetch(`http://localhost:${port}/%00`);
+      check(res.status === 404, `nul-byte in het adres: status ${res.status}, verwacht 404`);
+      await sleep(300);
+      // de server leeft nog: een tweede speler kan instappen en krijgt ticks
+      const b = await connectBot(port, 'blitzkrieg');
+      const k0 = b.state.tick;
+      await waitFor(() => b.state.tick > k0, 1000);
+      check(b.state.tick > k0 && !a.closed, 'server reageert niet meer na de kapotte berichten');
+      return 'kapotte berichten en /%00 genegeerd, server tikt door';
+    },
+  },
+  {
+    name: 'wachtkamer: het aantal bases volgt speleraantal en modus (teams 2, anders één per speler), ook als de kaart niet verandert',
+    async run(port) {
+      const a = await connectBot(port, 'blitzkrieg');
+      const bases = (s) => new Set(s.map.filter((v) => v >= G.BASE)).size;
+      const cfg = async (o) => { a.send({ t: 'cfg', map: 'koersk', size: 'middel', playerCount: 4, gameMode: 'ffa', ...o }); await sleep(1500); };
+      await cfg({});
+      check(a.state.mapId === 'koersk' && bases(a.state) === 4, `4 spelers: ${bases(a.state)} bases`);
+      await cfg({ playerCount: 2 });
+      check(bases(a.state) === 2, `2 spelers: ${bases(a.state)} bases, verwacht 2 (geen lege bases)`);
+      await cfg({ gameMode: 'teams' });
+      check(a.state.gameMode === 'teams' && bases(a.state) === 2, `teams: ${bases(a.state)} bases`);
+      // terug naar ieder voor zich met 4: er moeten weer 4 bases zijn, anders heeft speler 3 geen plek
+      await cfg({});
+      check(bases(a.state) === 4, `terug naar 4 spelers: ${bases(a.state)} bases`);
+      const b = await connectBot(port, 'blitzkrieg'), c = await connectBot(port, 'blitzkrieg');
+      await sleep(300);
+      check(c.me && a.state.tanks.size === 3, `derde speler kon niet instappen (${a.state.tanks.size} tanks)`);
+      check(c.state.map[c.me.y * G.W + c.me.x] === G.BASE + c.state.me, 'derde speler staat niet in zijn eigen basis');
+      b.close();
+      return 'bases: 4 → 2 → teams 2 → 4, derde speler in eigen basis';
+    },
+  },
+  {
     name: 'wachtkamer: na START komen brug (Market Garden) en munitiedepot (Fall Gelb) alsnog naar de browser',
     async run(port) {
       const a = await connectBot(port, 'blitzkrieg');
@@ -535,10 +574,11 @@ export const tests = [
       const out = [];
       for (const [map, ok] of [['market-garden', (hz) => hz.bridge?.cells.length > 0], ['fall-gelb', (hz) => Array.isArray(hz.ammoDepots) && hz.ammoDepots.length > 0]]) {
         a.send({ t: 'cfg', map, size: 'middel' });
-        await waitFor(() => a.state.mapId === map, 4000);
+        await waitFor(() => a.state.mapId === map, 30000); // Fall Gelb rekent ~4 s, langer als de processor druk is
         a.events.length = 0;
         a.send({ t: 'start' });
-        await waitFor(() => a.events.some((e) => e.t === 'hz'), 2000);
+        // bij START komt er eerst een kaart met alleen de bases van wie er is (nog eens ~4 s)
+        await waitFor(() => a.events.some((e) => e.t === 'hz'), 30000);
         const e = a.events.find((x) => x.t === 'hz');
         check(e && ok(e.hz), `${map}: geen hz met brug/depot na START`);
         check(map !== 'market-garden' || a.state.bridge?.cells.length, 'browser kent de brug niet');
@@ -581,13 +621,23 @@ export const tests = [
       check(G.roundWinner([p(0, false), p(1, false)]) === -1, 'tegelijk dood: niemand wint');
       check(G.roundWinner([p(0, true), p(1, true), p(2, false)]) === -1, 'bij 3 spelers wint niemand een ronde (kills tellen)');
       const s = (id, rounds, kills) => ({ id, rounds, kills });
-      const cfg = { roundsToWin: 3, killsToWin: 5 };
+      const cfg = { roundsToWin: 3 }; // rondes of kills: hetzelfde aantal (de rondekeuze)
       check(G.gameWinner([s(0, 2, 9), s(1, 1, 0)], cfg) === -1, '2 spelers: kills tellen niet');
       check(G.gameWinner([s(0, 3, 0), s(1, 1, 0)], cfg) === 0, '2 spelers: 3 rondes wint');
-      check(G.gameWinner([s(0, 9, 4), s(1, 0, 3), s(2, 0, 0)], cfg) === -1, '3 spelers: rondes tellen niet');
-      check(G.gameWinner([s(0, 0, 4), s(1, 0, 5), s(2, 0, 0)], cfg) === 1, '3 spelers: 5 kills wint');
+      check(G.gameWinner([s(0, 9, 2), s(1, 0, 1), s(2, 0, 0)], cfg) === -1, '3 spelers: rondes tellen niet');
+      check(G.gameWinner([s(0, 0, 2), s(1, 0, 3), s(2, 0, 0)], cfg) === 1, '3 spelers: 3 kills wint');
       check(G.score({ rounds: 2, kills: 7 }, 2) === 2 && G.score({ rounds: 2, kills: 7 }, 4) === 7, 'score volgt de telwijze');
-      return `2 spelers: ${G.GAME.roundsToWin} rondes, meer: ${G.GAME.killsToWin} kills; tegelijk dood = niemand`;
+      // de telwijze volgt het aantal waarmee het spel begon, niet wie er nu is
+      check(G.gameWinner([s(0, 3, 0), s(1, 0, 0)], cfg, 'ffa', 4) === -1 && G.gameWinner([s(0, 0, 3), s(1, 0, 0)], cfg, 'ffa', 4) === 0, 'begonnen met 4, nog 2 over: kills blijven tellen');
+      check(G.gameWinner([s(0, 3, 0), s(1, 0, 0), s(2, 0, 9)], cfg, 'ffa', 2) === 0, 'begonnen met 2, derde erbij: rondes blijven tellen');
+      // geforceerde storm: zelfde effecten op elke kaart, label naar de stijl
+      for (const [id, label] of [['ardennen', 'Sneeuwstorm'], ['el-alamein', 'Zandstorm'], ['carentan', 'Storm']]) {
+        const wx = Wx.weatherAt(G.MAPS[id], 1, 1, 1, 1, 0);
+        Wx.forceStorm(wx, G.MAPS[id].style, 12.3);
+        check(wx.storm.label === label && wx.storm.secs === 13 && wx.burial && wx.eraser && wx.visibility === G.FORCED_STORM.visibility, `${id}: geforceerde storm ${JSON.stringify(wx.storm)}`);
+      }
+      check(G.MAPS.ardennen.refill.fuel === false, 'Ardennen: brandstof in de basis');
+      return `2 spelers: ${G.GAME.roundsToWin} rondes, meer: evenveel kills; tegelijk dood = niemand; telwijze vast per spel`;
     },
   },
   {
@@ -1120,14 +1170,14 @@ export const tests = [
         const seen = G.reachable(w.map, w.bases[0]);
         check(w.bases.every((b) => seen[b.y * G.W + b.x]), `seed ${seed}: basis onbereikbaar na de dooi`);
       }
-      // geleidelijke dooi: ronde 3 en 4 broos ijs (iceBreakMul), ronde 5 smelt (terreinverandering); sneeuw tot ronde 4
-      check(Wx.terrainChangesAt(cfg, 5).length === 1 && Wx.terrainChangesAt(cfg, 4).length === 0, 'dooi niet bij het begin van ronde 5');
-      check(Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul === 2, 'ronde 3 iceBreakMul niet 2');
-      check(Wx.weatherAt(cfg, 4, 10, 10).flags.iceBreakMul === 4, 'ronde 4 iceBreakMul niet 4');
-      let eraserR4 = false, eraserR5 = false;
+      // geleidelijke dooi: ronde 2 en 3 broos ijs (iceBreakMul), ronde 4 smelt (terreinverandering); sneeuw tot ronde 3
+      check(Wx.terrainChangesAt(cfg, 4).length === 1 && Wx.terrainChangesAt(cfg, 3).length === 0 && Wx.terrainChangesAt(cfg, 5).length === 0, 'dooi niet bij het begin van ronde 4');
+      check(Wx.weatherAt(cfg, 2, 10, 10).flags.iceBreakMul === 2, 'ronde 2 iceBreakMul niet 2');
+      check(Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul === 4, 'ronde 3 iceBreakMul niet 4');
+      let eraserR3 = false, eraserR4 = false;
+      for (let t = 0; t < 200 * 30 && !eraserR3; t += 10) if (Wx.weatherAt(cfg, 3, t, t).eraser) eraserR3 = true;
       for (let t = 0; t < 200 * 30 && !eraserR4; t += 10) if (Wx.weatherAt(cfg, 4, t, t).eraser) eraserR4 = true;
-      for (let t = 0; t < 200 * 30 && !eraserR5; t += 10) if (Wx.weatherAt(cfg, 5, t, t).eraser) eraserR5 = true;
-      check(eraserR4 && !eraserR5, 'sneeuwjacht gaat door na de dooi');
+      check(eraserR3 && !eraserR4, 'sneeuwjacht gaat door na de dooi');
       return `20 kaarten, gemiddeld ${(pools / 20).toFixed(1)} plassen bij de dooi`;
     },
   },
@@ -1150,9 +1200,9 @@ export const tests = [
       const perTick = cfg.iceSlowBreak / G.TICK_RATE;
       check(perTick > 0 && perTick < 0.01, `per-tick kans ${perTick} buiten bereik`);
       // Weermultiplicators verhogen de kans in latere rondes
-      const mul3 = Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul ?? 1;
-      const mul4 = Wx.weatherAt(cfg, 4, 10, 10).flags.iceBreakMul ?? 1;
-      check(mul3 === 2 && mul4 === 4, `weerbonus ronde 3=${mul3} ronde 4=${mul4}, verwacht 2 en 4`);
+      const mul3 = Wx.weatherAt(cfg, 2, 10, 10).flags.iceBreakMul ?? 1;
+      const mul4 = Wx.weatherAt(cfg, 3, 10, 10).flags.iceBreakMul ?? 1;
+      check(mul3 === 2 && mul4 === 4, `weerbonus ronde 2=${mul3} ronde 3=${mul4}, verwacht 2 en 4`);
       return `drempel ${threshold}/${G.SPEED_ONE}, bevroren motor ${frozenSlow}, kans/tick ${perTick.toFixed(5)}, weer ×${mul3}/×${mul4}`;
     },
   },
@@ -1232,13 +1282,68 @@ export const tests = [
     },
   },
   {
+    name: 'instelling Storm: alleen de pauze tussen stormen verandert (uit = geen storm), de rest van het weer blijft; de browser rekent met dezelfde waarde',
+    run() {
+      const A = G.MAPS.ardennen;
+      const stormSeconds = (storm) => { let n = 0; for (let t = 0; t < 1200; t++) if (Wx.weatherAt(A, 3, t, t, 1, storm).burial) n++; return n; };
+      const runs = (storm) => { let n = 0, prev = false; for (let t = 0; t < 1200; t++) { const b = Wx.weatherAt(A, 3, t, t, 1, storm).burial; if (b && !prev) n++; prev = b; } return n; };
+      check(stormSeconds(0) === 0, 'Storm uit: er komt toch een storm');
+      check(runs(0.5) > runs(1) && runs(1) > runs(2), `aantal stormen in 20 min: snel ${runs(0.5)}, normaal ${runs(1)}, langzaam ${runs(2)}`);
+      // elke storm duurt 20 s, bij elke instelling
+      for (const storm of [0.5, 1, 2]) check(Math.abs(stormSeconds(storm) / runs(storm) - 20) <= 1, `storm duurt ${stormSeconds(storm) / runs(storm)} s bij instelling ${storm}`);
+      // mist, zicht en sneeuwval hangen niet van de instelling af (en zijn geen NaN bij uit)
+      for (const id of ['ardennen', 'leningrad', 'el-alamein']) {
+        for (const t of [0, 35, 62, 100]) {
+          const off = Wx.weatherAt(G.MAPS[id], 1, t, t, 1, 0);
+          check(Number.isFinite(off.drift) && Number.isFinite(off.driftRate), `${id}: verstuiving ${off.drift} bij Storm uit`);
+          const on = Wx.weatherAt(G.MAPS[id], 1, t, t, 1, 1);
+          if (!on.burial) check(off.visibility === on.visibility && off.drift === on.drift, `${id} op ${t} s: zicht of sneeuwval verandert met de instelling`);
+        }
+      }
+      // de browser: zelfde storm als de server bij instelling Snel
+      const s = Sim.createState();
+      Object.assign(s, { rules: A, settings: { ...G.DEFAULT_SETTINGS, stormFreq: 0.5 }, map: new Uint8Array(1) });
+      s.game.round = 3;
+      let differ = 0;
+      for (let k = 0; k < 600 * G.TICK_RATE; k += G.TICK_RATE) {
+        s.tick = k;
+        Sim.refreshWeather(s);
+        if (s.weather.burial !== Wx.weatherAtTick(A, 3, k, 0, 0, 1, 0.5).burial) differ++;
+      }
+      check(differ === 0, `browser en server oneens over de storm in ${differ} van 600 s`);
+      return `stormen in 20 min: snel ${runs(0.5)}, normaal ${runs(1)}, langzaam ${runs(2)}, uit 0; elk 20 s`;
+    },
+  },
+  {
+    name: 'bombardement velt begroeiing (blastVegetation), teams delen een basis, voorraden volgen de instellingen',
+    run() {
+      const w = testWorld('soft'), at = (x, y) => y * G.W + x;
+      w.vegHp = new Uint8Array([2, 2]);
+      for (let y = 50; y < 55; y++) for (let x = 50; x < 55; x++) { w.map[at(x, y)] = G.VEG; w.veg[at(x, y)] = 1; }
+      for (let y = 90; y < 95; y++) for (let x = 90; x < 95; x++) { w.map[at(x, y)] = G.VEG; w.veg[at(x, y)] = 2; }
+      G.indexVeg(w);
+      const box = G.blastVegetation(w, 52, 52, 2);
+      check(box && w.map[at(52, 52)] === G.EMPTY && w.map[at(50, 50)] === G.EMPTY, 'boom in de inslag staat er nog');
+      check(w.map[at(92, 92)] === G.VEG, 'boom ver van de inslag is ook weg');
+      check(G.blastVegetation(w, 20, 20, 3) === null, 'inslag zonder begroeiing geeft een rechthoek');
+      check(G.baseIndex(2, 'teams') === 0 && G.baseIndex(3, 'teams') === 1 && G.baseIndex(2, 'ffa') === 2, 'baseIndex');
+      const max = G.effectiveMax({ fuelMul: 0.5, shieldMul: 2 });
+      check(max.fuel === G.FUEL_MAX / 2 && max.shield === G.SHIELD_MAX * 2 && max.ammo === G.AMMO_MAX, 'effectiveMax');
+      // depot met Brandstof laag: vol = het maximum van dit spel, niet 200%
+      const room = { rules: { scarce: { type: 'fuelDepots', reach: 4, infinite: true, fixed: true } }, settings: { fuelMul: 0.5 }, world: w, hz: { depots: [[30, 30, 1]] }, tanks: [{ id: 0, alive: true, x: 30, y: 30, fuel: 10 }] };
+      Hz.step(room, 1, [], () => {});
+      check(room.tanks[0].fuel === max.fuel, `depot vult tot ${room.tanks[0].fuel}, verwacht ${max.fuel}`);
+      return 'inslag velt alleen de bomen erin; teams: basis 0 en 1; depot vult tot het maximum van het spel';
+    },
+  },
+  {
     name: 'rondes: teams — scoreMode en gameWinner bij teams',
     async run() {
       check(G.scoreMode(4, 'teams') === 'rounds', 'teams: rondes tellen');
       check(G.scoreMode(4, 'ffa') === 'kills', 'FFA 4 spelers: kills tellen');
       check(G.scoreMode(2, 'ffa') === 'rounds', 'FFA 2 spelers: rondes tellen');
       const s = (id, rounds, kills) => ({ id, rounds, kills });
-      const cfg = { roundsToWin: 3, killsToWin: 5 };
+      const cfg = { roundsToWin: 3 };
       check(G.gameWinner([s(0, 3, 0), s(1, 0, 0), s(2, 3, 0), s(3, 0, 0)], cfg, 'teams') === 0, 'teams: 3 rondes wint');
       check(G.gameWinner([s(0, 2, 9), s(1, 0, 0), s(2, 2, 0), s(3, 0, 0)], cfg, 'teams') === -1, 'teams: kills tellen niet');
       return 'scoreMode en gameWinner respecteren de gameMode-parameter';
@@ -1251,6 +1356,62 @@ export const tests = [
       const diff = Object.keys(want).filter((k) => got[k] !== want[k]);
       check(!diff.length, `andere kaart bij ${diff.slice(0, 5).join(', ')}${diff.length > 5 ? ' …' : ''} (bewust? node tests/fingerprint.mjs --write)`);
       return `${Object.keys(want).length} kaarten gelijk`;
+    },
+  },
+  {
+    name: 'maximumsnelheid: de rijklok schaalt mee (50%, 100%, 200%)',
+    async run() {
+      const out = [];
+      for (const [pct, want] of [[undefined, 100], [100, 100], [50, 50], [150, 150], [200, 200]]) {
+        const w = testWorld('paved');
+        if (pct !== undefined) w.speedMul = G.speedMul(pct);
+        const r = simDrive(w, 1, 100);
+        check(r.x - 50 === want, `snelheid ${pct ?? 'standaard'}%: ${r.x - 50} cellen in 100 ticks, verwacht ${want}`);
+        check(r.fuelUsed === want * G.CLASSES[G.CLASS.paved].fuel, `snelheid ${pct}%: brandstof per cel veranderde (${r.fuelUsed})`);
+        out.push(`${pct ?? 'standaard'}%: ${r.x - 50} cellen`);
+      }
+      // traag terrein schaalt mee: op zachte grond bij 200% twee keer zo ver als bij 100%
+      const base = simDrive(testWorld('soft'), 1, 200).x - 50;
+      const fast = testWorld('soft'); fast.speedMul = G.speedMul(200);
+      const far = simDrive(fast, 1, 200).x - 50;
+      check(Math.abs(far - 2 * base) <= 1, `zachte grond: ${base} cellen bij 100%, ${far} bij 200%`);
+      return `${out.join(', ')}; zachte grond ${base} → ${far}`;
+    },
+  },
+  {
+    name: 'maximumsnelheid: alleen de host stelt hem in (, en .), begrensd, voorspelling klopt',
+    async run(port) {
+      const a = await connectBot(port, 'barbarossa');
+      const b = await connectBot(port, 'barbarossa');
+      await waitFor(() => a.state.game.phase === 'play' && a.me?.a && b.me?.a, 4000);
+      const [host, guest] = a.state.host === a.state.me ? [a, b] : [b, a];
+      check(host.state.speedPct === G.SPEED.start, `beginstand ${host.state.speedPct}`);
+      guest.send({ t: 'cmd', cmd: 'speed', dir: 1 });
+      await sleep(300);
+      check(host.state.speedPct === G.SPEED.start, 'een gast kon de snelheid veranderen');
+      const up = (G.SPEED.max - G.SPEED.start) / G.SPEED.step;
+      for (let k = 0; k < up + 2; k++) host.send({ t: 'cmd', cmd: 'speed', dir: 1 });
+      await waitFor(() => guest.state.speedPct === G.SPEED.max, 2000);
+      check(guest.state.speedPct === G.SPEED.max && host.state.speedPct === G.SPEED.max, `niet begrensd op het maximum: ${host.state.speedPct}`);
+      // rijden op de hoogste snelheid: de voorspelling van de client komt uit waar de server staat
+      const x0 = host.me.x, y0 = host.me.y;
+      const tick = setInterval(() => Sim.advancePrediction(host.state, performance.now()), 10);
+      await drive(host, 1, 0, 800);
+      await sleep(400);
+      clearInterval(tick);
+      const moved = Math.abs(host.me.x - x0) + Math.abs(host.me.y - y0);
+      check(moved > 0, 'de host kwam niet vooruit');
+      const p = host.state.pred;
+      check(p && p.x === host.me.x && p.y === host.me.y, `voorspelling (${p?.x}, ${p?.y}) wijkt af van de server (${host.me.x}, ${host.me.y})`);
+      const down = (G.SPEED.max - G.SPEED.min) / G.SPEED.step;
+      for (let k = 0; k < down + 2; k++) host.send({ t: 'cmd', cmd: 'speed', dir: -1 });
+      await waitFor(() => guest.state.speedPct === G.SPEED.min, 2000);
+      check(guest.state.speedPct === G.SPEED.min, `niet begrensd op het minimum: ${guest.state.speedPct}`);
+      // wie later instapt, krijgt de stand in het instapbericht
+      const c = await connectBot(port, 'barbarossa');
+      check(c.state.speedPct === G.SPEED.min, `instapbericht geeft ${c.state.speedPct}%`);
+      for (const x of [a, b, c]) x.close();
+      return `gast genegeerd, ${G.SPEED.min}–${G.SPEED.max}%, ${moved} cellen gereden met kloppende voorspelling`;
     },
   },
 ];

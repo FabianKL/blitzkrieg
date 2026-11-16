@@ -2,11 +2,12 @@
 // Pas hier aan tijdens het testen; de rest van de code leest alleen deze tabellen.
 
 // Spel en rondes (§2). Een ronde eindigt zodra er een tank dood is; daarna begint iedereen
-// weer in zijn basis met alles vol. Bij 2 spelers wint wie eerst roundsToWin rondes wint,
-// bij meer spelers wie eerst killsToWin kills heeft. roundPauseSeconds: even stil tussen
+// weer in zijn basis met alles vol. Bij 2 spelers en bij teams wint wie eerst roundsToWin rondes
+// wint, bij meer spelers wie eerst zoveel kills heeft (hetzelfde getal: de rondekeuze uit de
+// wachtkamer). roundPauseSeconds: even stil tussen
 // rondes; gameOverSeconds: zo lang staat de winnaar in beeld, daarna een nieuw spel met
 // een nieuwe kaart. Tunnels en andere veranderingen aan de kaart blijven tussen rondes liggen.
-export const GAME = { roundsToWin: 3, killsToWin: 5, roundPauseSeconds: 3, gameOverSeconds: 8, maxPlayers: 4 };
+export const GAME = { roundsToWin: 3, roundPauseSeconds: 3, gameOverSeconds: 8, maxPlayers: 4 };
 
 // Rondekeuze in de wachtkamer (§2): hoeveel rondes je moet winnen (bij 2 spelers), of het aantal
 // kills dat nodig is (bij meer). De host kiest; standaard 3.
@@ -33,9 +34,19 @@ export const DEFAULT_SETTINGS = Object.fromEntries(
 // idleDrainEvery ticks, fireCooldown ticks tussen schoten, deathDigR: krater als hij ontploft.
 // Alle tanks zijn gelijk; per kaart verschilt alleen het uiterlijk.
 export const TANK = { fuelMax: 3000, shieldMax: 100, ammoMax: 50, idleDrainEvery: 10, fireCooldown: 4, deathDigR: 12 };
+// Maximumsnelheid van alle tanks in procenten (host: , en . tijdens het spel). 100 = één cel per
+// tick op de weg. Boven 200 zou een tank per tick verder springen dan zijn eigen vorm overlapt
+// (graven, mijnen). labelSeconds: zo lang staat de nieuwe stand in beeld.
+export const SPEED = { min: 50, max: 200, step: 10, start: 100, labelSeconds: 1.5 };
 // Bijvullen in de eigen basis: fuel per tick, 1 pantser per armorEvery ticks, 1 munitie per
 // ammoEvery ticks (een kaart kan dat uitzetten met refill)
 export const REFILL = { fuel: 15, armorEvery: 4, ammoEvery: 6 };
+// Startplek zonder basis (Market Garden): minstens minDistT van andere tanks, tries pogingen. De
+// plek ligt in het grootste aaneengesloten begaanbare gebied (hoogstens areaTries gebieden bekeken).
+export const SPAWN = { minDistT: 10, tries: 500, areaTries: 8 };
+// Geforceerde storm (host, toets O, op elke kaart): zo lang, met dit zicht (in T), en hoe hij per
+// stijl heet in beeld. Verder werkt hij als een gewone storm: sporenwisser, onderduiken, geen minikaart.
+export const FORCED_STORM = { seconds: 20, visibility: 2, labels: { winter: 'Sneeuwstorm', woestijn: 'Zandstorm', zomer: 'Storm' } };
 // Mijnen (El Alamein): schade en krater
 export const MINES = { damage: 15, digR: 2 };
 
@@ -43,10 +54,12 @@ export const MINES = { damage: 15, digR: 2 };
 // (wie niet antwoordt, wordt afgesloten), max. berichten per seconde per speler en max. grootte.
 // Client: renderDelay ticks buffer voor andere tanks, histLen posities om tussen te interpoleren,
 // maxPred onbevestigde ticks invoer, smoothMs om correcties weg te werken, messageSeconds:
-// zo lang staat een melding van de server in beeld.
+// zo lang staat een melding van de server in beeld. errorLogFirst/errorLogEvery: een fout die de
+// server opvangt, komt de eerste zoveel keer in het log en daarna elke zoveelste keer.
 export const NET = {
   tickRate: 30, heartbeatMs: 5000, maxMsgsPerSec: 60, maxPayload: 4 * 1024,
   renderDelay: 1, histLen: 12, maxPred: 120, smoothMs: 100, messageSeconds: 6,
+  errorLogFirst: 3, errorLogEvery: 300,
 };
 
 // Toegang via internet; de geheimen zelf staan uitsluitend in de serveromgeving.
@@ -406,8 +419,6 @@ export const TERRAIN = {
   ford: { speed: 0.25, fuel: 3, track: 0.6, fade: 0.1, min: 0.0, noTunnel: true },
   // IJs: rijdt als een weg, maar geen tunnel; kaarten kunnen rupsensporen aanzetten.
   ice: { speed: 1.0, fuel: 1, track: 0, fade: 0, min: 0, noTunnel: true },
-  // Verbrande grond (Koersk): hard en zwart; nieuwe sporen zijn juist extra duidelijk
-  burnt: { speed: 0.8, fuel: 2, track: 1.0, fade: 0.008, min: 0.1 },
   // Retro: het originele Tunneler-zand (halve snelheid, tunnels blijven altijd)
   retro: { speed: 0.5, fuel: 3, track: 1.0, fade: 0, min: 1.0 },
 };

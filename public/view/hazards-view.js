@@ -114,13 +114,6 @@ export function createHazardView(v) {
       marks.rect(x - 1.2, y - 1, 2.4, 2).fill(full ? (kind === 'fuel' ? 0x4e6b2a : 0x8a6a2a) : 0x6a6a64);
     });
     props.end();
-    for (const g of game.guns) { // antitankgeschut (Carentan), zichtbaar na het eerste schot
-      const col = g.hp > 0 ? 0x4a4a3a : 0x2a2a26;
-      marks.save(); marks.translateTransform(g.x, g.y); marks.rotateTransform(g.ang);
-      marks.rect(-1.5, -1.2, 3, 2.4).fill(col);
-      marks.rect(0, -0.25, g.hp > 0 ? 4 : 2, 0.5).fill(col);
-      marks.restore();
-    }
     if (game.bridge?.blown && !v.bridgeSprites) drawBridgeWreck(game.bridge.box); // met sprites tekent bridges-view het wrak
   }
   // Opgeblazen brug: brokken beton en geknakte liggers in het water, met water ertussen.
@@ -150,18 +143,6 @@ export function createHazardView(v) {
       marks.save(); marks.translateTransform(hx, hy); marks.rotateTransform((hash(x0, y0, 40 + k) - 0.5) * 1.6);
       marks.rect(-2.2, -0.35, 4.4, 0.7).fill(bridgeGrey(0.5));
       marks.restore();
-    }
-  }
-  // Brandend graan (Koersk): vlammen op de brandende vakken
-  function drawFires(now) {
-    if (!game.fires.size) return;
-    const tw = Math.ceil(G.W / G.T);
-    for (const tile of game.fires) {
-      const x = (tile % tw) * G.T, y = ((tile / tw) | 0) * G.T;
-      for (let k = 0; k < 4; k++) {
-        const fx = x + 1 + ((k * 1.7) % 3.5), fy = y + 1 + ((k * 2.3) % 3.5), f = 0.6 + 0.4 * Math.sin(now / 90 + k * 1.9 + tile);
-        effects.circle(fx, fy, 0.8 + 0.5 * f).fill({ color: (255 << 16) | (Math.round(120 + 80 * f) << 8) | 40, alpha: 0.85 });
-      }
     }
   }
   // Stofwolk achter tanks die over harde grond rijden (Barbarossa, zomer)
@@ -254,5 +235,5 @@ export function createHazardView(v) {
     }
   }
 
-  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawShells, drawObjects: drawObjectsOfHazards, drawFires, drawDust, drawSearchlights, drawMirages, drawLandmarks };
+  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawShells, drawObjects: drawObjectsOfHazards, drawDust, drawSearchlights, drawMirages, drawLandmarks };
 }
