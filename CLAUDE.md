@@ -113,7 +113,7 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
 - K = zelfvernietiging: dood, telt voor niemand als kill.
 - **Host-commando's (op elke map):** O = geforceerde storm (`FORCED_STORM`: 20 s, label naar de
   stijl), N = dag/nacht wisselen, [ ] = zon-/maanstand roteren, M = mist aan/uit (zicht niet meer
-  beperkt door het weer). B = extra barrage, alleen op een map met bombardementen (Ardennen).
+  beperkt door het weer). B = extra barrage, alleen op een map met bombardementen (Ardennen, Oder-front).
   Alleen voor de host, gedeeld voor alle spelers; ook M.
   Dit zijn `cmd`-berichten naar de server; de server checkt host + play-fase.
 - **Winnen**: rondes (2 spelers, teams) of kills (meer spelers), hetzelfde aantal: de rondekeuze uit

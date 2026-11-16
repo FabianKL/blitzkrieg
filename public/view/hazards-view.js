@@ -62,15 +62,11 @@ export function createHazardView(v) {
       }
     }
   }
-  // Aangekondigde barrage: het vak flitst (artillerie) en de boomtoppen trillen (bos, §10.8)
+  // Aangekondigde barrage: het vak flitst (bos, §10.8) of rode schermrandgloed (bombardement)
   function drawBarrage(now) {
     const b = game.barrage;
     if (!b) return;
     const [x0, y0, x1, y1] = b.box, p = 0.5 + 0.5 * Math.sin(now / 70);
-    if (b.kind === 'art') { // §10.9: het vak licht op
-      effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xfff0b4, alpha: 0.12 + 0.18 * p });
-      return;
-    }
     if (b.kind === 'bomb') return; // bombardement: rode schermrandgloed (in world-view.js)
     effects.rect(x0, y0, x1 - x0, y1 - y0).fill({ color: 0xff7828, alpha: 0.08 + 0.12 * p });
     // gestippelde rand: streepjes van 1,5 met gaten van 1

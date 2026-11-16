@@ -4,7 +4,7 @@
 // richtingshint (een groot geluid, §8).
 //
 // Een kaart heeft (config):
-//   hazard  {type, ...}: forestBarrage, bridgeBlast, artillery, facades, bombardment
+//   hazard  {type, ...}: forestBarrage, bridgeBlast, facades, bombardment
 //   scarce  {type, ...}: fuelDepots, ammoDepot, airDrops
 //   meter   {type, ...}: sand, heat, temp (per tank, zie METERS)
 // De server roept aan: roundStart(room, events) bij elke nieuwe ronde (en bij het begin),
@@ -214,71 +214,6 @@ const airDrops = {
   snapshot(room) { return { crates: room.hz.crates || [] }; },
 };
 
-// ---------- Artilleriebarrage (Oder-front, §10.9) ----------
-// Elke everySeconds licht een vak van area x area T op; warningSeconds later wordt het
-// beschoten: armorLoss% voor wie erin staat; daarna kraters (zachte grond).
-const artillery = {
-  roundStart(room) {
-    room.hz.next = room.tick + ticks(room.rules.hazard.everySeconds);
-    room.hz.lightTargets = room.hz.lightTargets || new Map();
-  },
-  step(room, tick, events, hurt) {
-    const cfg = room.rules.hazard, hz = room.hz, w = room.world;
-    if (hz.pending && tick >= hz.pending.at) {
-      const { box } = hz.pending;
-      hz.pending = null;
-      const craters = [];
-      for (let k = 0; k < 6; k++) craters.push([Math.round(box[0] + rnd() * (box[2] - box[0])), Math.round(box[1] + rnd() * (box[3] - box[1])), 3 + Math.floor(rnd() * 3)]);
-      G.markArtillery(w, box, craters);
-      events.push({ t: 'zb', box, craters });
-      for (const t of room.tanks) if (t?.alive && t.x >= box[0] && t.x <= box[2] && t.y >= box[1] && t.y <= box[3]) hurt(t, cfg.armorLoss, events);
-    }
-    // zoeklicht-triggering: tank in de bundel → bundel plakt vast, na stickSeconds artillerie
-    if (cfg.searchlightDelay && room.wx?.flags?.searchlights) {
-      const slCfg = room.wx.flags.searchlights;
-      hz.stuckBeams ??= new Map();
-      // vastgeplakte bundels: volg de tank, controleer of de sticktijd verstreken is
-      for (const [beam, st] of [...hz.stuckBeams]) {
-        const target = room.tanks.find((o) => o?.id === st.tankId);
-        if (target?.alive) { st.x = target.x; st.y = target.y; }
-        if (tick >= st.until) {
-          hz.stuckBeams.delete(beam);
-          hz.lightTargets.delete(st.tankId);
-          const half = (cfg.area * G.T) / 2;
-          hz.pending = { box: [Math.round(st.x - half), Math.round(st.y - half), Math.round(st.x + half), Math.round(st.y + half)], at: tick + ticks(cfg.warningSeconds) };
-          events.push({ t: 'z', box: hz.pending.box, at: hz.pending.at, kind: 'art' });
-          events.push({ t: 'slr', beam });
-        }
-      }
-      // detectie: welke spot bevat een tank? (gebruik stuckBeams zodat vastgeplakte spots meebewegen)
-      const beams = searchlightBeams(slCfg, tick - room.mapTick, hz.stuckBeams);
-      for (const t of room.tanks) {
-        if (!t?.alive) continue;
-        for (let k = 0; k < beams.length; k++) {
-          if (hz.stuckBeams.has(k)) continue;
-          const b = beams[k];
-          if (((t.x - b.cx) / b.rx) ** 2 + ((t.y - b.cy) / b.ry) ** 2 <= 1) {
-            const stickSec = slCfg.stickSeconds ?? cfg.searchlightDelay;
-            hz.stuckBeams.set(k, { tankId: t.id, x: t.x, y: t.y, until: tick + ticks(stickSec) });
-            events.push({ t: 'sls', beam: k, x: t.x, y: t.y });
-            break;
-          }
-        }
-      }
-    }
-    if (tick < hz.next) return;
-    hz.next = tick + ticks(cfg.everySeconds);
-    const half = (cfg.area * G.T) / 2, x = half + rnd() * (G.W - 2 * half), y = half + rnd() * (G.H - 2 * half);
-    hz.pending = { box: [Math.round(x - half), Math.round(y - half), Math.round(x + half), Math.round(y + half)], at: tick + ticks(cfg.warningSeconds) };
-    events.push({ t: 'z', box: hz.pending.box, at: hz.pending.at, kind: 'art' });
-  },
-  snapshot(room) {
-    const out = room.hz.pending ? { barrage: { ...room.hz.pending, kind: 'art' } } : {};
-    if (room.hz.stuckBeams?.size) out.stuckBeams = [...room.hz.stuckBeams].map(([k, v]) => [k, v.x, v.y]);
-    return out;
-  },
-};
-
 // ---------- Instortende gevels (Berlijn, §10.10) ----------
 // Wie vlak naast een gebouw rijdt of staat: elke seconde chancePerSecond kans op een vallende
 // gevel (armorLoss%). Wie tegen een gebouw aan rijdt: zeker (rammingLoss%). Een gebouw met
@@ -372,7 +307,6 @@ const bombardment = {
   roundStart(room) {
     const cfg = room.rules.hazard;
     room.hz.active = room.hz.active || [];
-    room.hz.lightTargets = room.hz.lightTargets || new Map();
     room.hz.barrageCount = 0;
     const first = cfg.intervals ? cfg.intervals[0] : cfg.everySeconds;
     room.hz.next = first ? room.tick + ticks(first) : Infinity;
@@ -383,32 +317,53 @@ const bombardment = {
     // lopende bombardementen: inslagen verspreid over durationSeconds
     for (let k = hz.active.length - 1; k >= 0; k--) {
       const b = hz.active[k];
-      if (tick >= b.end) { hz.active.splice(k, 1); events.push({ t: 'zb', box: b.box, kind: 'bomb' }); continue; }
+      if (tick >= b.end) {
+        hz.active.splice(k, 1);
+        const ev = { t: 'zb', box: b.box, kind: 'bomb' };
+        if (cfg.craters) {
+          const craters = b.impacts.map(([x, y, r]) => [x, y, r]);
+          G.markArtillery(w, b.box, craters);
+          ev.craters = craters;
+        }
+        events.push(ev);
+        continue;
+      }
       // inslagen uit de vooraf gekozen lijst, gelijkmatig verdeeld over [start, end)
       while (b.nextIdx < b.impacts.length) {
-        const frac = b.impacts.length <= 1 ? 0 : b.nextIdx / (b.impacts.length - 1);
+        const frac = b.nextIdx / b.impacts.length;
         if (tick < b.start + Math.round(frac * (b.end - b.start))) break;
         const [ix, iy, r] = b.impacts[b.nextIdx++];
-        // v: de inslag velt de begroeiing; de clients doen hetzelfde (terrain.js blastVegetation)
         if (cfg.destroysPine) G.blastVegetation(w, ix, iy, r);
         events.push({ t: 'zi', x: ix, y: iy, r, ...(cfg.destroysPine ? { v: 1 } : {}) });
         for (const t of room.tanks) if (t?.alive && t.x >= b.box[0] && t.x <= b.box[2] && t.y >= b.box[1] && t.y <= b.box[3]) hurt(t, b.armorLoss, events);
       }
     }
-    // zoeklicht-triggering
+    // zoeklicht-triggering: bundel plakt vast aan de tank, na stickSeconds bombardement
     if (cfg.searchlightDelay && room.wx?.flags?.searchlights) {
-      for (const t of room.tanks) {
-        if (!t?.alive) continue;
-        if (searchlightAt(room.wx.flags.searchlights, tick - room.mapTick, t.x, t.y)) {
-          if (!hz.lightTargets.has(t.id)) hz.lightTargets.set(t.id, { x: t.x, y: t.y, at: tick + ticks(cfg.searchlightDelay) });
-        } else {
-          hz.lightTargets.delete(t.id);
+      const slCfg = room.wx.flags.searchlights;
+      hz.stuckBeams ??= new Map();
+      for (const [beam, st] of [...hz.stuckBeams]) {
+        const target = room.tanks.find((o) => o?.id === st.tankId);
+        if (target?.alive) { st.x = target.x; st.y = target.y; }
+        if (tick >= st.until) {
+          hz.stuckBeams.delete(beam);
+          startBombardment(hz, tick, st.x, st.y, half, cfg, events);
+          events.push({ t: 'slr', beam });
         }
       }
-      for (const [id, lt] of [...hz.lightTargets]) {
-        if (tick < lt.at) continue;
-        hz.lightTargets.delete(id);
-        startBombardment(hz, tick, lt.x, lt.y, half, cfg, events);
+      const beams = searchlightBeams(slCfg, tick - room.mapTick, hz.stuckBeams);
+      for (const t of room.tanks) {
+        if (!t?.alive) continue;
+        for (let k = 0; k < beams.length; k++) {
+          if (hz.stuckBeams.has(k)) continue;
+          const b = beams[k];
+          if (((t.x - b.cx) / b.rx) ** 2 + ((t.y - b.cy) / b.ry) ** 2 <= 1) {
+            const stickSec = slCfg.stickSeconds ?? cfg.searchlightDelay;
+            hz.stuckBeams.set(k, { tankId: t.id, x: t.x, y: t.y, until: tick + ticks(stickSec) });
+            events.push({ t: 'sls', beam: k, x: t.x, y: t.y });
+            break;
+          }
+        }
       }
     }
     // timer-gebaseerd bombardement (vast interval of versnellend)
@@ -423,10 +378,11 @@ const bombardment = {
     }
   },
   snapshot(room) {
-    return {
+    const out = {
       barrage: room.hz.active?.map((b) => ({ box: b.box, level: b.level, end: b.end, impacts: b.impacts })) || [],
-      lightTargets: [...(room.hz.lightTargets || new Map()).entries()].map(([id, lt]) => ({ id, ...lt })),
     };
+    if (room.hz.stuckBeams?.size) out.stuckBeams = [...room.hz.stuckBeams].map(([k, v]) => [k, v.x, v.y]);
+    return out;
   },
 };
 // Bepaal het centrum van een bombardement: nabij een levende speler of willekeurig op de kaart
@@ -472,7 +428,7 @@ function startBombardment(hz, tick, cx, cy, half, cfg, events) {
   events.push({ t: 'z', box, at: warnEnd, kind: 'bomb', level, impacts });
 }
 
-const HAZARDS = { forestBarrage, bridgeBlast, artillery, facades, bombardment };
+const HAZARDS = { forestBarrage, bridgeBlast, facades, bombardment };
 const SCARCE = { fuelDepots, ammoDepot, airDrops };
 const parts = (room) => [HAZARDS[room.rules.hazard?.type], SCARCE[room.rules.scarce?.type]].filter(Boolean);
 

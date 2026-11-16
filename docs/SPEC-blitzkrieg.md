@@ -615,8 +615,8 @@ dubbel brandstofverbruik op zacht en moeras.
 
 | Wanneer | Effect |
 |---|---|
-| Ronde 1–2 | Zomerhitte, zicht 12 T. Branden en rook (rookvlek bij vuur, 20 s). |
-| Vanaf ronde 3 | Onweer: branden doven, schoten steken graan nog aan met 3% kans. Zwarte aarde → moeras. Zicht 8 T. |
+| Ronde 1–2 | Zomerhitte, zicht 12 T. Slagveldrook bij vuurgevechten. |
+| Vanaf ronde 3 | Onweer met regen: zwarte aarde → moeras. Zicht 8 T. |
 
 **Tanks:** A = T-34, B = Panther.
 
@@ -769,8 +769,11 @@ brandstof aangevuld: de depots zijn de enige bron.
   (1 eigen opening, 2 wegen erdoorheen).
 - Geen dorp.
 
-**Gevaar — artilleriebarrage:** elke 60 s licht een willekeurig vak van 3×3 T op. Na 3 s
-beschoten: 30% pantser. Daarna kraters (zacht).
+**Gevaar — bombardement:** elke 60 s licht een willekeurig vak van 3×3 T op. Na 3 s
+bombardement in drie zwaartegraden (dezelfde als Ardennen: licht 10%/3 inslagen,
+gemiddeld 20%/6, zwaar 30%/10). Inslagen laten kraters achter (zacht). Een tank die in een
+zoeklichtbundel komt, triggert een bombardement op die positie (bundel plakt 1 s vast,
+daarna 3 s waarschuwing). De host kan met **B** een extra barrage starten.
 
 **Schaars middel:** geen. Standaardregels.
 
@@ -841,18 +844,17 @@ de basis. Brandstof en munitie gewoon aanvullen.
 Pijltjes of WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = inzoomen,
 0 = uitzoomen. In je eigen basis: repareren en herladen.
 
-**Host-commando's (alleen op de Ardennen):**
-- **B** = extra bombardement nabij een speler (telt niet mee voor de automatische versnelling).
-- **O** = geforceerde sneeuwstorm (20 s).
+**Host-commando's (op elke map):**
+- **O** = geforceerde storm van 20 s (sneeuwstorm, zandstorm of storm, naar de stijl van de map).
 - **N** = dag/nacht wisselen (alle spelers).
 - **[** / **]** = zon-/maanstand roteren (8 stappen, alle spelers).
-
-**Host-commando op elke map:**
+- **M** = mist aan/uit: het zicht wordt niet meer door het weer beperkt (alle spelers).
+- **B** = extra bombardement nabij een speler (alleen op een map met bombardementen; telt niet mee
+  voor de automatische versnelling).
 - **,** / **.** = maximumsnelheid van alle tanks omlaag / omhoog (stappen van 10%, 50–200%).
   De stand staat kort in beeld bij alle spelers; een nieuw spel begint op 100%.
 
-**Per speler:**
-- **M** = lokale atmosferische mist aan/uit (alleen op je eigen scherm).
+Backspace toont de toetsen in beeld.
 
 ### 11.2 Touch (tablet en telefoon)
 
