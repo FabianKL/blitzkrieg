@@ -338,8 +338,10 @@ export function startWorld(style, game) {
     }
     if (e.t === 'fb' && e.fell) { plantFelled(fields, game.map, gpu, e.box); buildObjects(e.box); objectView.rebuild(e.box); }
     if (e.t === 'fc') gpu.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
-    if (e.t === 'gun' && e.tx !== undefined) { particles.spawn('flash', e.x, e.y, 1, { life: 0.2, r0: 1, r1: 3 }); }
-    if (e.t === 'zi') { objectView.addCrater(e.x, e.y, e.r); shake = Math.max(shake, 0.15); }
+    if (e.t === 'zi') {
+      if (e.fell) { plantFelled(fields, game.map, gpu, e.box); buildObjects(e.box); objectView.rebuild(e.box); } // bomen weg
+      objectView.addCrater(e.x, e.y, e.r); shake = Math.max(shake, 0.15);
+    }
     if (e.t === 'zb') { // barrage: kapotte boomtoppen (bos) of artillerie
       const [x0, y0, x1, y1] = e.box;
       gpu.markRect(x0, y0, x1, y1);
@@ -543,6 +545,9 @@ export function startWorld(style, game) {
   const roundLabel = createLabel(L.ui), gaugeG = L.ui.addChild(new Graphics()), gaugeLabel = createLabel(L.ui);
   const zoomLabel = createLabel(L.ui);
   let zoomLabelUntil = 0;
+  // maximumsnelheid (, en . van de host): de nieuwe stand staat even in beeld
+  const speedLabel = createLabel(L.ui);
+  let speedLabelUntil = 0, speedSeqSeen = game.speedSeq;
   // Schaduwen: dezelfde vorm in het zwart, iets verschoven (licht van linksboven)
   // Eén lichtbron (look.light) voor tanks, bases, bomen en rotsen; de stijl kiest de kleur
   const SHADOW = { dx: 0, dy: 0, alpha: 0, color: style.shadow?.color ?? 0x000000 };
@@ -839,7 +844,6 @@ export function startWorld(style, game) {
     effects.clear();
     hz.drawBarrage(now);
     hz.drawShells(now);
-    hz.drawFires(now);
     hz.drawDust();
     particles.update(dt);
     drawSmokes(now);
@@ -1353,7 +1357,7 @@ export function startWorld(style, game) {
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     world.visible = L.ui.visible = !!game.map;
-    if (game.map && mapReady) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawZoomLabel(now); side.drawMinimap(); }
+    if (game.map && mapReady) { drawWorld(now, dt); drawRoundLabel(); drawGauge(); drawZoomLabel(now); drawSpeedLabel(now); side.drawMinimap(); }
     side.drawCard(now);
     if (game.status === 'playing') gameOverlay();
     gpu.flushSwatches(); // legenda: uitsnedes van de grond
@@ -1396,7 +1400,7 @@ export function startWorld(style, game) {
 
   // Rondenummer en hoe je wint, linksonder in beeld
   function drawRoundLabel() {
-    const goal = G.scoreMode(game.tanks.size, game.gameMode) === 'rounds' ? `${game.rounds} RONDES WINT` : `${game.rounds} KILLS WINT`;
+    const goal = G.scoreMode(game.scorePlayers ?? game.tanks.size, game.gameMode) === 'rounds' ? `${game.rounds} RONDES WINT` : `${game.rounds} KILLS WINT`;
     const s = devicePixelRatio || 1;
     roundLabel.set(`RONDE ${game.game.round} · ${goal}`, { size: 12 * s, pad: 8 * s, h: 22 * s });
     roundLabel.at(8 * s, canvas.height - 30 * s);
@@ -1407,6 +1411,15 @@ export function startWorld(style, game) {
     const s = devicePixelRatio || 1;
     zoomLabel.set(`ZOOM ${ZOOM.toFixed(1)}×`, { size: 14 * s, pad: 10 * s, h: 26 * s, color: 0xf0e6c8, bg: 0x100c08, alpha: 0.82 });
     zoomLabel.at((canvas.width - zoomLabel.width) / 2, 44 * s);
+  }
+
+  function drawSpeedLabel(now) {
+    if (game.speedSeq !== speedSeqSeen) { speedSeqSeen = game.speedSeq; speedLabelUntil = now + G.SPEED.labelSeconds * 1000; }
+    if (now >= speedLabelUntil) { speedLabel.hide(); return; }
+    const s = devicePixelRatio || 1, pct = game.speedPct;
+    const edge = pct <= G.SPEED.min ? ' (MIN)' : pct >= G.SPEED.max ? ' (MAX)' : '';
+    speedLabel.set(`SNELHEID ${pct}%${edge}`, { size: 14 * s, pad: 10 * s, h: 26 * s, color: 0xf0e6c8, bg: 0x100c08, alpha: 0.82 });
+    speedLabel.at((canvas.width - speedLabel.width) / 2, 76 * s); // onder het zoomlabel
   }
 
   // Wat een stijl nodig heeft voor zijn effecten, en wat de spelpagina gebruikt (hooks, destroy)

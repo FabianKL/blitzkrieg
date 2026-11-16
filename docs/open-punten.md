@@ -65,16 +65,18 @@ of nummers op de sprite (keuze van de eigenaar); de vage contour is geschrapt, e
 kijkboog buiten de cirkel wordt gewoon getekend. Nog door de eigenaar te controleren: de keuze
 van de tanks per map (§5) en hoe de rupsen eruitzien in het spel.
 
-### Eén basis per team
-Eén basis per team, niet per speler. Bij 2v2 zijn dat 2 bases (één per team); bij ieder voor zich
-met 4 spelers zijn het er 4. Teken ook alleen het aantal bases dat nodig is voor het aantal spelers:
-bij twee spelers maximaal twee bases.
-
 ## Bugs
 
 ### Wegen worden niet goed getekend
 Er worden happen uit wegen gehaald waar ze water of een andere weg kruisen. De weg hoort daar
-doorlopend getekend te worden.
+doorlopend getekend te worden. Eén oorzaak is weg: zijwegen liepen als middellijn over water, rots
+of een basiszone terwijl daar geen wegcellen lagen; ze lopen er nu omheen (of komen er niet), en op
+de Ardennen ligt een basis niet meer op een rechte weg. Nog in de browser te controleren: of de
+happen bij water daarmee weg zijn, en de kruising van twee wegen (niet onderzocht).
+
+### Lege basis bij een gat in de spelers
+Bij START krijgt de kaart zoveel bases als het hoogste bezette spelersnummer. Stapt in de wachtkamer
+iemand uit die niet de laatste was (speler 2 van 3), dan blijft zijn basis leeg op de kaart staan.
 
 ### Verborgen tank toont tunnel aan tegenstander
 Als een tank ondergesneeuwd of ondergestoven is (bedekt), ziet de tegenstander een tunnel op die

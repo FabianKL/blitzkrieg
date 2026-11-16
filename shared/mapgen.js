@@ -388,6 +388,13 @@ function tryMap(seed, rules, players) {
     for (let i = 0; i < N; i++) if (!border[i]) { P0++; if (terrain[i] === CLASS.paved && fixedClass[i]) paved++; }
     const want = (((rules.terrainPercent.paved || 0) - 1) / 100) * P0;
     const srz = rules.sideRoadZone; // [x0, y0, x1, y1] genormaliseerd, alleen hier zijwegen
+    // Een zijweg legt geen brug en breekt niet door rots of huizen: hij loopt om water, ijs, rots,
+    // gebouwen en de beschermde zones heen. Kan hij niet om water, ijs, rots of een gebouw heen,
+    // dan komt hij er niet (anders loopt de middellijn voor de weergave door terwijl de wegcellen
+    // ontbreken: een hap uit de weg).
+    const avoid = new Uint8Array(N), solid = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (!border[i] && (map[i] === WATER || map[i] === ROCK || map[i] === BUILDING || (terrain[i] === CLASS.ice && fixedClass[i]))) solid[i] = 1; // (de rand telt niet: daar begint de weg)
+    for (let i = 0; i < N; i++) if (zone[i] || solid[i]) avoid[i] = 1;
     for (let k = 0; paved < want && k < 12; k++) {
       const side = Math.floor(rnd() * 4), u = 0.1 + rnd() * 0.8;
       const af = [[u, 0], [u, 1], [0, u], [1, u]][side];
@@ -401,13 +408,16 @@ function tryMap(seed, rules, players) {
         if (d < bd) { bd = d; best = [i % W, (i / W) | 0]; }
       }
       if (!best || bd < 8 * T) continue; // minstens 8T lang, anders is het een stomp stukje
-      const path = routePath(a, best, zone, roadWidth / 2 + 1, noise, 900 + k, 0.1, false);
+      const path = routePath(a, best, avoid, roadWidth / 2 + 1, noise, 900 + k, 0.1, false);
+      const cells = [];
+      let broken = false;
+      stroke(path, roadWidth / 2, (i) => { if (solid[i]) broken = true; else if (open(i)) cells.push(i); });
+      if (broken) continue; // geen route om het obstakel heen
       roads.push({ path, width: roadWidth, class: 'paved' });
-      stroke(path, roadWidth / 2, (i) => {
-        if (!open(i) || map[i] === WATER || map[i] === BUILDING || map[i] === ROCK || (terrain[i] === CLASS.ice && fixedClass[i])) return;
+      for (const i of cells) {
         if (!(terrain[i] === CLASS.paved && fixedClass[i])) paved++;
         setPaved(i);
-      });
+      }
     }
   }
   // doorwaadbare plekken (3 T lang), niet bij een brug
@@ -944,6 +954,16 @@ function placeBases(n, rnd, isBorder, villages, rivers, pt, rules, lakeExclude) 
   const hw = BASE_W >> 1, hh = BASE_H >> 1, pad = 3 * T;
   const mx = hw + pad + 14, my = hh + pad + 4; // rand van rots tot 13 dik
   const sepX = BASE_W + pad + VIEW_CELLS.w / 2, sepY = BASE_H + pad + VIEW_CELLS.h / 2;
+  // Een rechte weg (Ardennen) buigt niet om een basis heen: de basis komt ernaast te liggen, anders
+  // zit er een gat in de weg. Punten om de 2 cellen langs elke rechte weg, met de halve breedte.
+  const straight = (rules.features || []).filter((g) => g.type === 'road' && g.straight).flatMap((f) => {
+    const [ax, ay] = pt(f.from), [bx, by] = pt(f.to), n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2)), r = (f.width * T) / 2 + 1;
+    return Array.from({ length: n + 1 }, (_, s) => [ax + ((bx - ax) * s) / n, ay + ((by - ay) * s) / n, r]);
+  });
+  const onStraightRoad = (x, y) => straight.some(([px, py, r]) => {
+    const dx = Math.abs(px - x), dy = Math.abs(py - y);
+    return (dx <= hw + pad + r && dy <= hh + pad + r) || (dx <= 2 * T + r && dy <= hh + DOOR_CLEAR + 2 + r); // zone en deurstroken
+  });
   const blocked = (x, y, k = 1, kr = 1) => {
     // de hele rand van basis + 3 T (en de deurstroken) moet vrij van de rotsrand zijn
     for (let px = x - hw - pad; px <= x + hw + pad; px++) if (isBorder(px, y - hh - pad) || isBorder(px, y + hh + pad)) return true;
@@ -962,6 +982,7 @@ function placeBases(n, rnd, isBorder, villages, rivers, pt, rules, lakeExclude) 
       const depth = f.depth * H + 12;
       if (f.side === 'south' ? y + hh + DOOR_CLEAR > H - depth - pad : y - hh - DOOR_CLEAR < depth + pad) return true;
     }
+    if (kr >= 0.6 && onStraightRoad(x, y)) return true; // (in het krapste geval vervalt deze regel)
     // niet in of vlak bij een meer (Leningrad)
     if (lakeExclude?.[y * W + x]) return true;
     return false;
@@ -1361,7 +1382,9 @@ export function makeBorder(map, noise) {
 
 // Bases tekenen: dunne muur in spelerskleur, opening boven en onder, eromheen vrijgemaakt
 export function drawBases(map, veg, bases, isBorder, noise) {
-  const obstacle = (v) => v === ROCK || v === WATER || v === VEG || v === BUILDING;
+  // Geen gebouwen: in de beschermde zone staan er geen, en de trechter voor de deur is breder dan de
+  // zone; daar zou hij een hap uit een huis nemen (een half huis langs de weg bij Bastogne).
+  const obstacle = (v) => v === ROCK || v === WATER || v === VEG;
   const clear = (i) => { map[i] = DIRT; veg[i] = 0; };
   bases.forEach((b, i) => {
     const x0 = b.x - (BASE_W >> 1), y0 = b.y - (BASE_H >> 1);

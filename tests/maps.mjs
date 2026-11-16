@@ -40,8 +40,8 @@ const WEATHER = {
   'fall-gelb': [[1, 10, 10, { vis: null }], [3, 400, 10, { vis: 8 }], [4, 600, 10, { vis: null }]],
   barbarossa: [[1, 10, 10, { vis: 10, flag: 'dust' }], [2, 300, 10, { vis: 10 }], [3, 500, 10, { vis: 8, flag: 'mud' }]],
   'el-alamein': [[1, 10, 10, { vis: 10, flag: 'mirages' }], [2, 75, 30, { vis: 2, eraser: true, burial: true }]],
-  leningrad: [[1, 10, 0, { vis: 12 }], [1, 150, 150, { vis: 7 }], [3, 75, 75, { vis: 2, eraser: true }], [5, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
-  koersk: [[1, 10, 10, { vis: 12, flag: 'fires' }], [3, 400, 10, { vis: 8, flag: 'thunder' }]],
+  leningrad: [[1, 10, 0, { vis: 12 }], [1, 150, 150, { vis: 7 }], [3, 75, 75, { vis: 2, eraser: true }], [4, 75, 0, { vis: 12, eraser: false, flag: 'thawed' }]],
+  koersk: [[1, 10, 10, { vis: 12, flag: 'battleSmoke' }], [3, 400, 10, { vis: 8, flag: 'thunder' }]],
   carentan: [[1, 10, 10, { vis: 4 }], [2, 300, 10, { vis: 12 }], [2, 350, 50, { vis: 8, eraser: 'nearWater' }]],
   'market-garden': [[1, 10, 10, { vis: 12 }], [3, 400, 10, { vis: 8 }]],
   ardennen: [[1, 0, 0, { vis: 2 }], [3, 10, 10, { vis: null, noflag: 'fog' }]],
@@ -49,7 +49,7 @@ const WEATHER = {
   berlijn: [[1, 10, 10, { vis: 12 }], [2, 300, 10, { vis: 8 }], [3, 500, 10, { vis: 6 }], [5, 900, 10, { vis: 6 }]],
 };
 // Terreinveranderingen per ronde (ronde -> aantal)
-const CHANGES = { 'fall-gelb': { 2: 1, 3: 1, 4: 1, 5: 0 }, barbarossa: { 3: 1, 4: 0 }, leningrad: { 5: 1 }, koersk: { 3: 1 } };
+const CHANGES = { 'fall-gelb': { 2: 1, 3: 1, 4: 1, 5: 0 }, barbarossa: { 3: 1, 4: 0 }, leningrad: { 4: 1 }, koersk: { 3: 1 } };
 
 export const mapTests = [
   {
@@ -141,20 +141,16 @@ export const mapTests = [
     },
   },
   {
-    name: 'gevaren: brandend graan, ontploffende brug, artillerie, instortende gevels',
+    name: 'gevaren: ontploffende brug, artillerie, instortende gevels (Koersk heeft geen gevaar)',
     async run() {
       const out = [];
       try {
-        // Koersk: schot op graan steekt aan, vuur springt met de wind mee, wie erin staat verliest pantser, daarna verbrand
+        // Koersk: de graanbrand is geschrapt; er is geen gevaar meer, alleen de motortemperatuur
         let room = fakeRoom('koersk'), t = room.tanks[0], ev = [];
         Hz.roundStart(room, ev);
-        check(placeOn(room, t, (i) => room.world.terrain[i] === G.CLASS.normal && room.world.map[i] === G.DIRT), 'geen graan');
-        withRandom(0, () => Hz.bulletLanded(room, t.x, t.y, ev));
-        check(ev.some((e) => e.t === 'fi'), 'schot op graan stak niets aan');
-        for (let k = 1; k <= 16 * G.TICK_RATE; k++) { room.tick = k; Hz.step(room, k, ev, hurt); }
-        check(t.shield < G.SHIELD_MAX, 'geen schade in het vuur');
-        check(room.world.terrain.includes(G.CLASS.burnt), 'niets verbrand na 15 s');
-        out.push(`graanbrand (${ev.filter((e) => e.t === 'fi').length} vakken)`);
+        for (let k = 1; k <= 130 * G.TICK_RATE; k += 7) { room.tick = k; Hz.step(room, k, ev, hurt); }
+        check(!G.MAPS.koersk.hazard && !ev.length && t.shield === G.SHIELD_MAX, `Koersk: toch een gevaar (${ev.map((e) => e.t).join(', ')})`);
+        out.push('Koersk zonder gevaar');
         // Market Garden: over de brug = kans op ontploffing (10%, +5% per oversteek), brug weg tot de volgende ronde
         room = fakeRoom('market-garden'); t = room.tanks[0]; ev = [];
         Hz.roundStart(room, ev);

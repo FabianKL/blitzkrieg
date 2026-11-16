@@ -118,6 +118,20 @@ export function checkGeneratedMap(id, w, players, size) {
     const seen = G.reachable(w.map, w.bases[0]);
     check(w.bases.every((b) => seen[b.y * G.W + b.x]), `${tag}: niet alle bases bereikbaar`);
   }
+  // de middellijn van een weg (voor de weergave) ligt nooit op water: daar hoort een brug te liggen,
+  // of de weg loopt eromheen. Behalve bij een weg die bewust geen brug krijgt (bridges: false).
+  if (!(rules.features || []).some((f) => f.type === 'road' && f.bridges === false)) {
+    for (const r of w.roads || []) {
+      for (let k = 0; k < r.path.length - 1; k++) {
+        const [ax, ay] = r.path[k], [bx, by] = r.path[k + 1], n = Math.ceil(Math.hypot(bx - ax, by - ay)) || 1;
+        for (let s = 0; s <= n; s++) {
+          const x = Math.round(ax + ((bx - ax) * s) / n), y = Math.round(ay + ((by - ay) * s) / n);
+          if (!G.inBounds(x, y) || w.border?.[y * G.W + x]) continue;
+          check(w.map[y * G.W + x] !== G.WATER, `${tag}: weg loopt bij (${x}, ${y}) over water zonder brug`);
+        }
+      }
+    }
+  }
   // bruggen minstens 3 T breed (de maat langs de rivier; de andere is de oversteek)
   for (const br of w.bridges) {
     if (br.cells < 4 * T * T) continue; // weg over het puntje van een rivier, geen echte brug

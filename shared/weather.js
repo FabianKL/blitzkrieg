@@ -16,10 +16,13 @@
 //             stormCover ervan toe; ground: gewicht per terreinklasse (ontbreekt = 1) (terrain.js
 //             fadeStep). rain: {min, max, period}: regen voor in beeld (0..1, verandert niets aan
 //             sporen); lightning: {every}: bliksem, gemiddeld elke `every` seconden een flits.
-//             En vrije vlaggen voor de kaart (fog, drops, fires, ...)
+//             En vrije vlaggen voor de kaart (fog, battleSmoke, ...)
 // scale: alle seconden keer scale (de tests draaien met een snelle klok).
+// storm: de instelling Storm uit de wachtkamer (LOBBY_SETTINGS.stormFreq): alleen de pauze tussen
+// terugkerende buien en stormen keer storm (2 = half zo vaak, 0,5 = twee keer zo vaak), 0 = ze
+// komen niet. De duur van de storm en al het andere weer (mist, sneeuwval, schemering) blijven gelijk.
 import { TICK_RATE } from './world.js';
-import { LIGHTNING, TRACK_ERASER } from './config.js';
+import { FORCED_STORM, LIGHTNING, TRACK_ERASER } from './config.js';
 
 // Vast toeval uit een geheel getal (0..1): server en clients krijgen dezelfde waarde
 function hash01(n) {
@@ -63,7 +66,7 @@ export function lightningAt(cfg, since, scale = 1) {
 // warn = hij begint binnen TRACK_ERASER.warnSeconds (alleen terugkerende regels).
 // roundPattern: [1, 1, 0] → actief in rondes 1, 2, niet 3, weer 4, 5, niet 6, enz.
 // randomEvery: {min, max} → terugkerend met wisselend interval (deterministisch uit hash01)
-export function ruleState(rule, round, tGame, tRound, scale = 1) {
+export function ruleState(rule, round, tGame, tRound, scale = 1, storm = 1) {
   if (rule.untilRound && round > rule.untilRound) return null;
   if (rule.roundPattern && !rule.roundPattern[(round - 1) % rule.roundPattern.length]) return null;
   const f = rule.from || {};
@@ -73,19 +76,20 @@ export function ruleState(rule, round, tGame, tRound, scale = 1) {
   else if (f.secondsInGame !== undefined) since = tGame - f.secondsInGame * scale;
   else since = f.round ? tRound : tGame;
   if (since < 0) return null;
-  if (rule.randomEvery) return randomRuleState(rule, since, scale);
+  if ((rule.randomEvery || rule.every) && !storm) return null; // stormen uit
+  if (rule.randomEvery) return randomRuleState(rule, since, scale, storm);
   if (!rule.every) return { since, left: Infinity, warn: false };
-  const every = rule.every * scale, dur = rule.duration * scale, p = since % every, start = every - dur;
+  const dur = rule.duration * scale, start = (rule.every - rule.duration) * scale * storm, every = start + dur, p = since % every;
   if (p >= start) return { since: p - start, left: every - p, warn: false };
   return { since: null, left: start - p, warn: p >= start - TRACK_ERASER.warnSeconds * scale };
 }
 
 // Terugkerend met wisselend interval: elk slot duurt gap + duration, met gap uit hash01
-function randomRuleState(rule, since, scale) {
+function randomRuleState(rule, since, scale, storm) {
   const { min, max } = rule.randomEvery, dur = rule.duration * scale;
   let t = 0, slot = 0;
   for (; slot < 200; slot++) {
-    const gap = (min + (max - min) * hash01(slot + 31337)) * scale;
+    const gap = (min + (max - min) * hash01(slot + 31337)) * scale * storm;
     if (t + gap + dur > since) {
       // we zitten in dit slot: vóór of tijdens de bui
       if (since >= t + gap) return { since: since - t - gap, left: t + gap + dur - since, warn: false };
@@ -98,11 +102,11 @@ function randomRuleState(rule, since, scale) {
 
 // Alles wat nu geldt: zichtstraal (de kleinste), sporenwisser, onderduiken, vlaggen, de
 // storm voor in beeld ({label, active, warn, secs}) en de regels die nu actief zijn.
-export function weatherAt(rules, round, tGame, tRound, scale = 1) {
+export function weatherAt(rules, round, tGame, tRound, scale = 1, storm = 1) {
   const out = { visibility: null, eraser: false, burial: false, drift: 0, driftRate: 0, driftGround: null, rain: 0, lightning: 0, flags: {}, storm: null, active: [] };
   let drift = null, stormSeconds = 0;
   for (const rule of rules?.weather || []) {
-    const st = ruleState(rule, round, tGame, tRound, scale);
+    const st = ruleState(rule, round, tGame, tRound, scale, storm);
     if ((rule.every || rule.randomEvery) && st && (st.since !== null || st.warn)) {
       const s = { label: rule.label, active: st.since !== null, warn: st.warn, secs: Math.ceil(st.left) };
       if (!out.storm || (s.active && !out.storm.active)) out.storm = s;
@@ -153,9 +157,21 @@ export function driftRate(cfg, s, stormSeconds) {
   return { driftRate: 1 / D.lightSeconds + (1 / D.heavySeconds - 1 / D.lightSeconds) * k, driftGround: ground };
 }
 
+// Geforceerde storm (host, toets O): de stormeffecten bovenop het weer van nu. Server en browser
+// roepen dit allebei aan zolang hij loopt; secs = seconden tot hij stopt, style = stijl van de kaart.
+export function forceStorm(wx, style, secs) {
+  const F = FORCED_STORM;
+  wx.visibility = wx.visibility === null ? F.visibility : Math.min(wx.visibility, F.visibility);
+  wx.eraser = true;
+  wx.burial = true;
+  wx.drift = Math.max(wx.drift, 1);
+  wx.flags.hidesMinimap = true;
+  if (!wx.storm || !wx.storm.active) wx.storm = { label: F.labels[style] ?? F.labels.zomer, active: true, warn: false, secs: Math.ceil(secs) };
+}
+
 // Vanuit ticks: game0 = tick waarop het spel begon, round0 = tick waarop de ronde begon
-export function weatherAtTick(rules, round, tick, game0, round0, scale = 1) {
-  return weatherAt(rules, round, (tick - game0) / TICK_RATE, (tick - round0) / TICK_RATE, scale);
+export function weatherAtTick(rules, round, tick, game0, round0, scale = 1, storm = 1) {
+  return weatherAt(rules, round, (tick - game0) / TICK_RATE, (tick - round0) / TICK_RATE, scale, storm);
 }
 
 // Terreinveranderingen die bij het begin van deze ronde ingaan: regels met een effect.terrain

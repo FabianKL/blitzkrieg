@@ -33,9 +33,10 @@ export function createSidePanel(v) {
   function paintMini(x, y) {
     if (!miniCanvas || !G.minimapOn(game.rules, game.settings?.minimap)) return;
     const c = at(x, y), idx = y * G.W + x, i = idx * 4;
-    const own = c === G.BASE + game.me || c === G.WALL + game.me;
+    const bi = G.baseIndex(game.me, game.gameMode); // bij teams: de basis van je team
+    const own = c === G.BASE + bi || c === G.WALL + bi;
     let col;
-    if (own) col = c === G.WALL + game.me ? rgb(miniColor(game.me)) : [240, 236, 222]; // muur in je ploegkleur
+    if (own) col = c === G.WALL + bi ? rgb(miniColor(game.me)) : [240, 236, 222]; // muur in je ploegkleur
     else if (c === G.ROCK) col = v.pal.rock;
     else if (c === G.WATER) col = v.pal.water;
     else if (c === G.VEG) col = (hash(x, y) % 3 ? v.pal.veg : lighten(v.pal.veg, 0.12));
@@ -86,7 +87,7 @@ export function createSidePanel(v) {
     for (const d of game.ammoDepots) icon(d[0], d[1], 'ammo');
     for (const c of game.crates) if (c && c[3]) icon(c[0], c[1], c[2]);
     // je eigen basis: een ring eromheen, zodat je hem altijd terugvindt
-    const mine = v.bases[game.me];
+    const mine = v.bases[G.baseIndex(game.me, game.gameMode)]; // bij teams: de basis van je team
     if (mine) {
       g.strokeStyle = '#ffffff'; g.lineWidth = 2 * px;
       g.strokeRect(mine.x0 - 3 * px, mine.y0 - 3 * px, mine.x1 - mine.x0 + 1 + 6 * px, mine.y1 - mine.y0 + 1 + 6 * px);
@@ -106,7 +107,7 @@ export function createSidePanel(v) {
   // Per kaart opgebouwd uit wat er echt ligt, met de namen uit de kaartinstellingen. Het
   // kleurvakje is een uitsnede van de getekende kaart zelf (met objecten), zodat het er precies
   // zo uitziet als in het spel; ligt iets (nog) niet op de kaart, dan de kleur uit de instellingen.
-  const CLASS_LABEL = { paved: 'Verhard', hard: 'Harde grond', normal: 'Grond', soft: 'Zachte grond', marsh: 'Moeras', ford: 'Doorwaadbare plek', ice: 'IJs', burnt: 'Verbrande grond', retro: 'Zand' };
+  const CLASS_LABEL = { paved: 'Verhard', hard: 'Harde grond', normal: 'Grond', soft: 'Zachte grond', marsh: 'Moeras', ford: 'Doorwaadbare plek', ice: 'IJs', retro: 'Zand' };
   function buildLegend() {
     const box = $('legend');
     if (!box) return;

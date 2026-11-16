@@ -4,15 +4,26 @@
 // Dit is de ingang (import * as G): hij geeft alles door uit world.js (maten, celtypes, tankvorm),
 // terrain.js (wat de kaart verandert), movement.js (rijden, kogels), codec.js (kaart over de lijn)
 // en mapgen.js (kaart maken). Hier zelf: rondes en score, en het uiterlijk van de ploegen.
-import { GAME, TOUCH, TANKS } from './config.js';
+import { GAME, TOUCH, TANKS, TANK } from './config.js';
 import { DIRS } from './world.js';
 
-export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH, ROUND_OPTIONS, DEFAULT_ROUNDS, LOBBY_SETTINGS, DEFAULT_SETTINGS } from './config.js';
+export { MAPS, VEGETATION, ICE, GAME, NET, REFILL, T, MAP_SIZES, DEFAULT_SIZE, VISION, MAP_MENU, DEFAULT_MAP, TOUCH, SPEED, SPAWN, FORCED_STORM, ROUND_OPTIONS, DEFAULT_ROUNDS, LOBBY_SETTINGS, DEFAULT_SETTINGS } from './config.js';
 export * from './world.js';
 export * from './terrain.js';
 export * from './movement.js';
 export * from './codec.js';
 export { generateMap } from './mapgen.js';
+
+// Welke basis hoort bij een speler: bij teams delen speler 0 en 2 basis 0, en 1 en 3 basis 1
+export const baseIndex = (id, gameMode) => (gameMode === 'teams' ? id % 2 : id);
+// Volle voorraden met de instellingen van de wachtkamer (brandstof, pantser, munitie)
+export function effectiveMax(settings = {}) {
+  return {
+    fuel: Math.round(TANK.fuelMax * (settings.fuelMul ?? 1)),
+    shield: Math.round(TANK.shieldMax * (settings.shieldMul ?? 1)),
+    ammo: Math.round(TANK.ammoMax * (settings.ammoMul ?? 1)),
+  };
+}
 
 // Uiterlijk van de 4 tanks op een kaart (§4): ploeg A en B kiezen een tank uit TANKS (config),
 // C en D rijden een variant daarvan. Alleen het uiterlijk; alle tanks rijden, schieten en
@@ -26,7 +37,8 @@ export function teamsFor(rules) {
 }
 
 // ---------- Spel en rondes (§2) ----------
-// Telwijze: bij teams of hoogstens 2 spelers gewonnen rondes, daarboven kills
+// Telwijze: bij teams of hoogstens 2 spelers gewonnen rondes, daarboven kills. players = het aantal
+// waarmee het spel begon (de server legt het bij START vast), niet wie er op dit moment is.
 export const scoreMode = (players, gameMode) => (gameMode === 'teams' || players <= 2 ? 'rounds' : 'kills');
 // Score die iedereen ziet, volgens de telwijze van nu
 export const score = (t, players, gameMode) => (scoreMode(players, gameMode) === 'rounds' ? t.rounds : t.kills);
@@ -46,10 +58,11 @@ export function roundWinner(players, gameMode) {
   return alive.length === 1 ? alive[0].id : -1;
 }
 
-// Heeft iemand het spel gewonnen? players = [{id, rounds, kills}]. Geeft id of -1.
-export function gameWinner(players, cfg = GAME, gameMode = 'ffa') {
-  const mode = scoreMode(players.length, gameMode);
-  const best = players.find((t) => (mode === 'rounds' ? t.rounds >= cfg.roundsToWin : t.kills >= cfg.killsToWin));
+// Heeft iemand het spel gewonnen? players = [{id, rounds, kills}]; count = het aantal spelers voor de
+// telwijze. Rondes of kills: hetzelfde aantal (cfg.roundsToWin, de rondekeuze). Geeft id of -1.
+export function gameWinner(players, cfg = GAME, gameMode = 'ffa', count = players.length) {
+  const mode = scoreMode(count, gameMode);
+  const best = players.find((t) => (mode === 'rounds' ? t.rounds : t.kills) >= cfg.roundsToWin);
   return best ? best.id : -1;
 }
 

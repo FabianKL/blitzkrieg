@@ -259,10 +259,16 @@ Besturing: pijltjes/WASD = rijden, spatie = schieten, K = zelfvernietiging, 9 = 
 0 = uitzoomen. Na een zoomtoets verschijnt het zoomniveau kort bovenin beeld. De zoom verandert
 alleen jouw weergave. Terug in je eigen basis tank, repareer en herlaad je.
 
-**Host-commando's (Ardennen):** B = extra bombardement, O = geforceerde sneeuwstorm (20 s),
-N = dag/nacht wisselen, [ ] = zon-/maanstand roteren (8 stappen). Alleen de host kan deze
-toetsen gebruiken; het effect geldt voor alle spelers. **Per speler:** M = lokale atmosferische
-mist aan/uit (alleen op je eigen scherm).
+**Host-commando's (op elke map):** O = geforceerde storm van 20 s (sneeuwstorm, zandstorm of storm,
+naar de stijl van de map), N = dag/nacht wisselen, [ ] = zon-/maanstand roteren (8 stappen),
+M = mist aan/uit: het zicht wordt dan niet meer door het weer beperkt. B = extra bombardement, alleen
+op een map met bombardementen (Ardennen). Alleen de host kan deze toetsen gebruiken; het effect geldt
+voor alle spelers. Backspace toont de toetsen in beeld.
+
+**Tanksnelheid (host, elke map):** , = maximumsnelheid van alle tanks omlaag, . = omhoog, in
+stappen van 10% tussen 50% en 200% (`SPEED` in `shared/config.js`). De nieuwe stand staat kort
+bovenin beeld bij alle spelers. Terrein en meters remmen naar verhouding even hard, brandstof per
+cel blijft gelijk. Een nieuw spel begint weer op 100%; tussen rondes blijft de stand staan.
 
 Op een tablet of telefoon (iPad, Android) speel je liggend met je duimen; de knoppen verschijnen bij
 de eerste aanraking. Linkerhelft van het veld = zwevende joystick (duim neerzetten en slepen, 8
@@ -290,8 +296,10 @@ is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter staat hij
   verlaat die het spel (de rest speelt door) en wordt de knop "opnieuw meedoen". Gaat de host weg,
   dan wordt de volgende speler host.
 - Een **ronde** eindigt zodra er een tank dood is; daarna begint iedereen weer in zijn eigen basis
-  met alles vol. Bij **2 spelers** wint wie eerst **3 rondes** wint, bij meer spelers wie eerst
-  **5 kills** heeft. Een dood door een gevaar telt voor niemand. Daarna terug naar de wachtkamer.
+  met alles vol. Bij **2 spelers** en bij teams wint wie eerst **3 rondes** wint, bij meer spelers
+  wie eerst **3 kills** heeft (hetzelfde getal: de rondekeuze in de wachtkamer). Of rondes of kills
+  tellen, ligt vast bij START (het ingestelde speleraantal, of minder als er minder spelers zijn) en
+  verandert niet als iemand later instapt of weggaat. Een dood door een gevaar telt voor niemand. Daarna terug naar de wachtkamer.
 - De kaart blijft het hele spel dezelfde; tunnels en sporen blijven tussen rondes liggen.
 
 ## Wat er in het spel zit
@@ -300,7 +308,7 @@ is hij tijdens het spel helemaal afwezig. Bij Tunneler zomer en winter staat hij
 - **Begroeiing en gebouwen** zijn weg te schieten (begroeiing 1–3 treffers, gebouwen 4, daarna puin).
   Een kogel raakt begroeiing over de hele breedte van je tank, en een plant die omgaat neemt alles
   binnen 4 cellen mee: zo schiet je altijd een doorgang waar je tank door past.
-- **Kogels** vliegen over grond en water en stoppen bij een tank, begroeiing, gebouw, rots of geschut.
+- **Kogels** vliegen over grond en water en stoppen bij een tank, begroeiing, gebouw of rots.
 - **Zicht**: binnen je zichtcirkel (de halve hoogte van het beeld) zie je rondom: tegenstanders en
   hun kogels scherp. Gebouwen, begroeiing, rotsen en rook verbergen overal wat erachter ligt. In je
   kijkboog (130° in je rijrichting) kijk je er net langs: je ziet de rand van het obstakel en een
@@ -334,11 +342,11 @@ uit rotsbloksprites uit de atlas van de stijl. Bomen zijn met twee treffers kapo
 | 1940 Grebbeberg | – | munitie alleen bij het depot in Rhenen | inundatie vanaf ronde 2, regen in ronde 3, rook |
 | 1941 Russische vlakte | – | dubbel brandstof in de modder | zomer met stofspoor; vanaf ronde 3 modder |
 | 1942 El Alamein | zandmeter, mijnen | – | hitte met valse contouren; wisselende woestijnwind; zandstorm elke 90 s |
-| 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, wisselende sneeuwval, sneeuwjacht; dooi in ronde 4 |
-| 1943 Koersk | brandend graan | motortemperatuur | zomer met rook; onweer met regen vanaf ronde 3 |
-| 1944 Carentan | verborgen antitankgeschut | – | ochtendmist; regenstorm met onweer elke 120 s (wist sporen bij het water) |
+| 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, wisselende sneeuwval, sneeuwjacht; broos ijs in ronde 2 en 3, dooi vanaf ronde 4 |
+| 1943 Koersk | – | motortemperatuur | zomer met rook; onweer met regen vanaf ronde 3 |
+| 1944 Carentan | – | – | ochtendmist in ronde 1; daarna om de 30–90 s een regenbui met onweer (wist sporen bij het water) |
 | 1944 Arnhem | de brug kan ontploffen (10% per oversteek, +5% na elke oversteek) | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
-| 1944 Ardennen | bombardement nabij spelers (B/O) | brandstofdepots (vast) | mist (M), dag/nacht (N), licht ([ ]), sneeuwstorm |
+| 1944 Ardennen | bombardement nabij spelers (velt bomen) | brandstof alleen bij de 3 vaste depots, niet in de basis | pulserende mist, sneeuwval, sneeuwstorm |
 | 1945 Oder-front | artilleriebarrage | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
 | 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter; ronde 3 regen met onweersbuien |
 
@@ -532,3 +540,16 @@ potnaam van retro.
   de tegels eromheen opnieuw op.
 - **Robuust**: berichten max. 4 KB, max. 60 berichten/s per speler, hartslag elke 5 s ruimt
   verbindingen van slapende laptops op, en een fout in één verbinding laat de server niet crashen.
+  Een fout in een tick of bij het verwerken van een bericht wordt opgevangen en gelogd
+  (`[potje] fout in tick`); de andere potjes en de volgende ticks lopen door.
+- **Bases**: de kaart heeft zoveel bases als nodig (ieder voor zich: één per speler; teams: twee, en
+  je vult bij in de basis van je team). Verandert de host in de wachtkamer het aantal of de modus,
+  dan komt er een nieuwe kaart. Zijn er bij START minder spelers dan ingesteld, dan komt er een kaart
+  met alleen hun bases; wie daarna nog wil instappen en geen basis heeft, moet wachten tot het
+  volgende spel. Op een kaart zonder bases (Arnhem) begin je op een willekeurige vrije plek in het
+  grote begaanbare gebied.
+- **Instelling Storm** (wachtkamer): alleen de pauze tussen terugkerende stormen en buien wordt
+  langer (Langzaam), korter (Snel) of ze blijven weg (Uit). De storm zelf duurt even lang, en mist,
+  sneeuwval en schemering veranderen niet. Server en browser rekenen met dezelfde waarde.
+- **Instellingen Brandstof, Pantser en Munitie** gelden ook voor depots en droppings: een depot vult
+  tot het maximum van dit spel.

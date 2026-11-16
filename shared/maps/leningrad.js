@@ -39,10 +39,10 @@ export default { // §10.4
   tunnelColor: '#3a2f27',
   weather: [
     { label: 'Winterschemering', from: { secondsInRound: 0 }, effect: { visibility: { start: 12, end: 6, overSeconds: 180 } } },
-    { label: 'Sneeuwval', untilRound: 4, effect: { drift: { min: 0.15, max: 0.8, period: 30 } } },
-    storm('Sneeuwjacht', { untilRound: 4 }),
-    { label: 'Ijs wordt broos', from: { round: 3 }, untilRound: 3, effect: { iceBreakMul: 2 } },
-    { label: 'Ijs kraakt', from: { round: 4 }, untilRound: 4, effect: { iceBreakMul: 4 } },
-    { label: 'Dooi', from: { round: 5 }, effect: { terrain: { type: 'thaw', pools: [4, 6], poolRadius: 5 }, thawed: true } },
+    { label: 'Sneeuwval', untilRound: 3, effect: { drift: { min: 0.15, max: 0.8, period: 30 } } },
+    storm('Sneeuwjacht', { untilRound: 3 }),
+    { label: 'Ijs wordt broos', from: { round: 2 }, untilRound: 2, effect: { iceBreakMul: 2 } },
+    { label: 'Ijs kraakt', from: { round: 3 }, untilRound: 3, effect: { iceBreakMul: 4 } },
+    { label: 'Dooi', from: { round: 4 }, effect: { terrain: { type: 'thaw', pools: [4, 6], poolRadius: 5 }, thawed: true } },
   ],
 };

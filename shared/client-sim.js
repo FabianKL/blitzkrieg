@@ -33,6 +33,7 @@ export function createState() {
     settings: { ...G.DEFAULT_SETTINGS }, // lobby-instellingen
     playerCount: G.MAX_PLAYERS, // hoeveel spelers meedoen (2, 3 of 4)
     gameMode: 'ffa', // 'ffa' of 'teams' (alleen bij 4 spelers)
+    scorePlayers: null, // met hoeveel spelers de score telt (vast sinds START); null = wie er nu is
     max: { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX }, // effectieve maxima
     landmarks: [], // herkenningspunten in dorpen: {kind, x, y}
     roads: [], // middellijnen van de wegen (weergave): {p: [[x, y], ...], w: breedte, c: klasse}
@@ -41,8 +42,6 @@ export function createState() {
     smokes: [], // rookvlekken die het zicht blokkeren: {x, y, r, until}
     depots: [], // brandstofdepots: [x, y, vol]
     barrage: null, // aangekondigde (artillerie)barrage: {box, at, kind}
-    fires: new Set(), // brandende vakken (Koersk)
-    guns: [], // zichtbaar antitankgeschut (Carentan): {k, x, y, ang, hp}
     crates: [], // droppings (Market Garden): [x, y, soort, vol]
     bridge: null, // de brug die kan ontploffen (Market Garden): {box, cells, blown}
     ammoDepots: [], // munitiedepots (Grebbeberg): [[x, y], ...]
@@ -51,6 +50,8 @@ export function createState() {
     lightStep: null, // lichtstand 0–7 ([ ]-toetsen, host); null = standaard
     fogOff: false, // mist uit (M-toets, host): voor alle spelers
     forcedStorm: null, // geforceerde storm (O-toets): { end: tick }
+    speedPct: G.SPEED.start, // maximumsnelheid van alle tanks in procenten (, en ., host)
+    speedSeq: 0, // telt elke keer dat de host de snelheid zet (de weergave toont dan de stand)
     vision: null, // zichtstraal in T volgens het weer (null = standaard)
     roundTick: 0, // tick waarop deze ronde begon (weer per ronde)
     weatherScale: 1, // de tests laten het weer sneller lopen
@@ -69,8 +70,6 @@ export function createState() {
 function applyHz(state, hz = {}) {
   state.depots = hz.depots || [];
   state.barrage = Array.isArray(hz.barrage) ? (hz.barrage[0] || null) : (hz.barrage || null);
-  state.fires = new Set(hz.fires || []);
-  state.guns = hz.guns || [];
   state.crates = hz.crates || [];
   state.bridge = hz.bridge || null;
   state.ammoDepots = hz.ammoDepots || [];
@@ -94,6 +93,7 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.max = msg.max ?? { fuel: G.FUEL_MAX, shield: G.SHIELD_MAX, ammo: G.AMMO_MAX };
   state.playerCount = msg.playerCount ?? G.MAX_PLAYERS;
   state.gameMode = msg.gameMode ?? 'ffa';
+  state.scorePlayers = msg.sp ?? null;
   state.landmarks = msg.lm || [];
   state.roads = msg.rd || [];
   state.bridges = msg.br || [];
@@ -127,6 +127,8 @@ export function applyInit(state, msg, hooks = {}, now = 0) {
   state.lightStep = msg.la ?? null;
   state.fogOff = !!msg.mf;
   state.forcedStorm = msg.fs ?? null;
+  state.speedPct = msg.sp ?? G.SPEED.start;
+  state.world.speedMul = G.speedMul(state.speedPct);
   updateWeather(state);
   updateClock(state, msg.k, now);
   resetPrediction(state, now);
@@ -235,6 +237,7 @@ const ON = {
     Object.assign(state.game, { phase: 'play', round: e.n, rw: -1 });
     if (e.m0 !== undefined) state.mapTick = e.m0; // spel gestart: storm- en weerklok beginnen nu
     if (e.r0 !== undefined) state.roundTick = e.r0;
+    if (e.sp !== undefined) state.scorePlayers = e.sp; // telwijze van dit spel
     c.newRound = true;
   },
   hz(state, e) { applyHz(state, e.hz); }, // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
@@ -245,15 +248,6 @@ const ON = {
     else if (e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed);
     else G.markBarrage(state.world, e.box, c.changed);
     state.barrage = null;
-  },
-  fi(state, e) { state.fires.add(e.tile); }, // brand
-  fo(state, e, c) { // uitgebrand: verbrande grond
-    state.fires.delete(e.tile);
-    G.burnTile(state.world, e.tile, c.changed);
-  },
-  gun(state, e) { // geschut vuurt (en is nu zichtbaar) of is geraakt
-    const g = state.guns.find((o) => o.k === e.k);
-    if (g) g.hp = e.hp; else state.guns.push({ k: e.k, x: e.x, y: e.y, ang: e.ang, hp: e.hp });
   },
   bridge(state, e, c) { // brug ontploft of hersteld
     if (!state.bridge) return;
@@ -281,11 +275,20 @@ const ON = {
   W(state, e, c) { G.applyTerrainChange(state.world, e.change, e.extra, c.changed); }, // het weer verandert het terrein
   sls(state, e) { state.stuckBeams ??= new Map(); state.stuckBeams.set(e.beam, { x: e.x, y: e.y }); }, // zoeklicht plakt vast
   slr(state, e) { state.stuckBeams?.delete(e.beam); }, // zoeklicht losgelaten
-  zi(state, e) { }, // bombardement-inslag (alleen visueel: kratersprite in world-view)
+  zi(state, e, c) { // bombardement-inslag {x, y, r, v: velt de begroeiing}; de krater is alleen beeld
+    if (!e.v) return;
+    e.box = G.blastVegetation(state.world, e.x, e.y, e.r, c.changed);
+    e.fell = !!e.box;
+  },
   fs(state, e) { state.forcedStorm = { end: e.end }; }, // geforceerde storm (O-toets)
   dn(state, e) { state.night = !!e.n; }, // dag/nacht wisselt (N-toets)
   la(state, e) { state.lightStep = e.s; }, // lichtstand draait ([ ]-toetsen)
   mf(state, e) { state.fogOff = !!e.off; }, // mist aan/uit (M-toets, host)
+  sp(state, e) { // maximumsnelheid van alle tanks (, en ., host)
+    state.speedPct = e.p;
+    state.world.speedMul = G.speedMul(e.p);
+    state.speedSeq++;
+  },
 };
 
 // ---------- Klok: waar staat de server nu, gezien vanaf deze computer ----------
@@ -307,7 +310,7 @@ export function renderTick(state, now) {
 // Je tank rijdt meteen als je een toets indrukt, met dezelfde regels als de server
 // (G.moveTank). Elke voorspelde tick wordt bewaard met het volgnummer van de invoer
 // en hoeveelste tick met die invoer het is. De server stuurt terug hoe ver hij is
-// (y = [volgnummer, aantal ticks, mv]); wij nemen zijn positie over en spelen
+// (y = [volgnummer, aantal ticks, mv, sp]); wij nemen zijn positie over en spelen
 // de nog niet bevestigde ticks opnieuw af.
 
 // Nieuwe invoer van het toetsenbord: geeft het volgnummer terug om mee te sturen
@@ -321,7 +324,7 @@ function resetPrediction(state, now) {
   const self = state.tanks.get(state.me);
   if (!self || !self.a || self.x === undefined) { state.pred = null; return; }
   state.pred = {
-    x: self.x, y: self.y, dir: self.d, mv: 0,
+    x: self.x, y: self.y, dir: self.d, mv: 0, sp: 0,
     px: self.x, py: self.y, // vorige voorspelde positie (voor vloeiend tekenen)
     offX: 0, offY: 0, // nog weg te werken correctie
     log: [], // onbevestigde ticks: {seq, n, dx, dy}
@@ -338,7 +341,7 @@ function others(state) {
 function simTank(state, from, input) {
   const self = state.tanks.get(state.me);
   if (state.game.phase !== 'play') return { ...from }; // tussen rondes staat alles stil
-  const t = { x: from.x, y: from.y, dir: from.dir, mv: from.mv, fuel: self.f > 0 ? 1e9 : 0, input, slow: self.v };
+  const t = { x: from.x, y: from.y, dir: from.dir, mv: from.mv, sp: from.sp, fuel: self.f > 0 ? 1e9 : 0, input, slow: self.v };
   G.moveTank(t, state.world, others(state));
   return t;
 }
@@ -353,16 +356,16 @@ export function predictStep(state) {
   if (p.log.length > MAX_PRED) p.log.shift();
   const t = simTank(state, p, { dx: state.input.dx, dy: state.input.dy });
   p.px = p.x; p.py = p.y;
-  p.x = t.x; p.y = t.y; p.dir = t.dir; p.mv = t.mv;
+  p.x = t.x; p.y = t.y; p.dir = t.dir; p.mv = t.mv; p.sp = t.sp;
 }
 
-function reconcile(state, [seq, n, mv]) {
+function reconcile(state, [seq, n, mv, sp]) {
   const p = state.pred;
   const self = state.tanks.get(state.me);
   // bevestigde ticks weggooien
   while (p.log.length && (p.log[0].seq < seq || (p.log[0].seq === seq && p.log[0].n <= n))) p.log.shift();
   // vanaf de serverpositie de rest opnieuw afspelen
-  let s = { x: self.x, y: self.y, dir: self.d, mv: mv | 0 };
+  let s = { x: self.x, y: self.y, dir: self.d, mv: mv | 0, sp: sp | 0 };
   for (const e of p.log) s = simTank(state, s, { dx: e.dx, dy: e.dy });
   if (s.x !== p.x || s.y !== p.y) {
     // verschil zichtbaar wegwerken in plaats van te verspringen (bij grote sprongen: direct)
@@ -370,7 +373,7 @@ function reconcile(state, [seq, n, mv]) {
     if (Math.abs(ex) + Math.abs(ey) < 6) { p.offX += ex; p.offY += ey; }
     p.px = s.x; p.py = s.y;
   }
-  p.x = s.x; p.y = s.y; p.dir = s.dir; p.mv = s.mv;
+  p.x = s.x; p.y = s.y; p.dir = s.dir; p.mv = s.mv; p.sp = s.sp;
 }
 
 // Laat de voorspelling meelopen met de tijd (30 ticks per seconde, zoals de server)
@@ -433,19 +436,14 @@ export function updateRenderPositions(state, now) {
 }
 
 // Het weer van nu, zelfde klok als de server. In de wachtkamer nog geen weer.
+export const refreshWeather = (state) => updateWeather(state); // voor de tests
 function updateWeather(state) {
   const lobby = state.game.phase === 'lobby';
-  state.weather = lobby ? Weather.weatherAt(null, 1, 0, 0) : Weather.weatherAtTick(state.rules, state.game.round, state.tick, state.mapTick, state.roundTick, state.weatherScale);
+  state.weather = lobby ? Weather.weatherAt(null, 1, 0, 0) : Weather.weatherAtTick(state.rules, state.game.round, state.tick, state.mapTick, state.roundTick, state.weatherScale, state.settings?.stormFreq ?? 1);
   // geforceerde storm (O-toets): stormeffecten mergen zolang actief
   const fs = state.forcedStorm;
   if (fs && state.tick < fs.end) {
-    const wx = state.weather;
-    wx.visibility = wx.visibility === null ? 2 : Math.min(wx.visibility, 2);
-    wx.eraser = true;
-    wx.burial = true;
-    wx.drift = Math.max(wx.drift, 1);
-    wx.flags.hidesMinimap = true;
-    if (!wx.storm || !wx.storm.active) wx.storm = { label: 'Sneeuwstorm', active: true, warn: false, secs: Math.ceil((fs.end - state.tick) / G.TICK_RATE) };
+    Weather.forceStorm(state.weather, state.rules?.style, (fs.end - state.tick) / G.TICK_RATE);
   } else if (fs) {
     state.forcedStorm = null;
   }
