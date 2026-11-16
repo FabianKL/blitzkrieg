@@ -35,9 +35,17 @@ export default { // §10.9
     { type: 'road', from: [0.1, 0.3], to: [0.88, 0.3], width: 2 },
     { type: 'road', from: [0.1, 0.72], to: [0.88, 0.72], width: 2 },
   ],
-  // zoeklicht triggert artillerie; daarnaast standaard elke 60 s een willekeurig bombardement
-  hazard: { type: 'artillery', everySeconds: 60, warningSeconds: 3, armorLoss: 30, area: 3,
-    searchlightDelay: 1 },
+  // zoeklicht triggert bombardement; daarnaast standaard elke 60 s een willekeurig bombardement
+  hazard: {
+    type: 'bombardment', areaT: 3, durationSeconds: 3, warningSeconds: 3,
+    searchlightDelay: 1, everySeconds: 60,
+    craters: true,
+    levels: {
+      licht:     { weight: 3, armorLoss: 10, impacts: 3 },
+      gemiddeld: { weight: 2, armorLoss: 20, impacts: 6 },
+      zwaar:     { weight: 1, armorLoss: 30, impacts: 10 },
+    },
+  },
   look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32, bridge: { kind: 'staal' } },
   tunnelColor: '#1a1410',
   weather: [

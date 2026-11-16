@@ -141,7 +141,7 @@ export const mapTests = [
     },
   },
   {
-    name: 'gevaren: ontploffende brug, artillerie, instortende gevels (Koersk heeft geen gevaar)',
+    name: 'gevaren: ontploffende brug, bombardement, instortende gevels (Koersk heeft geen gevaar)',
     async run() {
       const out = [];
       try {
@@ -171,19 +171,22 @@ export const mapTests = [
         withRandom(0.19, () => cross(5)); // teller loopt door: 20% bij de derde oversteek
         check(br.blown && room.hz.crossings === 3, `teller liep niet door over de ronde (${room.hz.crossings})`);
         out.push('brug');
-        // Oder-front: vak licht op, 3 s later -30% en kraters
+        // Oder-front: bombardement waarschuwt 3 s, treft drie keer en laat kraters achter
         room = fakeRoom('seelow'); t = room.tanks[0]; ev = [];
         // zoeklicht-triggering uitzetten: deze test gaat over de vaste 60 s-timer
         const slSave = room.wx.flags.searchlights;
         room.wx.flags.searchlights = null;
-        Hz.roundStart(room, ev);
-        for (let k = 1; k <= 60 * G.TICK_RATE && !ev.some((e) => e.t === 'z'); k++) Hz.step(room, k, ev, hurt);
-        const z = ev.find((e) => e.t === 'z');
-        check(z && z.at - 60 * G.TICK_RATE === 3 * G.TICK_RATE, 'artillerie niet na 60 s met 3 s waarschuwing');
-        t.x = (z.box[0] + z.box[2]) >> 1; t.y = (z.box[1] + z.box[3]) >> 1;
-        for (let k = 60 * G.TICK_RATE + 1; k <= z.at; k++) Hz.step(room, k, ev, hurt);
-        check(t.shield === 70 && ev.some((e) => e.t === 'zb' && e.craters), 'artillerie: geen -30% of geen kraters');
-        out.push('artillerie');
+        withRandom(0, () => {
+          Hz.roundStart(room, ev);
+          for (let k = 1; k <= 60 * G.TICK_RATE && !ev.some((e) => e.t === 'z'); k++) Hz.step(room, k, ev, hurt);
+          const z = ev.find((e) => e.t === 'z');
+          check(z && z.at - 60 * G.TICK_RATE === 3 * G.TICK_RATE, 'bombardement niet na 60 s met 3 s waarschuwing');
+          t.x = (z.box[0] + z.box[2]) >> 1; t.y = (z.box[1] + z.box[3]) >> 1;
+          for (let k = 60 * G.TICK_RATE + 1; k <= z.at + 3 * G.TICK_RATE; k++) Hz.step(room, k, ev, hurt);
+          check(t.shield === 70 && ev.filter((e) => e.t === 'zi').length === 3 && ev.some((e) => e.t === 'zb' && e.craters), 'bombardement: schade, drie inslagen of kraters ontbreken');
+        });
+        room.wx.flags.searchlights = slSave;
+        out.push('bombardement');
         // Berlijn: naast een gebouw kans op een vallende gevel; tegen een gebouw aan rijden = zeker
         room = fakeRoom('berlijn'); t = room.tanks[0]; ev = [];
         Hz.roundStart(room, ev);

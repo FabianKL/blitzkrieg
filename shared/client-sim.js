@@ -243,8 +243,9 @@ const ON = {
   hz(state, e) { applyHz(state, e.hz); }, // spel gestart vanuit de wachtkamer: brug, munitiedepot e.d.
   h(state, e) { state.host = e.i; }, // andere host (de vorige is weg)
   z(state, e) { state.barrage = { box: e.box, at: e.at, kind: e.kind, impacts: e.impacts }; }, // (artillerie)barrage aangekondigd
-  zb(state, e, c) { // inslag: kraters (artillerie) of kapotte boomtoppen (bos)
-    if (e.kind === 'bomb') { /* bombardement: kraters zijn al per zi-event gegraven */ }
+  zb(state, e, c) { // inslag: kraters (bombardement/artillerie) of kapotte boomtoppen (bos)
+    if (e.kind === 'bomb' && e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed);
+    else if (e.kind === 'bomb') { /* bombardement zonder kraters: terrein al per zi-event aangepast */ }
     else if (e.craters) G.markArtillery(state.world, e.box, e.craters, c.changed);
     else G.markBarrage(state.world, e.box, c.changed);
     state.barrage = null;
