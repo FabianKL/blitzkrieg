@@ -119,6 +119,16 @@ export const HINTS = { hearingT: 20, glowSeconds: 3, dustEverySeconds: 10 };
 // het venster loopt hij af tot 0. debug: ?debug=alles toont alles, alleen op localhost.
 export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5, shadowFalloffT: 1 };
 
+// Luchtspiegelingen (El Alamein): een nep-tank die vanuit de kaartrand naar je toe rijdt en
+// verdwijnt zodra hij scherp in beeld komt. Puur weergave, per speler anders (Math.random).
+export const MIRAGES = {
+  spawnMs: [8000, 20000],  // ms tussen spawns
+  maxActive: 2,            // hoogstens zoveel tegelijk
+  speed: 3,                // cellen per seconde
+  fadeOutMs: 400,          // uitfaden bij de zichtcirkelrand
+  spawnMargin: 8,          // cellen voorbij de camerarand spawnen
+};
+
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
 
@@ -462,6 +472,22 @@ export const TRACK_ERASER = {
 // één inslag tussen firstAt en firstAt + spread (deel van het vak): een flits van `flash`, na
 // `gap` een tweede van `second` lang (secondStrength), en tot afterglow een nagloed (glow).
 export const LIGHTNING = { firstAt: 0.05, spread: 0.8, flash: 0.08, gap: 0.16, second: 0.06, secondStrength: 0.7, afterglow: 1, glow: 0.25 };
+
+// Geluid (public/audio.js): volumes in dB, afstanden in cellen, tijden in seconden.
+// masterVol: algeheel volume; sfxVol/ambientVol/synthVol: busvolumes; hearingCells: hoorbereik
+// (komt uit HINTS.hearingT × T); filterRange: LPF-cutoff bereik [dichtbij, veraf] in Hz;
+// fadeSeconds: fade-in/-uit van ambiënt-loops; pools: grootte van de speler-pools;
+// motor: frequentiebereik van de motorsynthese; lowWarn: piepje bij lage voorraad.
+export const SOUND = {
+  masterVol: -6, sfxVol: 0, ambientVol: -8, synthVol: -6,
+  filterRange: [8000, 800],
+  fadeSeconds: 3,
+  pools: { cannon: 8, impact: 6, hardImpact: 4, metalImpact: 4, explosion: 2 },
+  motor: { idleHz: 40, fullHz: 80, noiseLPF: [200, 600] },
+  tracks: { bandpass: [300, 1200] },
+  lowWarn: { hz: 880, ms: 80, intervalSeconds: 2 },
+  reverbDecay: 0.3,
+};
 
 // De kaarten (veldslagen) staan elk in een eigen bestand: zie maps/index.js.
 export { MAPS, MAP_MENU, DEFAULT_MAP } from './maps/index.js';

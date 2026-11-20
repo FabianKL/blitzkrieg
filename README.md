@@ -341,7 +341,7 @@ uit rotsbloksprites uit de atlas van de stijl. Bomen zijn met twee treffers kapo
 |---|---|---|---|
 | 1940 Grebbeberg | – | munitie alleen bij het depot in Rhenen | inundatie vanaf ronde 2, regen in ronde 3, rook |
 | 1941 Russische vlakte | – | dubbel brandstof in de modder | zomer met stofspoor; vanaf ronde 3 modder |
-| 1942 El Alamein | zandmeter, mijnen | – | hitte met valse contouren; wisselende woestijnwind; zandstorm elke 90 s |
+| 1942 El Alamein | zandmeter, mijnen | – | hitte met luchtspiegelingen; wisselende woestijnwind; zandstorm elke 90 s |
 | 1942 Leningrad | breekbaar ijs | motorwarmte | schemering, wisselende sneeuwval, sneeuwjacht; broos ijs in ronde 2 en 3, dooi vanaf ronde 4 |
 | 1943 Koersk | – | motortemperatuur | zomer met rook; onweer met regen vanaf ronde 3 |
 | 1944 Carentan | – | – | ochtendmist in ronde 1; daarna om de 30–90 s een regenbui met onweer (wist sporen bij het water) |
@@ -362,8 +362,10 @@ velden staan uitgelegd bovenaan `shared/maps/index.js`, waar ook het mapmenu sta
   het beeld. Het weer houdt zijn waarden in T: 12 T = de volle cirkel, 6 T = de helft, nooit kleiner
   dan 2 tankbreedtes (`VISION`). Rotsen blokkeren het zicht ook. In een kijkboog van 130° in je
   rijrichting kijk je langs de randen van obstakels, naast en achter je niet. Buiten de cirkel zie
-  je geen schim maar, alleen in de kijkboog, de tank zelf (de vage contour is geschrapt; alleen de
-  valse contouren bij El Alamein bestaan nog, zie `docs/open-punten.md`). Kogels van anderen zie je alleen scherp in je zichtveld. Tunnels en sporen zie je
+  je geen schim maar, alleen in de kijkboog, de tank zelf (de vage contour is geschrapt). Bij El
+  Alamein verschijnen luchtspiegelingen: een nep-tank met het uiterlijk van de tegenstander rijdt
+  vanuit de kaartrand naar je toe en verdwijnt zodra hij de zichtcirkel bereikt (`MIRAGES` in
+  config.js). Kogels van anderen zie je alleen scherp in je zichtveld. Tunnels en sporen zie je
   alleen waar je zicht hebt (de spec laat ze overal zien). Een tegenstander die je scherp ziet,
   geeft geen richtingshint.
 - **Percentages en vaste breedtes**: wegen (2 T) schalen niet mee; op een kleine kaart is verhard

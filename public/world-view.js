@@ -38,7 +38,7 @@
 //   label(now)                 korte tekst linksboven of rechtsboven in het speelveld (ploeg, mist)
 import * as G from '/shared/game.js';
 import { BUILDING as BUILDING_CFG, BRIDGE as BRIDGE_CFG, CAMERA_ZOOM, FOG, HINTS, LOOK, LIGHT_DIRS, NIGHT_TINT, BASE_KIT, FX, BURIAL, EDGE } from '/shared/config.js';
-import { sightOf, sightAt, visibleCell, contourAlpha, hintDirection, hintSource, searchlightAt, searchlightBeams } from '/shared/vision.js';
+import { sightOf, sightAt, visibleCell, hintDirection, hintSource, searchlightAt, searchlightBeams } from '/shared/vision.js';
 import { updateRenderPositions } from '/shared/client-sim.js';
 import { autoDetectRenderer, Container, Graphics, Sprite, Texture, DisplacementFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { createNoise2D } from 'simplex-noise';
@@ -60,6 +60,7 @@ import { createTankView } from '/view/tanks-view.js';
 import { createWeatherView } from '/view/weather-view.js';
 import { report as assetReport, loadManifest, loadImage, has } from '/assets.js';
 import { TEX, textureOf, drawnTexture, tintOf, createTileSprites, createParticles, createLabel, spritePool } from '/pixi-scene.js';
+import * as audio from '/audio.js';
 
 const OBJ_PAD = 4; // zo ver steekt het grootste object (boom, rotsblok) buiten zijn cel uit
 const ICE_CLS = G.CLASS.ice;
@@ -507,18 +508,10 @@ export function startWorld(style, game) {
   const sparkles = spritePool(L.marks.addChild(new Container()), TEX.sparkle, (s) => { s.anchor.set(0.5); s.blendMode = 'add'; });
   const tankShadows = L.shadows.addChild(new Container()), baseShadows = L.shadows.addChild(new Container());
   const bulletLayer = L.tanks.addChild(new Container()), tankLayer = L.tanks.addChild(new Container());
-  // Contour: een neutraal silhouet van een tank (romp, rupsen, koepel, loop), alleen nog voor de
-  // valse contouren bij El Alamein; zachte randen door een eigen vervaging op de laag
-  const contourTex = drawnTexture(14 * 16, 14 * 16, (g) => {
-    g.scale(16, 16); g.translate(7, 7); g.fillStyle = '#fff';
-    g.fillRect(-3.5, -3.2, 7, 1.4); g.fillRect(-3.5, 1.8, 7, 1.4); g.fillRect(-3, -2.2, 6, 4.4);
-    g.beginPath(); g.arc(0, 0, 1.7, 0, Math.PI * 2); g.fill();
-    g.fillRect(0, -0.35, 5.5, 0.7);
-  });
-  const contourLayer = L.tanks.addChild(new Container());
-  contourLayer.filters = [new KawaseBlurFilter({ strength: 2, quality: 2 })];
-  const contourSetup = (s) => { s.anchor.set(0.5); s.scale.set(1 / 16); s.tint = 0x0c0c0e; };
-  const mirageSprites = spritePool(contourLayer, contourTex, contourSetup); // valse contouren (El Alamein)
+  // Luchtspiegelingen (El Alamein): echte tank-sprites zonder vervaging
+  const mirageLayer = L.tanks.addChild(new Container());
+  const mirageSetup = (s) => { s.anchor.set(0.5); s.scale.set(1 / TANK_PX); };
+  const miragePool = spritePool(mirageLayer, Texture.EMPTY, mirageSetup);
   const drift = L.tanks.addChild(new Sprite(driftTexture())); // hoop sneeuw op je ingesneeuwde tank
   drift.anchor.set(0.5); drift.visible = false;
   const effects = L.effects.addChild(new Graphics());
@@ -534,9 +527,10 @@ export function startWorld(style, game) {
   const overlaySprite = L.ui.addChild(new Sprite());
   const eraserG = L.ui.addChild(new Graphics());
   // Sneeuw, zand en regen vallen vóór de mist, de schaduw en de stormwaas (view/weather-view.js)
+  let thunderFlash = false;
   const weatherView = createWeatherView({
     layer: L.ui.addChild(new Container()), world, game, lookOf: () => look,
-    stormOf: () => eraserInfo(game), onThunder: (s) => { shake = Math.max(shake, s); },
+    stormOf: () => eraserInfo(game), onThunder: (s) => { shake = Math.max(shake, s); thunderFlash = true; },
   });
   const eraserLabel = createLabel(L.ui);
   const blindOverlay = L.ui.addChild(new Graphics());
@@ -848,12 +842,16 @@ export function startWorld(style, game) {
     particles.update(dt);
     drawSmokes(now);
     drawWeather(cam, now, dt);
+    // geluid: weertoestand doorgeven en motorsynth/ambiënt bijwerken
+    audio.setWeather({ rain: weatherView.rainShown ?? 0, drift: weatherView.driftShown ?? 0, storm: weatherView.stormShown ?? 0, lightning: thunderFlash });
+    thunderFlash = false;
+    audio.update(game, dt);
     sightSprite.visible = visionSprite.visible = overlayOn;
     if (!sightOn) { crackMask.texture = plantMask.texture = Texture.EMPTY; gpu.setMask(null); } // leeg omgekeerd masker: alle barsten te zien
-    mirageSprites.begin();
+    miragePool.begin();
     if (sightOn) { drawSight(me, cam); if (weatherView.stormShown < 0.5) hz.drawMirages(me, cam, now); } // geen luchtspiegelingen in de storm
     if (overlayOn) drawFog(me, cam);
-    mirageSprites.end();
+    miragePool.end();
     hz.drawSearchlights();
     // Zoeklichtspots (op de kaart) en verblinding (schermvullend als je erin staat)
     spotG.clear();
@@ -1024,11 +1022,6 @@ export function startWorld(style, game) {
     const self = game.tanks.get(game.me);
     if (self && self.a && self.rx !== undefined) return { x: Math.round(self.rx), y: Math.round(self.ry), ang: self.ang };
     return null;
-  }
-  // Contour: het neutrale silhouet, donker en vaag, wel in de goede richting gedraaid
-  function drawContour(pool, x, y, ang, alpha) {
-    const s = pool.next();
-    s.position.set(x, y); s.rotation = ang || 0; s.alpha = alpha;
   }
   // Eigen bedekte tank (storm): de tank blijft eronder te zien, verbleekt, met een hoop sneeuw, zand
   // of stof erover in de vorm van de tank. De hoop groeit aan (BURIAL.growMs) en valt eraf als je
@@ -1296,7 +1289,11 @@ export function startWorld(style, game) {
       seenOf: (id) => game.tanks.get(id)?.seen ?? null,
       posOf: (id) => game.tanks.get(id) ?? null,
     });
-    if (at) addHint(at.x, at.y);
+    if (at) {
+      addHint(at.x, at.y);
+      const me = eye();
+      if (me) audio.onHint(hintDirection(at.x - me.x, at.y - me.y));
+    }
   }
 
   // ---------- Renderer en beeldlus ----------
@@ -1367,7 +1364,8 @@ export function startWorld(style, game) {
 
   // ---------- Gevaren en schaarse middelen in beeld (view/hazards-view.js) ----------
   const hz = createHazardView({
-    game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius, fx,
+    game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, miragePool, visionRadius, fx,
+    tankTexture, TANK_PX,
     get pal() { return pal; }, get bridgeSprites() { return bridgeView.active; },
     texture: (name) => objectView.texture(name), props: L.marks.addChild(new Container()), seesSharp,
   });
@@ -1441,6 +1439,7 @@ export function startWorld(style, game) {
       return ZOOM;
     },
     zoomBy(delta) { return view.setZoom(ZOOM + delta); },
+    triggerMirage: () => hz.triggerMirage(),
     // effect afspelen om te bekijken (localhost): blitzView.play('explosie', x, y, {size: 14, add: true})
     play: (name, x, y, o) => DEBUG_HOST && fx.play(name, x, y, o),
     assets: () => assetReport, // welke texturen en sprites er gebruikt worden (de rest is procedureel of de oude tekening)

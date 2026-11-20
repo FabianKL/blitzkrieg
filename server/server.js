@@ -27,6 +27,7 @@ const VENDOR = {
   '/vendor/pixi.mjs': 'node_modules/pixi.js/dist/pixi.min.mjs',
   '/vendor/pixi-filters.mjs': 'node_modules/pixi-filters/dist/pixi-filters.mjs',
   '/vendor/simplex-noise.mjs': 'node_modules/simplex-noise/dist/esm/simplex-noise.js',
+  '/vendor/tone.js': 'node_modules/tone/build/Tone.js',
 };
 
 // ---------- Statische bestanden ----------

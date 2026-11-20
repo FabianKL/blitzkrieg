@@ -12,8 +12,9 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
 - Alles in het **Nederlands**: commentaar, teksten in het spel, testnamen, commitberichten, en je
   antwoorden aan de eigenaar.
 - Code zonder build-stap: ES-modules, Node + `ws` op de server, vanille JS en PixiJS in de browser.
-  Toegestane pakketten in de browser: `pixi.js` (8), `pixi-filters`, `simplex-noise`; de server geeft
-  ze op `/vendor/` (vaste lijst in `server/server.js`) en `index.html` heeft een import map. Geen andere
+  Toegestane pakketten in de browser: `pixi.js` (8), `pixi-filters`, `simplex-noise`, `tone` (15,
+  geluid); de server geeft ze op `/vendor/` (vaste lijst in `server/server.js`) en `index.html` heeft
+  een import map. `tone` wordt als UMD-script geladen (niet via de import map). Geen andere
   frameworks of pakketten zonder overleg.
 - Sluit aan bij de omringende code: korte functies, commentaar dat uitlegt *waarom*.
 - **Alle getallen horen in `shared/config.js`**, niet als losse waarden in de code. Getallen die bij
@@ -50,6 +51,11 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
 - **Assets**: sprites en texturen staan in `public/assets/` (`manifest.json` is de bron, `LEESMIJ.md`
   zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
   tekent de weergave het procedureel of zoals vroeger.
+- **Geluid**: `public/audio.js` (Tone.js) speelt alle geluidseffecten: synthese voor motor,
+  rupsbanden, hints, UI en sirenes; pooling voor kanonschoten en inslagen; ambiënt voor weer
+  (regen, wind, storm, donder). `shell.js` roept `audio.onEvent(e, game)` aan bij elke
+  gebeurtenis; `world-view.js` roept `audio.setWeather()` en `audio.update()` aan elk frame.
+  Getallen in `SOUND` (config.js). Tone.js wordt als UMD-script geladen in `index.html`.
 - **Effecten verraden niets**: mondingsvuur, splinters, flipbook-effecten, lichtvlekjes en kogels van
   anderen alleen als je ze scherp ziet; waterplanten die op een tunnel verdwijnen alleen waar je zicht hebt; geluiden lopen via de richtingshints. Effecten mogen `Math.random()` gebruiken (alleen browser).
 - **Wegen**: de kaartmaker geeft de middellijnen mee (`roads`, alleen weergave; de cellen blijven de
@@ -79,8 +85,9 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
   - in een kijkboog van 130° in de rijrichting kijk je langs randen (de rand zelf en een tank half
     achter een hoek zie je); naast en achter je niet, en daar zie je het obstakel zelf ook niet;
   - buiten de cirkel zie je alleen in de kijkboog iets: een tank die daar rijdt, zie je gewoon
-    (de vage contour is geschrapt; wat er met de valse contouren bij El Alamein en de hints moet,
-    staat in `docs/open-punten.md`);
+    (de vage contour is geschrapt; de luchtspiegelingen bij El Alamein zijn nu volledige
+    tank-sprites van de tegenstander die vanuit de kaartrand naar je toe rijden en bij de
+    zichtcirkel verdwijnen, `MIRAGES` in config.js);
   - de donkere schaduw volgt precies dezelfde regel (`visibleCell`);
   - bomkraters (van artillerie of een ontplofte tank) zie je altijd, ook zonder zicht;
   - waar je geen zicht hebt, zie je geen tunnels, sporen of ijsbarsten: daar ligt de
