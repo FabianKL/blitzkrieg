@@ -40,7 +40,7 @@ const syncVisionLabels = () => {
 syncVisionLabels();
 
 // ---------- Lobby ----------
-const STYLE_ICON = { zomer: '☀', winter: '❄', woestijn: '🏜' };
+const STYLE_ICON = { zomer: '☀', winter: '❄', woestijn: '🏜', tunneler: '⛏' };
 const TEAM_COLORS = ['var(--red)', 'var(--gold)', '#4a8a4a', '#6a6aaa'];
 
 // Kaartlijst (eenmalig)

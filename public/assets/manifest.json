@@ -27,6 +27,11 @@
     "soft": "zand",
     "rock": "rots",
     "tunnel": "aarde"
+   },
+   "tunneler": {
+    "normal": "woestijnzand",
+    "rock": "rots",
+    "tunnel": "aarde"
    }
   },
   "perMap": {
@@ -147,7 +152,8 @@
  "atlases": {
   "zomer": "zomer/objects.json",
   "winter": "winter/objects.json",
-  "woestijn": "woestijn/objects.json"
+  "woestijn": "woestijn/objects.json",
+  "tunneler": "tunneler/objects.json"
  },
  "files": {
   "effects/artillerie-inslag.png": [
@@ -814,6 +820,66 @@
    512,
    512
   ],
+  "tunneler/objects.png": [
+   1480,
+   428
+  ],
+  "tunneler/objects/krater-01.png": [
+   256,
+   256
+  ],
+  "tunneler/objects/krater-02.png": [
+   256,
+   256
+  ],
+  "tunneler/objects/krater-03.png": [
+   256,
+   256
+  ],
+  "tunneler/objects/krater-04.png": [
+   256,
+   256
+  ],
+  "tunneler/objects/rots-01.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-02.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-03.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-04.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-05.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-06.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-07.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-08.png": [
+   160,
+   160
+  ],
+  "tunneler/objects/rots-09.png": [
+   160,
+   160
+  ],
+  "tunneler/terrain/woestijnzand.jpg": [
+   512,
+   512
+  ],
   "zomer/bases/deurpost.png": [
    96,
    96
@@ -1350,6 +1416,32 @@
   "winter/bridges/staal-wrak.png": [
    2069,
    250
-  ]
+  ],
+  "tanks/viper/tank.png": [
+   448,
+   448
+  ],
+  "tanks/viper/romp.png": [
+   448,
+   448
+  ],
+  "tanks/viper/rups.png": [
+   168,
+   28
+  ],
+  "tanks/viper/tank.json": "json",
+  "tanks/kobalt/tank.png": [
+   448,
+   448
+  ],
+  "tanks/kobalt/romp.png": [
+   448,
+   448
+  ],
+  "tanks/kobalt/rups.png": [
+   168,
+   28
+  ],
+  "tanks/kobalt/tank.json": "json"
  }
 }

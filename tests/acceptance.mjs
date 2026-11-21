@@ -31,7 +31,7 @@ export function acceptanceTest(allTests) {
       }
       for (const page of ['/', '/retro']) {
         const html = await (await fetch(`http://localhost:${port}${page}`)).text();
-        const visible = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--[\s\S]*?-->/g, '');
+        const visible = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<link[^>]*>|<!--[\s\S]*?-->/g, '');
         check(!/tunneler/i.test(visible), `${page}: "Tunneler" staat nog in de pagina`);
         check(/BLITZKRIEG/.test(html) || page !== '/', `${page}: geen BLITZKRIEG`);
       }

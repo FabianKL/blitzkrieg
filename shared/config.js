@@ -46,7 +46,7 @@ export const REFILL = { fuel: 15, armorEvery: 4, ammoEvery: 6 };
 export const SPAWN = { minDistT: 10, tries: 500, areaTries: 8 };
 // Geforceerde storm (host, toets O, op elke kaart): zo lang, met dit zicht (in T), en hoe hij per
 // stijl heet in beeld. Verder werkt hij als een gewone storm: sporenwisser, onderduiken, geen minikaart.
-export const FORCED_STORM = { seconds: 20, visibility: 2, labels: { winter: 'Sneeuwstorm', woestijn: 'Zandstorm', zomer: 'Storm' } };
+export const FORCED_STORM = { seconds: 20, visibility: 2, labels: { winter: 'Sneeuwstorm', woestijn: 'Zandstorm', zomer: 'Storm', tunneler: 'Zandstorm' } };
 // Mijnen (El Alamein): schade en krater
 export const MINES = { damage: 15, digR: 2 };
 
@@ -307,6 +307,8 @@ export const TANKS = {
   panther: { name: 'PANTHER', nation: 'DUITSLAND', mini: '#2f7fe8', hull: '#5a5e60', mark: 'number', number: '401' },
   sherman: { name: 'M4A1 SHERMAN', nation: 'VERENIGDE STATEN', mini: '#2fd04a', hull: '#55602f', mark: 'star' },
   comet: { name: 'A34 COMET', nation: 'VERENIGD KONINKRIJK', mini: '#f2b51c', hull: '#5b6040', mark: 'roundel' },
+  viper: { name: 'VIPER MK-I', nation: 'TUNNELER', mini: '#2fd04a', hull: '#2d8c3a', mark: 'star' },
+  kobalt: { name: 'KOBALT MK-I', nation: 'TUNNELER', mini: '#2f7fe8', hull: '#2a5ca0', mark: 'triangle' },
 };
 
 // Tanks als sprite (public/world-view.js): per tank in public/assets/tanks/<naam>/ tank.png (compleet)
@@ -370,7 +372,7 @@ export const FX = {
   sheets: ['explosie', 'rook', 'mondingsvuur', 'inslag-aarde', 'inslag-sneeuw', 'inslag-zand', 'artillerie-inslag'],
   speed: 0.4, muzzle: 3, hit: 4, death: 14, bridge: 18, impactSize: 3.5,
   artillerySize: 8, shellFallMs: 120,
-  impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand' },
+  impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand', tunneler: 'inslag-zand' },
   lightColor: 0xffc070, lightAlpha: 0.55, lightLife: 0.25,
 };
 
