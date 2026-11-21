@@ -341,6 +341,10 @@ export function startWorld(style, game) {
     if (e.t === 'fc') gpu.markRect(e.box[0] - 1, e.box[1] - 1, e.box[2] + 1, e.box[3] + 1);
     if (e.t === 'zi') {
       if (e.fell) { plantFelled(fields, game.map, gpu, e.box); buildObjects(e.box); objectView.rebuild(e.box); } // bomen weg
+      if (e.cr) { // salvo-krater: terrein bijwerken en als gezien markeren
+        gpu.markRect(e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r);
+        if (seenDug) markSeenBox([e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r]);
+      }
       objectView.addCrater(e.x, e.y, e.r); shake = Math.max(shake, 0.15);
     }
     if (e.t === 'zb') { // barrage: kapotte boomtoppen (bos) of artillerie
@@ -858,6 +862,19 @@ export function startWorld(style, game) {
     blindOverlay.clear();
     const slCfg = game.weather?.flags.searchlights;
     if (slCfg) {
+      // client-side beam tracking: beweeg stuck beams richting de gevolgde tank
+      if (game.stuckBeams?.size && slCfg.trackSpeedT) {
+        const trkPx = slCfg.trackSpeedT * G.T * dt;
+        for (const [, st] of game.stuckBeams) {
+          if (st.tankId == null) continue;
+          const tgt = game.tanks?.get(st.tankId);
+          if (!tgt || tgt.x === undefined) continue;
+          const dx = tgt.x - st.x, dy = tgt.y - st.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > trkPx) { st.x += dx / dist * trkPx; st.y += dy / dist * trkPx; }
+          else { st.x = tgt.x; st.y = tgt.y; }
+        }
+      }
       for (const b of searchlightBeams(slCfg, game.tick - game.mapTick, game.stuckBeams)) {
         spotG.ellipse(b.cx, b.cy, b.rx, b.ry).fill({ color: 0xfffad2, alpha: b.stuck ? 0.45 : 0.35 });
       }

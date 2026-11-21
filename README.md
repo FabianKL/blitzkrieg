@@ -347,7 +347,7 @@ uit rotsbloksprites uit de atlas van de stijl. Bomen zijn met twee treffers kapo
 | 1944 Carentan | – | – | ochtendmist in ronde 1; daarna om de 30–90 s een regenbui met onweer (wist sporen bij het water) |
 | 1944 Arnhem | de brug kan ontploffen (10% per oversteek, +5% na elke oversteek) | brandstof en munitie via droppings | helder; mist en regen vanaf ronde 3 |
 | 1944 Ardennen | bombardement nabij spelers (velt bomen) | brandstof alleen bij de 3 vaste depots, niet in de basis | pulserende mist, sneeuwval, sneeuwstorm |
-| 1945 Oder-front | bombardement (zoeklicht triggert barrage) | – | nacht met zoeklichten; dageraad vanaf ronde 3 |
+| 1945 Oder-front | gericht salvo (zoeklicht volgt tank, escalerend) + barrage | – | nacht met zoeklichten in het dal; dageraad vanaf ronde 3 |
 | 1945 Berlijn | instortende gevels | pantser wordt niet hersteld | rook, steeds dichter; ronde 3 regen met onweersbuien |
 
 **Alle getallen staan in `shared/config.js`**: terreinklassen, maten (T = 5 cellen), zicht, tank,

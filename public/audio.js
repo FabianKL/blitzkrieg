@@ -25,7 +25,6 @@ let trackNoise, trackFilter, trackGain;
 let hintSynth, hintPanner;
 let uiSynth;
 let warnOsc, warnGain;
-let sireneSynth, sireneGain;
 
 // --- Ambiënt ---
 let rainNoise, rainFilter, rainGain;
@@ -35,7 +34,6 @@ let thunderSynth, thunderGain;
 // --- Toestand ---
 let motorRunning = false;
 let lastWarnTime = 0;
-let sireneActive = false;
 let currentStyle = 'zomer';
 
 // Weertoestand (gezet door world-view.js via setWeather)
@@ -170,11 +168,6 @@ export function init() {
   warnOsc = new Tone.Oscillator(SOUND.lowWarn.hz, 'square').connect(warnGain);
   warnOsc.volume.value = -20;
   warnOsc.start();
-
-  // --- Barrage-sirene ---
-  sireneGain = new Tone.Gain(0).connect(synthBus);
-  sireneSynth = new Tone.Oscillator(300, 'sine').connect(sireneGain);
-  sireneSynth.volume.value = -6;
 
   // --- Ambiënt: regen ---
   rainGain = new Tone.Gain(0).connect(ambientBus);
@@ -331,21 +324,6 @@ function playBridgeExplosion(pan, vol) {
   playExplosion(pan, vol, 6000, true);
 }
 
-// --- Zoeklicht-alarm ---
-function playSearchlightAlarm(pan, vol) {
-  if (!ready || disposed) return;
-  const panner = new Tone.Panner(pan).connect(sfxBus);
-  const synth = new Tone.Synth({
-    oscillator: { type: 'sawtooth' },
-    envelope: { attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.2 },
-    volume: vol - 6,
-  }).connect(panner);
-  const now = Tone.now();
-  synth.triggerAttack('A4', now);
-  synth.frequency.linearRampTo('E5', 0.3, now);
-  synth.triggerRelease(now + 0.5);
-  setTimeout(() => { synth.dispose(); panner.dispose(); }, 1500);
-}
 
 // --- Vliegtuig ---
 function playPlane(pan, vol) {
@@ -388,29 +366,6 @@ function playArtilleryImpact(pan, vol) {
   playExplosion(pan, vol, 4000, true);
 }
 
-// --- Sirene (barrage) ---
-function startSirene() {
-  if (!ready || disposed || sireneActive) return;
-  sireneActive = true;
-  sireneSynth.start();
-  sireneGain.gain.linearRampTo(0.5, 0.3, Tone.now());
-  sweepSirene();
-}
-
-function sweepSirene() {
-  if (!sireneActive || disposed) return;
-  const now = Tone.now();
-  sireneSynth.frequency.linearRampTo(800, 1, now);
-  sireneSynth.frequency.linearRampTo(300, 1, now + 1);
-  setTimeout(() => sweepSirene(), 2000);
-}
-
-function stopSirene() {
-  if (!sireneActive) return;
-  sireneActive = false;
-  sireneGain.gain.linearRampTo(0, 0.5, Tone.now());
-  setTimeout(() => { if (!sireneActive) sireneSynth.stop(); }, 600);
-}
 
 // --- Donder ---
 function playThunder(vol) {
@@ -567,8 +522,6 @@ export function onEvent(e, game) {
 
   // --- Bommen ---
   if (e.t === 'z' && e.kind === 'bomb') {
-    startSirene();
-    // bomfluiten voor individuele inslagen
     if (e.impacts) {
       for (const imp of e.impacts) {
         const s = spatial(me, imp.x ?? imp[0] ?? 0, imp.y ?? imp[1] ?? 0);
@@ -576,33 +529,18 @@ export function onEvent(e, game) {
       }
     }
   }
-  if (e.t === 'z' && e.kind !== 'bomb') {
-    // artillerie-waarschuwing
-    startSirene();
-  }
   if (e.t === 'zi') {
-    stopSirene();
     const s = spatial(me, e.x, e.y);
     if (s) playArtilleryImpact(s.pan, s.vol);
     else playArtilleryImpact(0, -15);
   }
   if (e.t === 'zb') {
-    stopSirene();
     if (e.craters) {
       for (const c of e.craters) {
         const cx = c[0] ?? c.x, cy = c[1] ?? c.y;
         const s = spatial(me, cx, cy);
         if (s) playArtilleryImpact(s.pan, s.vol);
       }
-    }
-  }
-
-  // --- Zoeklicht ---
-  if (e.t === 'sls') {
-    if (e.x !== undefined) {
-      const s = spatial(me, e.x, e.y);
-      if (s) playSearchlightAlarm(s.pan, s.vol);
-      else playSearchlightAlarm(0, -10);
     }
   }
 
@@ -729,7 +667,6 @@ export function destroy() {
   disposed = true;
   ready = false;
   motorRunning = false;
-  sireneActive = false;
   // Tone.js kan niet helemaal opgeschoond worden, maar we stoppen alles
   try {
     motorSynth?.triggerRelease();
@@ -737,7 +674,6 @@ export function destroy() {
     trackNoise?.stop();
     rainNoise?.stop();
     windNoise?.stop();
-    sireneSynth?.stop();
     warnOsc?.stop();
   } catch { /* al opgeruimd */ }
 }

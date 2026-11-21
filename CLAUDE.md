@@ -52,7 +52,7 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
   zegt wat er is). `public/assets.js` laadt alleen wat in het manifest staat; ontbreekt iets, dan
   tekent de weergave het procedureel of zoals vroeger.
 - **Geluid**: `public/audio.js` (Tone.js) speelt alle geluidseffecten: synthese voor motor,
-  rupsbanden, hints, UI en sirenes; pooling voor kanonschoten en inslagen; ambiënt voor weer
+  rupsbanden, hints en UI; pooling voor kanonschoten en inslagen; ambiënt voor weer
   (regen, wind, storm, donder). `shell.js` roept `audio.onEvent(e, game)` aan bij elke
   gebeurtenis; `world-view.js` roept `audio.setWeather()` en `audio.update()` aan elk frame.
   Getallen in `SOUND` (config.js). Tone.js wordt als UMD-script geladen in `index.html`.
@@ -77,6 +77,14 @@ tanks en beslissingen staan daarin. Openstaande punten en bugs staan in
   de rondes (`hazard.chance`/`chanceStep`).
 - Kogels **graven standaard niet** (`BULLETS.dig`, per map aan te zetten; retro graaft wel). De krater
   van een ontploffende tank blijft.
+- **Bombardement** (`server/hazards.js`) kent twee modi: **barrage** (tijdgestuurd
+  gebiedsbombardement, `cfg.levels`) en **salvo** (event-getriggerd escalerend gericht vuur,
+  `cfg.salvo`). Een map kan één of beide gebruiken. Ardennen: alleen barrage. Seelow: salvo
+  (zoeklichten doorzoeken het dal, volgen de tank, escalerend artillerievuur) + barrage (timer).
+  Het zoeklicht scant alleen het sweep-gebied (`sweepRect`) en volgt de tank met beperkte snelheid
+  (`trackSpeedT`); de tank kan ontsnappen door snel te rijden of achter de heuvelrug te gaan.
+- **Geen alarmgeluid**: er is geen sirene of zoeklicht-alarm meer in het spel. Bomfluiten en
+  artillerie-inslaggeluiden blijven.
 - Zicht (`VISION`, regel in `shared/vision.js`):
   - de zichtcirkel is de halve hoogte van het beeld; het weer (in T) maakt hem kleiner, met als
     minimum 2 tankbreedtes;
