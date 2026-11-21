@@ -46,7 +46,7 @@ export const REFILL = { fuel: 15, armorEvery: 4, ammoEvery: 6 };
 export const SPAWN = { minDistT: 10, tries: 500, areaTries: 8 };
 // Geforceerde storm (host, toets O, op elke kaart): zo lang, met dit zicht (in T), en hoe hij per
 // stijl heet in beeld. Verder werkt hij als een gewone storm: sporenwisser, onderduiken, geen minikaart.
-export const FORCED_STORM = { seconds: 20, visibility: 2, labels: { winter: 'Sneeuwstorm', woestijn: 'Zandstorm', zomer: 'Storm' } };
+export const FORCED_STORM = { seconds: 20, visibility: 2, labels: { winter: 'Sneeuwstorm', woestijn: 'Zandstorm', zomer: 'Storm', tunneler: 'Zandstorm' } };
 // Mijnen (El Alamein): schade en krater
 export const MINES = { damage: 15, digR: 2 };
 
@@ -118,6 +118,16 @@ export const HINTS = { hearingT: 20, glowSeconds: 3, dustEverySeconds: 10 };
 // donkere zone; contourAlpha: dekking van een contour net buiten de cirkel; naar de rand van
 // het venster loopt hij af tot 0. debug: ?debug=alles toont alles, alleen op localhost.
 export const FOG = { fade: 0.62, shadow: 0.35, blur: 3, contourAlpha: 0.5, shadowFalloffT: 1 };
+
+// Luchtspiegelingen (El Alamein): een nep-tank die vanuit de kaartrand naar je toe rijdt en
+// verdwijnt zodra hij scherp in beeld komt. Puur weergave, per speler anders (Math.random).
+export const MIRAGES = {
+  spawnMs: [8000, 20000],  // ms tussen spawns
+  maxActive: 2,            // hoogstens zoveel tegelijk
+  speed: 3,                // cellen per seconde
+  fadeOutMs: 400,          // uitfaden bij de zichtcirkelrand
+  spawnMargin: 8,          // cellen voorbij de camerarand spawnen
+};
 
 // Weergave. minimap: minikaart aan of uit (een kaart kan dit overschrijven met minimap: false).
 export const DISPLAY = { minimap: true };
@@ -297,6 +307,8 @@ export const TANKS = {
   panther: { name: 'PANTHER', nation: 'DUITSLAND', mini: '#2f7fe8', hull: '#5a5e60', mark: 'number', number: '401' },
   sherman: { name: 'M4A1 SHERMAN', nation: 'VERENIGDE STATEN', mini: '#2fd04a', hull: '#55602f', mark: 'star' },
   comet: { name: 'A34 COMET', nation: 'VERENIGD KONINKRIJK', mini: '#f2b51c', hull: '#5b6040', mark: 'roundel' },
+  viper: { name: 'VIPER MK-I', nation: 'TUNNELER', mini: '#2fd04a', hull: '#2d8c3a', mark: 'star' },
+  kobalt: { name: 'KOBALT MK-I', nation: 'TUNNELER', mini: '#2f7fe8', hull: '#2a5ca0', mark: 'triangle' },
 };
 
 // Tanks als sprite (public/world-view.js): per tank in public/assets/tanks/<naam>/ tank.png (compleet)
@@ -360,7 +372,7 @@ export const FX = {
   sheets: ['explosie', 'rook', 'mondingsvuur', 'inslag-aarde', 'inslag-sneeuw', 'inslag-zand', 'artillerie-inslag'],
   speed: 0.4, muzzle: 3, hit: 4, death: 14, bridge: 18, impactSize: 3.5,
   artillerySize: 8, shellFallMs: 120,
-  impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand' },
+  impact: { zomer: 'inslag-aarde', winter: 'inslag-sneeuw', woestijn: 'inslag-zand', tunneler: 'inslag-zand' },
   lightColor: 0xffc070, lightAlpha: 0.55, lightLife: 0.25,
 };
 
@@ -462,6 +474,22 @@ export const TRACK_ERASER = {
 // één inslag tussen firstAt en firstAt + spread (deel van het vak): een flits van `flash`, na
 // `gap` een tweede van `second` lang (secondStrength), en tot afterglow een nagloed (glow).
 export const LIGHTNING = { firstAt: 0.05, spread: 0.8, flash: 0.08, gap: 0.16, second: 0.06, secondStrength: 0.7, afterglow: 1, glow: 0.25 };
+
+// Geluid (public/audio.js): volumes in dB, afstanden in cellen, tijden in seconden.
+// masterVol: algeheel volume; sfxVol/ambientVol/synthVol: busvolumes; hearingCells: hoorbereik
+// (komt uit HINTS.hearingT × T); filterRange: LPF-cutoff bereik [dichtbij, veraf] in Hz;
+// fadeSeconds: fade-in/-uit van ambiënt-loops; pools: grootte van de speler-pools;
+// motor: frequentiebereik van de motorsynthese; lowWarn: piepje bij lage voorraad.
+export const SOUND = {
+  masterVol: -6, sfxVol: 0, ambientVol: -8, synthVol: -6,
+  filterRange: [8000, 800],
+  fadeSeconds: 3,
+  pools: { cannon: 8, impact: 6, hardImpact: 4, metalImpact: 4, explosion: 2 },
+  motor: { idleHz: 40, fullHz: 80, noiseLPF: [200, 600] },
+  tracks: { bandpass: [300, 1200] },
+  lowWarn: { hz: 880, ms: 80, intervalSeconds: 2 },
+  reverbDecay: 0.3,
+};
 
 // De kaarten (veldslagen) staan elk in een eigen bestand: zie maps/index.js.
 export { MAPS, MAP_MENU, DEFAULT_MAP } from './maps/index.js';

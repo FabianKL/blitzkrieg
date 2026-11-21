@@ -609,7 +609,7 @@ export const tests = [
         check(rules.header && rules.style, `${id}: titel of weergave ontbreekt`);
         out.push(`${id}: ${teams[0].name}/${teams[1].name}`);
       }
-      check(G.MAP_MENU.length === 12 && G.MAP_MENU.every((m, i) => i === 0 || m.year >= G.MAP_MENU[i - 1].year), 'menu: 12 maps chronologisch');
+      check(G.MAP_MENU.length === 13 && G.MAP_MENU.every((m, i) => i === 0 || m.year >= G.MAP_MENU[i - 1].year), 'menu: 13 maps chronologisch');
       return out.join(', ');
     },
   },

@@ -29,6 +29,7 @@
 import retro from './retro.js';
 import tunnelerZomer from './tunneler-zomer.js';
 import tunnelerWinter from './tunneler-winter.js';
+import tunnelerClassic from './tunneler-classic.js';
 import fallGelb from './fall-gelb.js';
 import barbarossa from './barbarossa.js';
 import elAlamein from './el-alamein.js';
@@ -45,6 +46,7 @@ import berlijn from './berlijn.js';
 export const MAP_MENU = [
   { id: 'tunneler-zomer', year: 0, mission: 'Tunneler', name: 'Zomer' },
   { id: 'tunneler-winter', year: 0, mission: 'Tunneler', name: 'Winter' },
+  { id: 'tunneler-classic', year: 0, mission: 'Tunneler', name: 'Classic' },
   { id: 'fall-gelb', year: 1940, mission: 'Fall Gelb', name: 'Grebbeberg' },
   { id: 'barbarossa', year: 1941, mission: 'Barbarossa', name: 'Russische vlakte' },
   { id: 'el-alamein', year: 1942, mission: 'Lightfoot', name: 'El Alamein' },
@@ -62,6 +64,7 @@ export const MAPS = {
   retro,
   'tunneler-zomer': tunnelerZomer,
   'tunneler-winter': tunnelerWinter,
+  'tunneler-classic': tunnelerClassic,
   'fall-gelb': fallGelb,
   barbarossa,
   'el-alamein': elAlamein,

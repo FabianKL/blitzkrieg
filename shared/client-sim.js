@@ -73,7 +73,7 @@ function applyHz(state, hz = {}) {
   state.crates = hz.crates || [];
   state.bridge = hz.bridge || null;
   state.ammoDepots = hz.ammoDepots || [];
-  if (hz.stuckBeams) { state.stuckBeams = new Map(hz.stuckBeams.map(([k, x, y]) => [k, { x, y }])); }
+  if (hz.stuckBeams) { state.stuckBeams = new Map(hz.stuckBeams.map(([k, x, y, tankId]) => [k, { x, y, tankId }])); }
   else { state.stuckBeams = null; }
 }
 
@@ -274,12 +274,11 @@ const ON = {
   c(state, e) { state.world.ice[e.b] = e.n; }, // passage over een ijsvak (barsten)
   w(state, e, c) { e.box = G.breakIce(state.world, e.b, c.changed); }, // ijs gebroken: wak (de server gooide de dobbelsteen)
   W(state, e, c) { G.applyTerrainChange(state.world, e.change, e.extra, c.changed); }, // het weer verandert het terrein
-  sls(state, e) { state.stuckBeams ??= new Map(); state.stuckBeams.set(e.beam, { x: e.x, y: e.y }); }, // zoeklicht plakt vast
+  sls(state, e) { state.stuckBeams ??= new Map(); state.stuckBeams.set(e.beam, { x: e.x, y: e.y, tankId: e.i }); }, // zoeklicht plakt vast
   slr(state, e) { state.stuckBeams?.delete(e.beam); }, // zoeklicht losgelaten
-  zi(state, e, c) { // bombardement-inslag {x, y, r, v: velt de begroeiing}; de krater is alleen beeld
-    if (!e.v) return;
-    e.box = G.blastVegetation(state.world, e.x, e.y, e.r, c.changed);
-    e.fell = !!e.box;
+  zi(state, e, c) { // bombardement-inslag {x, y, r, v: velt de begroeiing, cr: salvo-krater}
+    if (e.v) { e.box = G.blastVegetation(state.world, e.x, e.y, e.r, c.changed); e.fell = !!e.box; }
+    if (e.cr) G.markArtillery(state.world, [e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r], [[e.x, e.y, e.r]], c.changed);
   },
   fs(state, e) { state.forcedStorm = { end: e.end }; }, // geforceerde storm (O-toets)
   dn(state, e) { state.night = !!e.n; }, // dag/nacht wisselt (N-toets)

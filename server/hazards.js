@@ -300,9 +300,11 @@ function weatherTankStep(room, t, info, events) {
 }
 
 // ---------- Bombardement (Ardennen §10.8, Seelow §10.9) ----------
-// Drie zwaartegraden (licht/gemiddeld/zwaar), inslagen verspreid over durationSeconds in een
-// areaT×areaT-gebied. Triggers: timer (everySeconds of intervals[]), zoeklicht (searchlightDelay),
-// of handmatig door de host (hostBarrage). nearPlayer centreert nabij een levende tank.
+// Twee modi: barrage (tijdgestuurd gebiedsbombardement, cfg.levels) en salvo (event-getriggerd
+// gericht vuur op een doel, cfg.salvo). Een map kan één of beide gebruiken.
+// Barrage: drie zwaartegraden (licht/gemiddeld/zwaar), inslagen verspreid over durationSeconds
+// in een areaT×areaT-gebied. Triggers: timer (everySeconds/intervals[]) of host (hostBarrage).
+// Salvo: zoeklicht vangt tank → beam volgt → escalerende inslagen (lock-in).
 const bombardment = {
   roundStart(room) {
     const cfg = room.rules.hazard;
@@ -338,19 +340,56 @@ const bombardment = {
         for (const t of room.tanks) if (t?.alive && t.x >= b.box[0] && t.x <= b.box[2] && t.y >= b.box[1] && t.y <= b.box[3]) hurt(t, b.armorLoss, events);
       }
     }
-    // zoeklicht-triggering: bundel plakt vast aan de tank, na stickSeconds bombardement
-    if (cfg.searchlightDelay && room.wx?.flags?.searchlights) {
+    // zoeklicht-salvo: bundel volgt de tank, escalerende inslagen (lock-in)
+    if (cfg.salvo && room.wx?.flags?.searchlights) {
       const slCfg = room.wx.flags.searchlights;
+      const sv = cfg.salvo;
       hz.stuckBeams ??= new Map();
+      const beamRx = ((slCfg.lengthT || slCfg.widthT) * G.T) / 2;
+      const beamRy = (slCfg.widthT * G.T) / 2;
+      const trackPx = (slCfg.trackSpeedT || 3) * G.T / G.TICK_RATE;
+      const sr = slCfg.sweepRect;
+      // stuck beams: volg de tank, vuur salvo's, laat los als ontsnapt
       for (const [beam, st] of [...hz.stuckBeams]) {
         const target = room.tanks.find((o) => o?.id === st.tankId);
-        if (target?.alive) { st.x = target.x; st.y = target.y; }
-        if (tick >= st.until) {
+        if (!target?.alive || (sr && target.x < sr[0] * G.W)) {
           hz.stuckBeams.delete(beam);
-          startBombardment(hz, tick, st.x, st.y, half, cfg, events);
           events.push({ t: 'slr', beam });
+          continue;
+        }
+        // beam volgt de tank met beperkte snelheid
+        const dx = target.x - st.x, dy = target.y - st.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > trackPx) { st.x += dx / dist * trackPx; st.y += dy / dist * trackPx; }
+        else { st.x = target.x; st.y = target.y; }
+        // tank buiten de beam-ellips? (te snel voor het zoeklicht)
+        if (((target.x - st.x) / beamRx) ** 2 + ((target.y - st.y) / beamRy) ** 2 > 1) {
+          hz.stuckBeams.delete(beam);
+          events.push({ t: 'slr', beam });
+          continue;
+        }
+        // escalerende inslagen
+        if (tick >= st.nextStrike) {
+          const scatter = Math.max(sv.endScatterT, sv.startScatterT * sv.scatterDecay ** st.strikeCount) * G.T;
+          const nImpacts = Math.min(sv.maxImpacts, 1 + Math.floor(st.strikeCount / 2));
+          for (let i = 0; i < nImpacts; i++) {
+            const angle = rnd() * Math.PI * 2, rd = rnd() * scatter;
+            const ix = Math.round(target.x + Math.cos(angle) * rd);
+            const iy = Math.round(target.y + Math.sin(angle) * rd);
+            const cr = 1 + Math.floor(rnd() * 2);
+            events.push({ t: 'zi', x: ix, y: iy, r: cr, ...(sv.craters ? { cr: 1 } : {}) });
+            if (sv.craters) G.markArtillery(w, [ix - cr, iy - cr, ix + cr, iy + cr], [[ix, iy, cr]]);
+            const sR = sv.strikeRadius * G.T;
+            for (const t of room.tanks) {
+              if (t?.alive && Math.abs(t.x - ix) <= sR && Math.abs(t.y - iy) <= sR) hurt(t, sv.strikeDamage, events);
+            }
+          }
+          st.strikeCount++;
+          const interval = Math.max(sv.minInterval, sv.baseInterval - st.strikeCount * sv.intervalStep);
+          st.nextStrike = tick + ticks(interval);
         }
       }
+      // detectie: vrije bundels zoeken tanks
       const beams = searchlightBeams(slCfg, tick - room.mapTick, hz.stuckBeams);
       for (const t of room.tanks) {
         if (!t?.alive) continue;
@@ -358,16 +397,18 @@ const bombardment = {
           if (hz.stuckBeams.has(k)) continue;
           const b = beams[k];
           if (((t.x - b.cx) / b.rx) ** 2 + ((t.y - b.cy) / b.ry) ** 2 <= 1) {
-            const stickSec = slCfg.stickSeconds ?? cfg.searchlightDelay;
-            hz.stuckBeams.set(k, { tankId: t.id, x: t.x, y: t.y, until: tick + ticks(stickSec) });
-            events.push({ t: 'sls', beam: k, x: t.x, y: t.y });
+            hz.stuckBeams.set(k, {
+              tankId: t.id, x: t.x, y: t.y,
+              nextStrike: tick + ticks(sv.firstStrikeSeconds), strikeCount: 0,
+            });
+            events.push({ t: 'sls', beam: k, x: t.x, y: t.y, i: t.id });
             break;
           }
         }
       }
     }
-    // timer-gebaseerd bombardement (vast interval of versnellend)
-    if (tick >= hz.next) {
+    // timer-gebaseerd bombardement (vast interval of versnellend), alleen als levels bestaan
+    if (cfg.levels && tick >= hz.next) {
       const { x, y } = bombardmentCenter(room, cfg, half);
       startBombardment(hz, tick, x, y, half, cfg, events);
       hz.barrageCount++;
@@ -381,7 +422,7 @@ const bombardment = {
     const out = {
       barrage: room.hz.active?.map((b) => ({ box: b.box, level: b.level, end: b.end, impacts: b.impacts })) || [],
     };
-    if (room.hz.stuckBeams?.size) out.stuckBeams = [...room.hz.stuckBeams].map(([k, v]) => [k, v.x, v.y]);
+    if (room.hz.stuckBeams?.size) out.stuckBeams = [...room.hz.stuckBeams].map(([k, v]) => [k, v.x, v.y, v.tankId]);
     return out;
   },
 };

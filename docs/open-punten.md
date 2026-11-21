@@ -5,14 +5,6 @@ Lijst met nog te nemen beslissingen, nieuwe features, nodige aanpassingen en bug
 
 ## Beslissingen
 
-### Valse contouren bij El Alamein
-De vage contour van een tank buiten je zichtcirkel verdwijnt (keuze bij de nieuwe tanks,
-spec §4): een tank die je in de kijkboog ziet, wordt gewoon getekend. De valse contouren
-van de woestijnhallucinaties (`public/view/hazards-view.js`, "Woestijnhallucinaties") zijn
-dan meteen als nep te herkennen, want echte tanks zijn geen contour meer. Mogelijkheden:
-- schrappen (ook uit README, de kaarttabel en `tests/acceptance.mjs` punt 13);
-- als volledige "luchtspiegeling"-tank tekenen (een nep-tank die er echt uitziet en weer verdwijnt).
-
 ### Hints voor tanks buiten de cirkel
 Een tegenstander die je scherp ziet, geeft geen richtingshint. Een tank buiten de cirkel in de
 kijkboog gaf als contour wel een hint. Als je die tank straks gewoon ziet: dan ook geen hint meer?

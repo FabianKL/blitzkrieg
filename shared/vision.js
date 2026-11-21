@@ -81,13 +81,19 @@ export function searchlightBeams(cfg, ticks, stuckBeams) {
   const n = cfg.beams || 2;
   const rx = ((cfg.lengthT || cfg.widthT) * G.T) / 2;
   const ry = (cfg.widthT * G.T) / 2;
+  // sweepRect [x0, y0, x1, y1] als fractie: beperkt het zoekgebied
+  const sr = cfg.sweepRect;
+  const midX = sr ? G.W * (sr[0] + sr[2]) / 2 : G.W * 0.5;
+  const midY = sr ? G.H * (sr[1] + sr[3]) / 2 : G.H * 0.5;
+  const ampX = sr ? G.W * (sr[2] - sr[0]) * 0.35 : G.W * 0.35;
+  const ampY = sr ? G.H * (sr[3] - sr[1]) * 0.35 : G.H * 0.35;
   for (let k = 0; k < n; k++) {
     const stuck = stuckBeams?.get(k);
     if (stuck) {
       out.push({ cx: stuck.x, cy: stuck.y, rx, ry, stuck: true });
     } else {
-      const cx = G.W * 0.5 + G.W * 0.35 * Math.sin(t / cfg.sweepSeconds * (0.7 + k * 0.4) * Math.PI * 2 + k * 2.1);
-      const cy = G.H * 0.5 + G.H * 0.35 * Math.sin(t / cfg.sweepSeconds * (0.5 + k * 0.3) * Math.PI * 2 + k * 1.7 + 0.8);
+      const cx = midX + ampX * Math.sin(t / cfg.sweepSeconds * (0.7 + k * 0.4) * Math.PI * 2 + k * 2.1);
+      const cy = midY + ampY * Math.sin(t / cfg.sweepSeconds * (0.5 + k * 0.3) * Math.PI * 2 + k * 1.7 + 0.8);
       out.push({ cx, cy, rx, ry, stuck: false });
     }
   }

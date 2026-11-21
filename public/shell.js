@@ -5,6 +5,7 @@ import * as G from '/shared/game.js';
 import { CAMERA_ZOOM } from '/shared/config.js';
 import { connect } from '/net.js';
 import { touchControls } from '/touch.js';
+import * as audio from '/audio.js';
 
 const $ = (id) => document.getElementById(id);
 const NAME_KEY = 'blitzkrieg.naam';
@@ -15,12 +16,19 @@ let view = null;
 const game = connect({
   onMap: (map) => { if (!showView()) view?.hooks.onMap(map); update(); },
   onDig: (x, y) => view?.hooks.onDig(x, y),
-  onEvent: (e) => { view?.hooks.onEvent(e); update(); },
+  onEvent: (e) => { view?.hooks.onEvent(e); audio.onEvent(e, game); update(); },
   onStatus: (s) => { view?.hooks.onStatus(s); update(); },
 }, { room: 'blitzkrieg', name: savedName });
 game.visionOverlay = true;
 window.blitz = { game }; // voor de console en de tests
 touchControls($('panel'), game, $('view'));
+
+// Geluid: initialiseer en unlock bij de eerste interactie
+audio.init();
+const unlockAudio = () => { audio.unlock(); document.removeEventListener('click', unlockAudio); document.removeEventListener('keydown', unlockAudio); document.removeEventListener('touchstart', unlockAudio); };
+document.addEventListener('click', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
 
 // Zichtoverlay: alleen instelbaar via de checkbox in de wachtkamer.
 const VISION_KEY = 'blitzkrieg.zicht';
@@ -32,7 +40,7 @@ const syncVisionLabels = () => {
 syncVisionLabels();
 
 // ---------- Lobby ----------
-const STYLE_ICON = { zomer: '☀', winter: '❄', woestijn: '🏜' };
+const STYLE_ICON = { zomer: '☀', winter: '❄', woestijn: '🏜', tunneler: '⛏' };
 const TEAM_COLORS = ['var(--red)', 'var(--gold)', '#4a8a4a', '#6a6aaa'];
 
 // Kaartlijst (eenmalig)
@@ -231,7 +239,10 @@ function showView() {
   $('panel').prepend(canvas);
   document.body.dataset.style = next;
   import(`/styles/${next}.js`).then((mod) => {
-    if (style === next) view = mod.default(game);
+    if (style === next) {
+      view = mod.default(game);
+      game.triggerMirage = () => view?.triggerMirage();
+    }
   });
   return true;
 }
@@ -261,6 +272,7 @@ function toggleHotkeys() {
   let h = hk('WASD / ←→↑↓', 'Rijden');
   h += hk('SPATIE', 'Schieten');
   h += hk('K', 'Zelfvernietiging');
+  h += hk('H', 'Luchtspiegeling');
   h += hk('9 / 0', 'Zoom in/uit');
   if (isHost) {
     h += head('HOST');

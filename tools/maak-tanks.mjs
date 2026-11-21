@@ -15,6 +15,8 @@ const SOURCES = [
   { file: 'panter.png', name: 'panther', title: 'PANTHER', nation: 'DE' },
   { file: 'sherman.png', name: 'sherman', title: 'M4A1 SHERMAN', nation: 'US' },
   { file: 'comet.png', name: 'comet', title: 'A34 COMET', nation: 'UK' },
+  { file: 'viper.png', name: 'viper', title: 'VIPER MK-I', nation: 'TUNNELER' },
+  { file: 'kobalt.png', name: 'kobalt', title: 'KOBALT MK-I', nation: 'TUNNELER' },
 ];
 
 // ---------- PNG lezen en schrijven (8 bit RGBA of RGB, niet interlaced) ----------

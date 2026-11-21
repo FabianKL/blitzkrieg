@@ -148,6 +148,8 @@ export function createWeatherView({ layer, world, game, lookOf, stormOf, onThund
 
   return {
     get stormShown() { return stormShown; },
+    get rainShown() { return rainShown; },
+    get driftShown() { return driftShown; },
     update(cam, now, dt) {
       const wx = game.weather || {}, t = now / 1000;
       driftShown = toward(driftShown, wx.drift || 0, dt / SNOW_FX.rampSeconds);

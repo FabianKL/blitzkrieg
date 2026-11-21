@@ -1,18 +1,18 @@
 // Gevaren en schaarse middelen als ding op de kaart (§10): laadplekken, depots, barrage, kratten,
 // geschut, de opgeblazen brug, brand, stof, zoeklichten, luchtspiegelingen en herkenningspunten.
-// v = { game, at(x, y), Pixi-lagen en pools uit world-view.js, drawContour, visionRadius, pal,
+// v = { game, at(x, y), Pixi-lagen en pools uit world-view.js, miragePool, visionRadius, pal,
 // bridgeSprites (true: de bruggen zijn sprites, ook het wrak), texture(naam) (sprite uit de atlas
 // van de stijl, of null), props (container voor die sprites), seesSharp(x, y) }.
 // Depots, het munitiedepot, kratten en parachutes zijn sprites als de atlas ze heeft (PROPS),
 // anders getekend.
 import * as G from '/shared/game.js';
-import { sightAt, contourAlpha } from '/shared/vision.js';
+import { sightAt } from '/shared/vision.js';
 import { pack, REFILL_COLORS } from '/render-common.js';
-import { PROPS, FX } from '/shared/config.js';
+import { PROPS, FX, MIRAGES } from '/shared/config.js';
 import { spritePool } from '/pixi-scene.js';
 
 export function createHazardView(v) {
-  const { game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, mirageSprites, drawContour, visionRadius, fx } = v;
+  const { game, at, marks, effects, lights, badges, badgeRings, badgeTex, particles, miragePool, visionRadius, fx } = v;
   const props = spritePool(v.props, undefined, (s) => s.anchor.set(0.5));
   // sprite uit de atlas op (x, y), size = schaal (1 = getekende maat), of false als die er niet is
   function prop(name, x, y, size = 1, alpha = 1, rot = 0) {
@@ -155,34 +155,67 @@ export function createHazardView(v) {
   // Zoeklichten: ovale vlekken worden nu getekend in world-view.js (blindG), want lights
   // heeft soms geen parent door de PixiJS-lifecycle. Deze functie ruimt alleen op.
   function drawSearchlights() { lights.clear(); }
-  // Woestijnhallucinaties (El Alamein): buiten je zichtcirkel soms een valse contour, ergens waar
-  // een echte ook zou kunnen staan (in je kijkboog, vrije zichtlijn); per speler anders en niet
-  // gesynchroniseerd (§6.4)
+  // Luchtspiegelingen (El Alamein): een nep-tank met het uiterlijk van de tegenstander spawnt aan
+  // de rand van de kaart, rijdt naar je toe en verdwijnt zodra hij je zichtcirkel binnenkomt.
+  // Per speler anders en niet gesynchroniseerd.
   const mirages = [];
   let nextMirage = 0;
+  function opponentId() {
+    for (const [id, t] of game.tanks) if (id !== game.me && t.a) return id;
+    return -1;
+  }
   function drawMirages(me, cam, now) {
     if (!game.weather?.flags.mirages) return;
-    if (!nextMirage) nextMirage = now + 4000 + Math.random() * 11000;
+    if (!nextMirage) nextMirage = now + MIRAGES.spawnMs[0] + Math.random() * (MIRAGES.spawnMs[1] - MIRAGES.spawnMs[0]);
     const r = visionRadius(), far = Math.hypot(cam.w, cam.h) / 2;
-    if (now > nextMirage) {
-      nextMirage = now + 4000 + Math.random() * 11000; // 4–15 seconden
-      const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180), a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
-      const d = r + 4 + Math.random() * Math.max(4, far * 0.8 - r - 4);
-      const x = Math.round(me.x + Math.cos(a) * d), y = Math.round(me.y + Math.sin(a) * d);
-      if (G.inBounds(x, y) && sightAt(game.map, me, x, y, { radius: r, view: cam, smokes: game.smokes }) === 'contour') {
-        mirages.push({ x, y, born: now, ang: Math.floor(Math.random() * 8) * (Math.PI / 4),
-          dx: (Math.random() - 0.5) * 0.6, dy: (Math.random() - 0.5) * 0.6,
-          angSpeed: (Math.random() - 0.5) * 1.0,
-          until: now + 4000 + Math.random() * 4000 });
+
+    // Nieuwe hallucinatie spawnen
+    if (now > nextMirage && mirages.length < MIRAGES.maxActive) {
+      nextMirage = now + MIRAGES.spawnMs[0] + Math.random() * (MIRAGES.spawnMs[1] - MIRAGES.spawnMs[0]);
+      const opp = opponentId();
+      if (opp >= 0) {
+        // richting binnen de kijkboog, spawn voorbij de camerarand
+        const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180);
+        const a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
+        const spawnDist = far + MIRAGES.spawnMargin;
+        const sx = me.x + Math.cos(a) * spawnDist, sy = me.y + Math.sin(a) * spawnDist;
+        if (G.inBounds(Math.round(sx), Math.round(sy))) {
+          mirages.push({ x: sx, y: sy, ang: Math.atan2(me.y - sy, me.x - sx),
+            born: now, opp, fading: 0 });
+        }
       }
     }
+
+    // Bestaande hallucinaties bijwerken en tekenen
+    const opts = { radius: r, view: cam, smokes: game.smokes };
     for (let k = mirages.length - 1; k >= 0; k--) {
       const m = mirages[k];
-      if (now > m.until) { mirages.splice(k, 1); continue; }
-      const elapsed = (now - m.born) / 1000;
-      const mx = m.x + m.dx * elapsed, my = m.y + m.dy * elapsed;
-      const ma = m.ang + m.angSpeed * elapsed;
-      drawContour(mirageSprites, mx + 0.5, my + 0.5, ma, contourAlpha(Math.hypot(mx - me.x, my - me.y), r, far));
+      const dt = (now - m.born) / 1000;
+      const mx = m.x + Math.cos(m.ang) * MIRAGES.speed * dt;
+      const my = m.y + Math.sin(m.ang) * MIRAGES.speed * dt;
+      const dist = Math.hypot(mx - me.x, my - me.y);
+
+      // in de scherpe zichtcirkel: begin met uitfaden
+      if (!m.fading && dist <= r &&
+          sightAt(game.map, me, Math.round(mx), Math.round(my), opts) === 'sharp') {
+        m.fading = now;
+      }
+      // fade-out voltooid of buiten de kaart: verwijderen
+      if ((m.fading && now - m.fading > MIRAGES.fadeOutMs) || !G.inBounds(Math.round(mx), Math.round(my))) {
+        mirages.splice(k, 1); continue;
+      }
+
+      let alpha = 1;
+      if (m.fading) alpha = Math.max(0, 1 - (now - m.fading) / MIRAGES.fadeOutMs);
+      if (alpha <= 0) continue;
+
+      const tex = v.tankTexture(m.opp, now);
+      const s = miragePool.next();
+      s.texture = tex;
+      s.scale.set(1 / v.TANK_PX);
+      s.position.set(mx + 0.5, my + 0.5);
+      s.rotation = m.ang;
+      s.alpha = alpha;
     }
   }
 
@@ -231,5 +264,23 @@ export function createHazardView(v) {
     }
   }
 
-  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawShells, drawObjects: drawObjectsOfHazards, drawDust, drawSearchlights, drawMirages, drawLandmarks };
+  // H-toets: forceer een luchtspiegeling (ongeacht timer of maximum)
+  function triggerMirage() {
+    if (!game.weather?.flags.mirages) return;
+    const me = game.tanks.get(game.me);
+    if (!me?.a) return;
+    const opp = opponentId();
+    if (opp < 0) return;
+    const cam = v.cam, far = Math.hypot(cam.w, cam.h) / 2;
+    const half = (G.VISION.coneDegrees / 2) * (Math.PI / 180);
+    const a = (me.ang || 0) + (Math.random() * 2 - 1) * half;
+    const spawnDist = far + MIRAGES.spawnMargin;
+    const sx = me.x + Math.cos(a) * spawnDist, sy = me.y + Math.sin(a) * spawnDist;
+    if (G.inBounds(Math.round(sx), Math.round(sy))) {
+      mirages.push({ x: sx, y: sy, ang: Math.atan2(me.y - sy, me.x - sx),
+        born: performance.now(), opp, fading: 0 });
+    }
+  }
+
+  return { onEvent, drawRefillMarkers, drawDepots, drawBarrage, drawShells, drawObjects: drawObjectsOfHazards, drawDust, drawSearchlights, drawMirages, drawLandmarks, triggerMirage };
 }

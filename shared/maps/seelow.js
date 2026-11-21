@@ -7,7 +7,7 @@ export default { // §10.9
     setting: 'April 1945. De slag om de Seelower Hoogten: het Rode Leger bestormt de laatste verdedigingslinie voor Berlijn.',
     terrain: 'Een steile heuvelrug in het westen, akkers met boerderijen, en een smalle kronkelende rivier.',
     weather: 'De slag begint in het donker met verblindende zoeklichten. Vanaf ronde 3 breekt de dageraad aan.',
-    special: 'Zoeklichten verraden je positie: binnen 1 seconde volgt een artilleriebombardement. De heuvelrug biedt dekking maar beperkt je routes.',
+    special: 'Zoeklichten doorzoeken het dal en volgen je: binnen 1 seconde volgt gericht artillerievuur dat steeds heviger wordt. De heuvelrug biedt dekking.',
   },
   // meer akkers (15%), minder rotsen; wegen lopen de heuvel op
   terrainPercent: { soft: 28, marsh: 15, hard: 20, normal: 15, rock: 7, vegetation: 5, water: 6, paved: 4 },
@@ -35,21 +35,28 @@ export default { // §10.9
     { type: 'road', from: [0.1, 0.3], to: [0.88, 0.3], width: 2 },
     { type: 'road', from: [0.1, 0.72], to: [0.88, 0.72], width: 2 },
   ],
-  // zoeklicht triggert bombardement; daarnaast standaard elke 60 s een willekeurig bombardement
+  // zoeklicht triggert gericht salvo (escalerend); daarnaast standaard elke 60 s barrage
   hazard: {
-    type: 'bombardment', areaT: 3, durationSeconds: 3, warningSeconds: 3,
-    searchlightDelay: 1, everySeconds: 60,
-    craters: true,
+    type: 'bombardment',
+    // barrage (tijdgestuurd, elke 60 s)
+    areaT: 3, durationSeconds: 3, warningSeconds: 3, everySeconds: 60, craters: true,
     levels: {
       licht:     { weight: 3, armorLoss: 10, impacts: 3 },
       gemiddeld: { weight: 2, armorLoss: 20, impacts: 6 },
       zwaar:     { weight: 1, armorLoss: 30, impacts: 10 },
     },
+    // salvo (event-getriggerd door zoeklicht, lock-in)
+    salvo: {
+      firstStrikeSeconds: 1, baseInterval: 2, minInterval: 0.5, intervalStep: 0.3,
+      strikeDamage: 5, maxImpacts: 4,
+      startScatterT: 2.5, endScatterT: 0.5, scatterDecay: 0.7,
+      strikeRadius: 2, craters: true,
+    },
   },
   look: { grade: { saturation: -0.15, brightness: 0.92, tint: '#c8d0e8', tintStrength: 0.12 }, vignette: 0.32, bridge: { kind: 'staal' } },
   tunnelColor: '#1a1410',
   weather: [
-    { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 3, lengthT: 4, widthT: 3, sweepSeconds: 12, visibility: 12, stickSeconds: 1 } } },
+    { label: 'Nacht met zoeklichten', untilRound: 2, effect: { visibility: 4, night: true, searchlights: { beams: 3, lengthT: 4, widthT: 3, sweepSeconds: 12, visibility: 12, sweepRect: [0.33, 0, 1, 1], trackSpeedT: 3 } } },
     { label: 'Dageraad', from: { round: 3 }, effect: { visibility: 8 } },
   ],
 };
